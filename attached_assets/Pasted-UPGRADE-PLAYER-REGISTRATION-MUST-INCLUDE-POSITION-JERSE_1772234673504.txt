@@ -1,0 +1,170 @@
+UPGRADE: PLAYER REGISTRATION MUST INCLUDE POSITION + JERSEY REQUEST (APPROVAL WORKFLOW)
+
+GOAL
+During player self-registration / onboarding, collect:
+- Primary Position (Setter/Libero/Middle/Outside/Opposite)
+- Requested Jersey Number
+These must be APPROVED by Admin/Coach before becoming official.
+
+SECURITY RULES
+1) Player can request position + jersey, but cannot finalize them.
+2) Admin/Manager/Coach can approve or override.
+3) Jersey numbers must be unique within the official team roster (teamId).
+4) If team not approved yet, jersey request remains pending until team is approved.
+
+DATABASE CHANGES (Prisma)
+
+A) Add enums:
+enum PlayerPosition {
+  SETTER
+  LIBERO
+  MIDDLE
+  OUTSIDE
+  OPPOSITE
+}
+
+enum JerseyApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PositionApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+B) Extend Player model:
+Player {
+  ...
+  // requested values (player submits)
+  requestedPosition      PlayerPosition?
+  requestedJerseyNo      Int?
+
+  // approval workflow
+  positionApprovalStatus PositionApprovalStatus @default(PENDING)
+  jerseyApprovalStatus   JerseyApprovalStatus @default(PENDING)
+
+  // official values (set by Admin/Coach)
+  position               PlayerPosition?
+  jerseyNo               Int?
+
+  // optional audit
+  positionApprovedByUserId String?
+  jerseyApprovedByUserId   String?
+  approvedAt               DateTime?
+}
+
+C) Add uniqueness constraint for jersey number per team (for official assignment only):
+- Add a compound unique index:
+@@unique([tenantId, teamId, jerseyNo])
+IMPORTANT: allow jerseyNo to be nullable; ensure Prisma supports this. If DB does not allow unique on nullable reliably, enforce uniqueness in code checks on approval.
+
+API CHANGES
+
+1) Public teams endpoint stays as-is.
+
+2) Registration endpoint must accept:
+POST /auth/register
+Body:
+{
+  fullName,
+  email,
+  password,
+  tenantSlug,
+  requestedTeamId,            // from previous upgrade
+  requestedPosition,          // REQUIRED
+  requestedJerseyNo           // OPTIONAL but recommended REQUIRED
+}
+
+Server:
+- validate requestedPosition is in enum
+- validate requestedJerseyNo is within allowed range (e.g., 1–99)
+- create User role PLAYER
+- create Player record:
+  requestedTeamId
+  teamApprovalStatus=PENDING
+  requestedPosition, positionApprovalStatus=PENDING
+  requestedJerseyNo, jerseyApprovalStatus=PENDING
+- DO NOT set official position/jerseyNo yet.
+
+3) Player self endpoints:
+GET /players/me shows:
+- requestedTeam + approval status
+- requestedPosition + approval status
+- requestedJerseyNo + approval status
+PUT /players/me:
+- player can edit personal info
+- player cannot change requestedTeam/position/jersey after submission (unless you decide to allow before approval)
+
+4) Admin/Coach approval endpoints:
+POST /players/:playerId/approve-team (already exists)
+POST /players/:playerId/approve-position
+Body: { position }  // may approve requested or override
+Actions:
+- set player.position = position
+- positionApprovalStatus=APPROVED
+- positionApprovedByUserId = req.user.id
+
+POST /players/:playerId/reject-position
+Body: { reason? }
+- positionApprovalStatus=REJECTED
+
+POST /players/:playerId/approve-jersey
+Body: { jerseyNo }  // may approve requested or override
+Actions:
+- Must require player.teamId is APPROVED (official team assigned). If not, block with message:
+  "Approve team first, then assign jersey."
+- Enforce uniqueness within that team:
+  - query for any Player in same tenantId + teamId with jerseyNo
+  - if exists: return error "Jersey already taken"
+- set player.jerseyNo = jerseyNo
+- jerseyApprovalStatus=APPROVED
+- jerseyApprovedByUserId=req.user.id
+
+POST /players/:playerId/reject-jersey
+Body: { reason? }
+- jerseyApprovalStatus=REJECTED
+
+RBAC
+- Admin/Manager: can approve all
+- Coach: can approve position + jersey (and optionally team approval if allowed)
+- Player: read-only
+
+CLIENT UI CHANGES
+
+1) Registration Page
+Add fields:
+- Position dropdown (enum):
+  Setter, Libero, Middle, Outside, Opposite
+- Requested Jersey Number input (1–99)
+Validation:
+- required position
+- jersey required (recommended) or optional
+- show hint: “Final approval by Admin/Coach”
+
+2) Player Dashboard
+Show a status panel:
+- Team: Pending/Approved/Rejected
+- Position: Pending/Approved/Rejected
+- Jersey: Pending/Approved/Rejected
+If pending: “Awaiting approval”
+
+3) Admin/Coach Panel
+Add “Pending Approvals” queue with tabs:
+- Team approvals
+- Position approvals
+- Jersey approvals
+Each row:
+- player name, requested team/position/jersey
+- Approve (with override dropdown/input)
+- Reject
+
+SEED
+Ensure teams exist so registration works.
+Seed should also create at least 1 coach user so approval UI can be tested.
+
+DELIVERABLE
+Implement schema + migration + backend endpoints + client UI + RBAC + uniqueness checks.
+Ensure tenant scoping everywhere and prevent IDOR.

@@ -23,6 +23,8 @@ import Reports from "@/pages/Reports";
 import PlayerDashboard from "@/pages/PlayerDashboard";
 import Register from "@/pages/Register";
 import ProfileSetup from "@/pages/ProfileSetup";
+import VerifyEmail from "@/pages/VerifyEmail";
+import AdminRegistrations from "@/pages/AdminRegistrations";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -36,6 +38,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Login}/>
       <Route path="/register" component={Register}/>
+      <Route path="/verify-email" component={VerifyEmail}/>
       <Route path="/dashboard">{() => <ProtectedRoute component={Dashboard} />}</Route>
       <Route path="/profile-setup">{() => <ProtectedRoute component={ProfileSetup} />}</Route>
       <Route path="/teams">{() => <ProtectedRoute component={Teams} />}</Route>
@@ -51,6 +54,7 @@ function Router() {
       <Route path="/documents">{() => <ProtectedRoute component={Documents} />}</Route>
       <Route path="/reports">{() => <ProtectedRoute component={Reports} />}</Route>
       <Route path="/player-dashboard">{() => <ProtectedRoute component={PlayerDashboard} />}</Route>
+      <Route path="/admin/registrations">{() => <ProtectedRoute component={AdminRegistrations} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

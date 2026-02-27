@@ -1,0 +1,192 @@
+SECURITY UPGRADE: EMAIL VERIFICATION + AUTO TEAM APPROVAL + REGISTRATION MODERATION
+
+GOAL
+Before opening registration to players, implement:
+1) Email Verification (players must verify email before login is allowed)
+2) Registration Moderation (players cannot access portal features until approved)
+3) Optional Auto Team Approval rules (controlled by Admin settings)
+
+DATABASE CHANGES (Prisma)
+
+1) Extend User model:
+User {
+  ...
+  emailVerified       Boolean @default(false)
+  emailVerifiedAt     DateTime?
+  verificationToken   String?  // hashed token preferred
+  verificationTokenExp DateTime?
+
+  accountStatus       AccountStatus @default(PENDING_APPROVAL)
+}
+
+enum AccountStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  REJECTED
+  SUSPENDED
+}
+
+2) Extend Player model (if not already added):
+Player {
+  ...
+  registrationStatus PlayerRegistrationStatus @default(PENDING_APPROVAL)
+  registrationNotes  String?
+}
+
+enum PlayerRegistrationStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+3) System settings:
+SystemSecuritySettings {
+  id String @id @default("security")
+  tenantId String
+
+  requireEmailVerification Boolean @default(true)
+  requireAdminApproval     Boolean @default(true)
+
+  autoApproveTeamRequests  Boolean @default(false)
+  autoApprovePosition      Boolean @default(false)
+  autoApproveJersey        Boolean @default(false)
+
+  allowedEmailDomains      String?  // optional: "gmail.com,yahoo.com"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId])
+}
+
+SERVER BEHAVIOR
+
+A) On Registration (/auth/register)
+1) Create user with:
+- emailVerified = false
+- accountStatus = PENDING_APPROVAL
+2) Create player with:
+- registrationStatus = PENDING_APPROVAL
+3) Generate email verification token:
+- random 32+ bytes token
+- store hashed token + expiry (e.g., 24h)
+4) Send verification email:
+- Link: FRONTEND_URL + "/verify-email?token=...."
+If SMTP not configured, fallback:
+- Log the verification link in server console in dev mode
+- Provide Admin UI to manually verify user (for early testing)
+
+B) Verify Email Endpoint
+POST /auth/verify-email
+Body: { token }
+Server:
+- hash token and match user
+- if valid and not expired:
+  emailVerified=true, emailVerifiedAt=now
+  clear token fields
+- return success
+
+C) Login rules
+POST /auth/login must enforce:
+1) If requireEmailVerification AND emailVerified=false => block login with message:
+   "Please verify your email"
+2) If requireAdminApproval AND accountStatus != ACTIVE => block login with message:
+   "Your registration is pending approval"
+
+D) Admin Moderation UI and endpoints
+Create admin endpoints:
+GET /admin/registrations/pending
+- list pending users/players with requested team/position/jersey
+
+POST /admin/registrations/:userId/approve
+Actions:
+- user.accountStatus = ACTIVE
+- player.registrationStatus = APPROVED
+- If auto-approve flags enabled, apply them (below)
+
+POST /admin/registrations/:userId/reject
+Body: { reason }
+Actions:
+- user.accountStatus = REJECTED
+- player.registrationStatus = REJECTED
+- store reason in player.registrationNotes
+
+E) Auto Team Approval Rules
+If SystemSecuritySettings.autoApproveTeamRequests=true:
+- On admin approval OR on registration (if you choose), automatically set:
+  player.teamId = requestedTeamId
+  player.teamApprovalStatus = APPROVED
+Else:
+- keep teamApprovalStatus=PENDING until manually approved
+
+Similarly:
+- autoApprovePosition => set official position and approve
+- autoApproveJersey => assign jersey only if team already approved and jersey not taken; else keep pending
+
+FRONTEND CHANGES
+
+1) Registration flow
+After user registers:
+- show screen:
+  "Check your email to verify your account."
+- disable login until verified if requireEmailVerification enabled.
+
+2) Verify Email page
+Route: /verify-email?token=...
+- calls /auth/verify-email
+- show success message:
+  "Email verified. Awaiting admin approval." (if moderation enabled)
+  or "Email verified. You may login." (if moderation disabled)
+
+3) Pending Approval screen
+If login blocked due to PENDING_APPROVAL:
+- show friendly message:
+  "Your registration is awaiting approval by Afrocat management."
+- show their requested team/position/jersey and statuses.
+
+4) Admin Panel
+Add Admin → "Registrations"
+- Pending list
+- Approve / Reject buttons
+- On Approve: optional toggles to auto-approve team/position/jersey
+
+5) Admin Settings
+Add Admin → Settings → Security
+- toggles:
+  requireEmailVerification
+  requireAdminApproval
+  autoApproveTeamRequests
+  autoApprovePosition
+  autoApproveJersey
+- optional allowedEmailDomains
+
+EMAIL SENDING (IMPLEMENTATION)
+Implement SMTP support with nodemailer.
+Env vars:
+SMTP_HOST
+SMTP_PORT
+SMTP_USER
+SMTP_PASS
+SMTP_FROM
+FRONTEND_URL
+
+If SMTP_* not set:
+- Use DEV mode fallback:
+  print verification link in server console
+- Also allow Admin to manually verify user via admin UI for testing.
+
+SEED
+Seed should:
+- create tenant "afrocat"
+- create system security settings defaults:
+  requireEmailVerification=true
+  requireAdminApproval=true
+  autoApproveTeamRequests=false
+- create admin user already verified and ACTIVE.
+
+DELIVERABLE
+Implement schema + migrations + endpoints + frontend pages + admin UI + settings UI.
+Ensure tenant scoping and RBAC enforced.
+Provide README steps:
+- how to configure SMTP
+- how to test verification locally
+- how admin approves registrations

@@ -16,12 +16,14 @@ import type {
   ContractIssuedItem, InsertContractIssuedItem,
   ContractTransportBenefit, InsertContractTransportBenefit,
   NvfTransferFeeSchedule, InsertNvfTransferFeeSchedule,
-  PlayerTransferCase, InsertPlayerTransferCase
+  PlayerTransferCase, InsertPlayerTransferCase,
+  SystemSecuritySettings, InsertSystemSecuritySettings
 } from "@shared/schema";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByVerificationToken(tokenHash: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   getTeams(): Promise<Team[]>;
@@ -114,6 +116,10 @@ export interface IStorage {
   getPlayerTransferCase(id: string): Promise<PlayerTransferCase | undefined>;
   createPlayerTransferCase(tc: InsertPlayerTransferCase): Promise<PlayerTransferCase>;
   updatePlayerTransferCase(id: string, data: Partial<InsertPlayerTransferCase>): Promise<PlayerTransferCase | undefined>;
+  getSecuritySettings(): Promise<SystemSecuritySettings | undefined>;
+  upsertSecuritySettings(data: Partial<InsertSystemSecuritySettings>): Promise<SystemSecuritySettings>;
+  getPendingRegistrations(): Promise<Array<{ user: User; player: Player | undefined }>>;
+  getPlayersByJerseyAndTeam(teamId: string, jerseyNo: number): Promise<Player[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -123,6 +129,10 @@ export class DatabaseStorage implements IStorage {
   }
   async getUserByEmail(email: string) {
     const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email));
+    return user;
+  }
+  async getUserByVerificationToken(tokenHash: string) {
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.verificationToken, tokenHash));
     return user;
   }
   async createUser(user: InsertUser) {
@@ -501,6 +511,41 @@ export class DatabaseStorage implements IStorage {
   async updatePlayerTransferCase(id: string, data: Partial<InsertPlayerTransferCase>) {
     const [updated] = await db.update(schema.playerTransferCases).set(data).where(eq(schema.playerTransferCases.id, id)).returning();
     return updated;
+  }
+
+  async getSecuritySettings() {
+    const [settings] = await db.select().from(schema.systemSecuritySettings).limit(1);
+    return settings;
+  }
+  async upsertSecuritySettings(data: Partial<InsertSystemSecuritySettings>) {
+    const existing = await this.getSecuritySettings();
+    if (existing) {
+      const [updated] = await db.update(schema.systemSecuritySettings)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(schema.systemSecuritySettings.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(schema.systemSecuritySettings)
+      .values({ id: "security", ...data } as any).returning();
+    return created;
+  }
+  async getPendingRegistrations() {
+    const pendingUsers = await db.select().from(schema.users)
+      .where(eq(schema.users.accountStatus, "PENDING_APPROVAL"))
+      .orderBy(desc(schema.users.createdAt));
+    const results: Array<{ user: User; player: Player | undefined }> = [];
+    for (const u of pendingUsers) {
+      let player: Player | undefined;
+      if (u.playerId) {
+        player = await this.getPlayer(u.playerId);
+      }
+      results.push({ user: u, player });
+    }
+    return results;
+  }
+  async getPlayersByJerseyAndTeam(teamId: string, jerseyNo: number) {
+    return db.select().from(schema.players)
+      .where(and(eq(schema.players.teamId, teamId), eq(schema.players.jerseyNo, jerseyNo)));
   }
 }
 

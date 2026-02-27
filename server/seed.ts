@@ -36,16 +36,26 @@ async function seed() {
 
   const [coachUser] = await db.insert(schema.users).values({
     fullName: "Coach User", email: "coach@afrocat.test", passwordHash: hash, role: "COACH", teamId: menTeam.id,
+    emailVerified: true, accountStatus: "ACTIVE",
   }).returning();
 
   await db.insert(schema.users).values([
-    { fullName: "Admin User", email: "admin@afrocat.test", passwordHash: hash, role: "ADMIN" },
-    { fullName: "Manager User", email: "manager@afrocat.test", passwordHash: hash, role: "MANAGER" },
-    { fullName: "Stats User", email: "stats@afrocat.test", passwordHash: hash, role: "STATISTICIAN" },
-    { fullName: "Finance User", email: "finance@afrocat.test", passwordHash: hash, role: "FINANCE" },
-    { fullName: "Medical User", email: "medical@afrocat.test", passwordHash: hash, role: "MEDICAL" },
-    { fullName: "James Okonkwo", email: "player1@afrocat.test", passwordHash: hash, role: "PLAYER", playerId: players[0].id, teamId: menTeam.id },
+    { fullName: "Admin User", email: "admin@afrocat.test", passwordHash: hash, role: "ADMIN", emailVerified: true, accountStatus: "ACTIVE" },
+    { fullName: "Manager User", email: "manager@afrocat.test", passwordHash: hash, role: "MANAGER", emailVerified: true, accountStatus: "ACTIVE" },
+    { fullName: "Stats User", email: "stats@afrocat.test", passwordHash: hash, role: "STATISTICIAN", emailVerified: true, accountStatus: "ACTIVE" },
+    { fullName: "Finance User", email: "finance@afrocat.test", passwordHash: hash, role: "FINANCE", emailVerified: true, accountStatus: "ACTIVE" },
+    { fullName: "Medical User", email: "medical@afrocat.test", passwordHash: hash, role: "MEDICAL", emailVerified: true, accountStatus: "ACTIVE" },
+    { fullName: "James Okonkwo", email: "player1@afrocat.test", passwordHash: hash, role: "PLAYER", playerId: players[0].id, teamId: menTeam.id, emailVerified: true, accountStatus: "ACTIVE" },
   ]);
+
+  await db.insert(schema.systemSecuritySettings).values({
+    id: "security",
+    requireEmailVerification: true,
+    requireAdminApproval: true,
+    autoApproveTeamRequests: false,
+    autoApprovePosition: false,
+    autoApproveJersey: false,
+  }).onConflictDoNothing();
 
   const [match1] = await db.insert(schema.matches).values({
     teamId: menTeam.id, opponent: "Eagles VC", matchDate: "2024-03-10",

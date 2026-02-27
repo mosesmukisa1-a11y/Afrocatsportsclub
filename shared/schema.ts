@@ -23,6 +23,9 @@ export const transportBenefitTypeEnum = pgEnum("transport_benefit_type", ["TRAIN
 export const transportFrequencyEnum = pgEnum("transport_frequency", ["ONE_TIME", "WEEKLY", "MONTHLY", "PER_TRIP"]);
 export const nvfFeeTypeEnum = pgEnum("nvf_fee_type", ["INTER_ASSOCIATION_TRANSFER_FEE", "OTHER"]);
 export const transferCaseStatusEnum = pgEnum("transfer_case_status", ["DRAFT", "CONFIRMED", "PAID", "CLOSED"]);
+export const accountStatusEnum = pgEnum("account_status", ["PENDING_APPROVAL", "ACTIVE", "REJECTED", "SUSPENDED"]);
+export const approvalStatusEnum = pgEnum("approval_status", ["PENDING", "APPROVED", "REJECTED"]);
+export const registrationStatusEnum = pgEnum("registration_status", ["PENDING_APPROVAL", "APPROVED", "REJECTED"]);
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
@@ -32,6 +35,11 @@ export const users = pgTable("users", {
   role: roleEnum("role").notNull().default("PLAYER"),
   teamId: varchar("team_id", { length: 36 }),
   playerId: varchar("player_id", { length: 36 }),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  emailVerifiedAt: timestamp("email_verified_at"),
+  verificationToken: text("verification_token"),
+  verificationTokenExp: timestamp("verification_token_exp"),
+  accountStatus: accountStatusEnum("account_status").notNull().default("PENDING_APPROVAL"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -74,6 +82,18 @@ export const players = pgTable("players", {
   eligibilityStatus: eligibilityStatusEnum("eligibility_status").notNull().default("ELIGIBLE"),
   eligibilityNotes: text("eligibility_notes"),
   photoUrl: text("photo_url"),
+  requestedTeamId: varchar("requested_team_id", { length: 36 }),
+  teamApprovalStatus: approvalStatusEnum("team_approval_status").notNull().default("PENDING"),
+  requestedPosition: text("requested_position"),
+  positionApprovalStatus: approvalStatusEnum("position_approval_status").notNull().default("PENDING"),
+  requestedJerseyNo: integer("requested_jersey_no"),
+  jerseyApprovalStatus: approvalStatusEnum("jersey_approval_status").notNull().default("PENDING"),
+  positionApprovedByUserId: varchar("position_approved_by_user_id", { length: 36 }),
+  jerseyApprovedByUserId: varchar("jersey_approved_by_user_id", { length: 36 }),
+  teamApprovedByUserId: varchar("team_approved_by_user_id", { length: 36 }),
+  approvedAt: timestamp("approved_at"),
+  registrationStatus: registrationStatusEnum("registration_status").notNull().default("PENDING_APPROVAL"),
+  registrationNotes: text("registration_notes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -330,6 +350,19 @@ export const playerReports = pgTable("player_reports", {
   generatedDate: text("generated_date").notNull(),
 });
 
+export const systemSecuritySettings = pgTable("system_security_settings", {
+  id: varchar("id", { length: 36 }).primaryKey().default("security"),
+  requireEmailVerification: boolean("require_email_verification").notNull().default(true),
+  requireAdminApproval: boolean("require_admin_approval").notNull().default(true),
+  autoApproveTeamRequests: boolean("auto_approve_team_requests").notNull().default(false),
+  autoApprovePosition: boolean("auto_approve_position").notNull().default(false),
+  autoApproveJersey: boolean("auto_approve_jersey").notNull().default(false),
+  allowedEmailDomains: text("allowed_email_domains"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSystemSecuritySettingsSchema = createInsertSchema(systemSecuritySettings).omit({ createdAt: true, updatedAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, createdAt: true });
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true, createdAt: true });
@@ -409,3 +442,5 @@ export type InsertPlayerReport = z.infer<typeof insertPlayerReportSchema>;
 export type PlayerReport = typeof playerReports.$inferSelect;
 export type InsertPlayerDocument = z.infer<typeof insertPlayerDocumentSchema>;
 export type PlayerDocument = typeof playerDocuments.$inferSelect;
+export type InsertSystemSecuritySettings = z.infer<typeof insertSystemSecuritySettingsSchema>;
+export type SystemSecuritySettings = typeof systemSecuritySettings.$inferSelect;

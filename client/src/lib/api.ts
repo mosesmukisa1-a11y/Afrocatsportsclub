@@ -34,9 +34,27 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 export const api = {
   login: (data: { email: string; password: string }) =>
     apiFetch<{ token: string; user: any }>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
-  register: (data: { fullName: string; email: string; password: string }) =>
-    apiFetch<{ token: string; user: any }>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
+  register: (data: { fullName: string; email: string; password: string; requestedTeamId?: string; requestedPosition?: string; requestedJerseyNo?: number }) =>
+    apiFetch<any>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
+  verifyEmail: (token: string) =>
+    apiFetch<any>("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
   me: () => apiFetch<any>("/auth/me"),
+  getPublicTeams: () => fetch("/api/public/teams").then(r => r.json()) as Promise<any[]>,
+
+  getPendingRegistrations: () => apiFetch<any[]>("/admin/registrations/pending"),
+  approveRegistration: (userId: string) => apiFetch<any>(`/admin/registrations/${userId}/approve`, { method: "POST" }),
+  rejectRegistration: (userId: string, reason?: string) => apiFetch<any>(`/admin/registrations/${userId}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  adminVerifyEmail: (userId: string) => apiFetch<any>(`/admin/registrations/${userId}/verify-email`, { method: "POST" }),
+
+  approveTeam: (playerId: string, teamId: string) => apiFetch<any>(`/players/${playerId}/approve-team`, { method: "POST", body: JSON.stringify({ teamId }) }),
+  rejectTeam: (playerId: string) => apiFetch<any>(`/players/${playerId}/reject-team`, { method: "POST" }),
+  approvePosition: (playerId: string, position: string) => apiFetch<any>(`/players/${playerId}/approve-position`, { method: "POST", body: JSON.stringify({ position }) }),
+  rejectPosition: (playerId: string) => apiFetch<any>(`/players/${playerId}/reject-position`, { method: "POST" }),
+  approveJersey: (playerId: string, jerseyNo: number) => apiFetch<any>(`/players/${playerId}/approve-jersey`, { method: "POST", body: JSON.stringify({ jerseyNo }) }),
+  rejectJersey: (playerId: string) => apiFetch<any>(`/players/${playerId}/reject-jersey`, { method: "POST" }),
+
+  getSecuritySettings: () => apiFetch<any>("/admin/security-settings"),
+  updateSecuritySettings: (data: any) => apiFetch<any>("/admin/security-settings", { method: "PUT", body: JSON.stringify(data) }),
 
   getTeams: () => apiFetch<any[]>("/teams"),
   createTeam: (data: any) => apiFetch<any>("/teams", { method: "POST", body: JSON.stringify(data) }),

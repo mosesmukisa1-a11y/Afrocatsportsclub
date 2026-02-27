@@ -1,0 +1,99 @@
+ADMIN PERMANENT LOGIN + UNIVERSAL REGISTRATION APPROVAL (ALL ROLES)
+
+GOAL
+1) Ensure there is a permanent system admin:
+   Email: mosesmukisa1@gmail.com
+   Password: Walker33!
+   Role: ADMIN
+   Tenant: afrocat
+   Status: ACTIVE
+   emailVerified: true
+
+2) Require Admin approval for ALL new registrations:
+- PLAYER
+- COACH
+- MEDICAL
+- FINANCE
+- STATISTICIAN
+- MANAGER (optional)
+No new user can access the app until approved by Admin.
+
+SECURITY RULES
+- Password must be hashed with bcrypt (never stored plain text).
+- Do NOT log the plain password anywhere.
+- Do NOT write the plain password into README, seed files, or QA reports.
+- Do NOT commit any secret env var to GitHub.
+
+IMPLEMENTATION
+
+A) Create admin user safely
+1) Add a server script: /server/scripts/ensureAdmin.ts
+   - Reads admin email + password from environment variables:
+     ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_TENANT_SLUG
+   - Finds or creates tenant by slug (default "afrocat")
+   - Upserts user:
+     - role=ADMIN
+     - accountStatus=ACTIVE
+     - emailVerified=true
+     - passwordHash=bcrypt(ADMIN_PASSWORD)
+2) Add server package.json script:
+   "ensure:admin": "ts-node scripts/ensureAdmin.ts"
+3) For production build (no ts-node), also provide a JS compiled version or run it during migration step.
+
+B) Enforce approval for all roles
+1) Registration endpoint /auth/register must:
+   - Create user with accountStatus=PENDING_APPROVAL (for any role)
+   - If system setting requireEmailVerification=true, keep emailVerified=false until verified
+2) Login endpoint /auth/login must block if:
+   - requireEmailVerification && emailVerified=false
+   - requireAdminApproval && accountStatus != ACTIVE
+
+C) Admin approvals UI + endpoints (universal)
+1) Admin endpoint:
+   GET /admin/registrations/pending?role=PLAYER|COACH|MEDICAL|FINANCE|...
+   Returns pending users with:
+   - requestedRole
+   - requestedTeamId (if player)
+   - requestedPosition, requestedJerseyNo (if player)
+2) Admin actions:
+   POST /admin/registrations/:userId/approve
+   Body: { roleOverride? } // allow admin to set final role at approval time
+   Effects:
+   - set user.accountStatus=ACTIVE
+   - set user.role to roleOverride or requested role
+   - if role=PLAYER ensure linked Player exists
+   - if role=COACH ensure linked Coach profile exists (create if missing)
+   - if role=MEDICAL ensure medical profile exists (or keep as user-only role)
+3) Reject:
+   POST /admin/registrations/:userId/reject
+   Body: { reason }
+   Effects:
+   - user.accountStatus=REJECTED
+   - store reason
+
+D) Role-based registration types
+- Update /register UI:
+  By default, public registration should create PLAYER accounts only.
+  Add an Admin-only “Create Staff Account” page for Coach/Medic/Finance etc.
+  OPTIONALLY: allow public staff registration but ALWAYS requires admin approval (still blocked until approved).
+
+E) Admin panel features
+Add Admin → Registrations:
+- tabs by role: Players / Coaches / Medics / Finance / All
+- Approve, Reject
+- For players show requested team/position/jersey
+- Approve can also approve team/position/jersey in one flow (optional)
+
+RUN INSTRUCTIONS (REPLIT)
+1) Add Replit Secrets:
+   ADMIN_EMAIL=mosesmukisa1@gmail.com
+   ADMIN_PASSWORD=Walker33!
+   ADMIN_TENANT_SLUG=afrocat
+2) Run:
+   cd server
+   npm run ensure:admin
+3) Confirm login works with the provided admin credentials.
+
+DEPLOY NOTES
+- On Railway, set the same env vars (ADMIN_EMAIL/ADMIN_PASSWORD/ADMIN_TENANT_SLUG)
+- Run ensure admin during deployment (either as a one-time manual command or in start sequence BEFORE server starts, but never log password).

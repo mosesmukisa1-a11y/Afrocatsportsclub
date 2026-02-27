@@ -10,11 +10,18 @@ interface AuthUser {
   playerId?: string;
 }
 
+interface RegisterResult {
+  message: string;
+  requiresVerification: boolean;
+  requiresApproval: boolean;
+  verificationLink?: string;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (fullName: string, email: string, password: string) => Promise<void>;
+  register: (fullName: string, email: string, password: string, extra?: { requestedTeamId?: string; requestedPosition?: string; requestedJerseyNo?: number }) => Promise<RegisterResult>;
   logout: () => void;
 }
 
@@ -22,7 +29,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   login: async () => {},
-  register: async () => {},
+  register: async () => ({ message: "", requiresVerification: false, requiresApproval: false }),
   logout: () => {},
 });
 
@@ -46,10 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(res.user);
   };
 
-  const register = async (fullName: string, email: string, password: string) => {
-    const res = await api.register({ fullName, email, password });
-    setToken(res.token);
-    setUser(res.user);
+  const register = async (fullName: string, email: string, password: string, extra?: { requestedTeamId?: string; requestedPosition?: string; requestedJerseyNo?: number }): Promise<RegisterResult> => {
+    const res = await api.register({ fullName, email, password, ...extra });
+    return res as RegisterResult;
   };
 
   const logout = () => {

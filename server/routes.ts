@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { hashPassword, comparePassword, signToken, requireAuth, requireRole } from "./auth";
 import { z } from "zod";
+import crypto from "crypto";
 
 function esc(str: string | null | undefined): string {
   if (!str) return "—";
@@ -66,10 +67,23 @@ export async function registerRoutes(
         fullName: z.string().min(1),
         email: z.string().email(),
         password: z.string().min(6),
+        requestedTeamId: z.string().optional(),
+        requestedPosition: z.enum(["SETTER", "LIBERO", "MIDDLE", "OUTSIDE", "OPPOSITE"]).optional(),
+        requestedJerseyNo: z.number().int().min(1).max(99).optional(),
       }).parse(req.body);
 
       const existing = await storage.getUserByEmail(body.email);
       if (existing) return res.status(400).json({ message: "Email already registered" });
+
+      const settings = await storage.getSecuritySettings();
+
+      if (settings?.allowedEmailDomains) {
+        const domains = settings.allowedEmailDomains.split(",").map(d => d.trim().toLowerCase());
+        const emailDomain = body.email.split("@")[1]?.toLowerCase();
+        if (domains.length > 0 && domains[0] !== "" && !domains.includes(emailDomain)) {
+          return res.status(400).json({ message: "Email domain not allowed for registration" });
+        }
+      }
 
       const passwordHash = await hashPassword(body.password);
       const nameParts = body.fullName.trim().split(/\s+/);
@@ -82,7 +96,18 @@ export async function registerRoutes(
         email: body.email,
         status: "ACTIVE",
         eligibilityStatus: "PENDING",
+        requestedTeamId: body.requestedTeamId || null,
+        teamApprovalStatus: "PENDING",
+        requestedPosition: body.requestedPosition || null,
+        positionApprovalStatus: body.requestedPosition ? "PENDING" : "PENDING",
+        requestedJerseyNo: body.requestedJerseyNo || null,
+        jerseyApprovalStatus: body.requestedJerseyNo ? "PENDING" : "PENDING",
+        registrationStatus: "PENDING_APPROVAL",
       });
+
+      const verificationToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(verificationToken).digest("hex");
+      const tokenExp = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
       let user;
       try {
@@ -92,16 +117,63 @@ export async function registerRoutes(
           passwordHash,
           role: "PLAYER",
           playerId: player.id,
+          emailVerified: false,
+          verificationToken: tokenHash,
+          verificationTokenExp: tokenExp,
+          accountStatus: "PENDING_APPROVAL",
         });
       } catch (err) {
         await storage.deletePlayer(player.id);
         throw err;
       }
 
-      const token = signToken({ userId: user.id, email: user.email, role: user.role });
-      return res.status(201).json({ token, user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: player.id } });
+      const frontendUrl = process.env.FRONTEND_URL
+        ? process.env.FRONTEND_URL
+        : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
+      const verifyLink = `${frontendUrl}/verify-email?token=${verificationToken}`;
+      console.log(`[EMAIL VERIFY] ${body.email} → ${verifyLink}`);
+
+      return res.status(201).json({
+        message: "Registration successful. Please check your email to verify your account.",
+        requiresVerification: settings?.requireEmailVerification !== false,
+        requiresApproval: settings?.requireAdminApproval !== false,
+        verificationLink: process.env.NODE_ENV !== "production" ? verifyLink : undefined,
+      });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.post("/api/auth/verify-email", async (req, res, next) => {
+    try {
+      const { token } = z.object({ token: z.string().min(1) }).parse(req.body);
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+      const user = await storage.getUserByVerificationToken(tokenHash);
+      if (!user) return res.status(400).json({ message: "Invalid or expired verification token" });
+      if (user.verificationTokenExp && new Date(user.verificationTokenExp) < new Date()) {
+        return res.status(400).json({ message: "Verification token has expired. Please request a new one." });
+      }
+
+      await storage.updateUser(user.id, {
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        verificationToken: null,
+        verificationTokenExp: null,
+      } as any);
+
+      const settings = await storage.getSecuritySettings();
+      const needsApproval = settings?.requireAdminApproval !== false;
+
+      return res.json({
+        message: needsApproval
+          ? "Email verified successfully. Your account is awaiting admin approval."
+          : "Email verified successfully. You may now log in.",
+        requiresApproval: needsApproval,
+      });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
       next(e);
     }
   });
@@ -119,8 +191,24 @@ export async function registerRoutes(
       const valid = await comparePassword(body.password, user.passwordHash);
       if (!valid) return res.status(401).json({ message: "Invalid credentials" });
 
+      const settings = await storage.getSecuritySettings();
+
+      if (settings?.requireEmailVerification !== false && !user.emailVerified && user.role === "PLAYER") {
+        return res.status(403).json({ message: "Please verify your email before logging in.", code: "EMAIL_NOT_VERIFIED" });
+      }
+
+      if (settings?.requireAdminApproval !== false && user.accountStatus !== "ACTIVE" && user.role === "PLAYER") {
+        if (user.accountStatus === "REJECTED") {
+          return res.status(403).json({ message: "Your registration has been rejected.", code: "ACCOUNT_REJECTED" });
+        }
+        if (user.accountStatus === "SUSPENDED") {
+          return res.status(403).json({ message: "Your account has been suspended.", code: "ACCOUNT_SUSPENDED" });
+        }
+        return res.status(403).json({ message: "Your registration is awaiting approval by Afrocat management.", code: "PENDING_APPROVAL" });
+      }
+
       const token = signToken({ userId: user.id, email: user.email, role: user.role });
-      return res.json({ token, user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId } });
+      return res.json({ token, user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId, accountStatus: user.accountStatus } });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
@@ -131,7 +219,15 @@ export async function registerRoutes(
     try {
       const user = await storage.getUser(req.user!.userId);
       if (!user) return res.status(404).json({ message: "User not found" });
-      return res.json({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId });
+      return res.json({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId, accountStatus: user.accountStatus });
+    } catch (e) { next(e); }
+  });
+
+  // ─── PUBLIC TEAMS (for registration dropdown) ───
+  app.get("/api/public/teams", async (_req, res, next) => {
+    try {
+      const teams = await storage.getTeams();
+      res.json(teams.map(t => ({ id: t.id, name: t.name, category: t.category, season: t.season })));
     } catch (e) { next(e); }
   });
 
@@ -1742,6 +1838,236 @@ th{background:#0d7377;color:white}
       await storage.deleteMatchSquad(existing.id);
       res.status(204).send();
     } catch (e) { next(e); }
+  });
+
+  // ─── ADMIN: REGISTRATION APPROVALS ─────────────────
+  app.get("/api/admin/registrations/pending", requireAuth, requireRole(["ADMIN","MANAGER"]), async (_req, res, next) => {
+    try {
+      const pending = await storage.getPendingRegistrations();
+      res.json(pending.map(({ user: u, player: p }) => ({
+        userId: u.id,
+        fullName: u.fullName,
+        email: u.email,
+        emailVerified: u.emailVerified,
+        accountStatus: u.accountStatus,
+        createdAt: u.createdAt,
+        playerId: p?.id,
+        requestedTeamId: p?.requestedTeamId,
+        teamApprovalStatus: p?.teamApprovalStatus,
+        requestedPosition: p?.requestedPosition,
+        positionApprovalStatus: p?.positionApprovalStatus,
+        requestedJerseyNo: p?.requestedJerseyNo,
+        jerseyApprovalStatus: p?.jerseyApprovalStatus,
+        registrationStatus: p?.registrationStatus,
+      })));
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/admin/registrations/:userId/approve", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const user = await storage.getUser(req.params.userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (user.accountStatus === "ACTIVE") return res.status(400).json({ message: "User is already active" });
+
+      await storage.updateUser(user.id, { accountStatus: "ACTIVE" } as any);
+
+      if (user.playerId) {
+        const updateData: any = { registrationStatus: "APPROVED" };
+
+        const settings = await storage.getSecuritySettings();
+        const player = await storage.getPlayer(user.playerId);
+
+        if (settings?.autoApproveTeamRequests && player?.requestedTeamId) {
+          updateData.teamId = player.requestedTeamId;
+          updateData.teamApprovalStatus = "APPROVED";
+          updateData.teamApprovedByUserId = req.user!.userId;
+        }
+        if (settings?.autoApprovePosition && player?.requestedPosition) {
+          updateData.position = player.requestedPosition;
+          updateData.positionApprovalStatus = "APPROVED";
+          updateData.positionApprovedByUserId = req.user!.userId;
+        }
+        if (settings?.autoApproveJersey && player?.requestedJerseyNo && updateData.teamId) {
+          const existing = await storage.getPlayersByJerseyAndTeam(updateData.teamId, player.requestedJerseyNo);
+          if (existing.length === 0) {
+            updateData.jerseyNo = player.requestedJerseyNo;
+            updateData.jerseyApprovalStatus = "APPROVED";
+            updateData.jerseyApprovedByUserId = req.user!.userId;
+          }
+        }
+        updateData.approvedAt = new Date();
+        await storage.updatePlayer(user.playerId, updateData);
+      }
+
+      res.json({ message: "Registration approved" });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/admin/registrations/:userId/reject", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const { reason } = z.object({ reason: z.string().optional() }).parse(req.body);
+      const user = await storage.getUser(req.params.userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      await storage.updateUser(user.id, { accountStatus: "REJECTED" } as any);
+      if (user.playerId) {
+        await storage.updatePlayer(user.playerId, {
+          registrationStatus: "REJECTED",
+          registrationNotes: reason || null,
+        } as any);
+      }
+      res.json({ message: "Registration rejected" });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/admin/registrations/:userId/verify-email", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const user = await storage.getUser(req.params.userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      await storage.updateUser(user.id, {
+        emailVerified: true,
+        emailVerifiedAt: new Date(),
+        verificationToken: null,
+        verificationTokenExp: null,
+      } as any);
+      res.json({ message: "Email verified by admin" });
+    } catch (e) { next(e); }
+  });
+
+  // ─── PLAYER APPROVAL ENDPOINTS (Position/Jersey/Team) ────
+  app.post("/api/players/:playerId/approve-team", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { teamId } = z.object({ teamId: z.string().min(1) }).parse(req.body);
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      const team = await storage.getTeam(teamId);
+      if (!team) return res.status(400).json({ message: "Team not found" });
+
+      await storage.updatePlayer(player.id, {
+        teamId,
+        teamApprovalStatus: "APPROVED",
+        teamApprovedByUserId: req.user!.userId,
+        approvedAt: new Date(),
+      } as any);
+      res.json({ message: "Team approved" });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
+  });
+
+  app.post("/api/players/:playerId/reject-team", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      await storage.updatePlayer(player.id, { teamApprovalStatus: "REJECTED" } as any);
+      res.json({ message: "Team request rejected" });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/players/:playerId/approve-position", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { position } = z.object({
+        position: z.enum(["SETTER", "LIBERO", "MIDDLE", "OUTSIDE", "OPPOSITE"]),
+      }).parse(req.body);
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      await storage.updatePlayer(player.id, {
+        position,
+        positionApprovalStatus: "APPROVED",
+        positionApprovedByUserId: req.user!.userId,
+        approvedAt: new Date(),
+      } as any);
+      res.json({ message: "Position approved" });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
+  });
+
+  app.post("/api/players/:playerId/reject-position", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      await storage.updatePlayer(player.id, { positionApprovalStatus: "REJECTED" } as any);
+      res.json({ message: "Position request rejected" });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/players/:playerId/approve-jersey", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { jerseyNo } = z.object({ jerseyNo: z.number().int().min(1).max(99) }).parse(req.body);
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      if (!player.teamId || player.teamApprovalStatus !== "APPROVED") {
+        return res.status(400).json({ message: "Approve team first, then assign jersey." });
+      }
+
+      const existing = await storage.getPlayersByJerseyAndTeam(player.teamId, jerseyNo);
+      const conflicting = existing.filter(p => p.id !== player.id);
+      if (conflicting.length > 0) {
+        return res.status(400).json({ message: `Jersey #${jerseyNo} is already taken in this team.` });
+      }
+
+      await storage.updatePlayer(player.id, {
+        jerseyNo,
+        jerseyApprovalStatus: "APPROVED",
+        jerseyApprovedByUserId: req.user!.userId,
+        approvedAt: new Date(),
+      } as any);
+      res.json({ message: "Jersey number approved" });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
+  });
+
+  app.post("/api/players/:playerId/reject-jersey", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      await storage.updatePlayer(player.id, { jerseyApprovalStatus: "REJECTED" } as any);
+      res.json({ message: "Jersey request rejected" });
+    } catch (e) { next(e); }
+  });
+
+  // ─── SECURITY SETTINGS ──────────────────────────────
+  app.get("/api/admin/security-settings", requireAuth, requireRole(["ADMIN"]), async (_req, res, next) => {
+    try {
+      let settings = await storage.getSecuritySettings();
+      if (!settings) {
+        settings = await storage.upsertSecuritySettings({
+          id: "security",
+          requireEmailVerification: true,
+          requireAdminApproval: true,
+          autoApproveTeamRequests: false,
+          autoApprovePosition: false,
+          autoApproveJersey: false,
+        });
+      }
+      res.json(settings);
+    } catch (e) { next(e); }
+  });
+
+  app.put("/api/admin/security-settings", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        requireEmailVerification: z.boolean().optional(),
+        requireAdminApproval: z.boolean().optional(),
+        autoApproveTeamRequests: z.boolean().optional(),
+        autoApprovePosition: z.boolean().optional(),
+        autoApproveJersey: z.boolean().optional(),
+        allowedEmailDomains: z.string().nullable().optional(),
+      }).parse(req.body);
+      const settings = await storage.upsertSecuritySettings(body);
+      res.json(settings);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
   });
 
   return httpServer;
