@@ -82,6 +82,9 @@ export const api = {
 
   getSmartFocus: (playerId: string) => apiFetch<any[]>(`/smart-focus/player/${playerId}`),
 
+  getCoachDashboard: (teamId: string) => apiFetch<any>("/dashboard/coach/summary?teamId=" + teamId),
+  getPlayerDashboard: (playerId: string) => apiFetch<any>("/players/" + playerId + "/dashboard"),
+
   getCoachAssignments: () => apiFetch<any[]>("/coach-assignments"),
   getCoachAssignmentsByTeam: (teamId: string) => apiFetch<any[]>(`/coach-assignments/team/${teamId}`),
   createCoachAssignment: (data: any) => apiFetch<any>("/coach-assignments", { method: "POST", body: JSON.stringify(data) }),
@@ -107,6 +110,9 @@ export const api = {
   },
   createMatchDocument: (data: any) => apiFetch<any>("/match-documents", { method: "POST", body: JSON.stringify(data) }),
   generateO2bis: (data: any) => apiFetch<any>("/o2bis/generate", { method: "POST", body: JSON.stringify(data) }),
+
+  generateMatchReport: (matchId: string, teamId?: string) =>
+    apiFetch<any>("/reports/match/" + matchId + "/pdf", { method: "POST", body: JSON.stringify({ teamId }) }),
 
   getSquadEligibility: (teamId: string) => apiFetch<any[]>(`/squad/eligibility/${teamId}`),
   getMatchSquad: (matchId: string, teamId: string) => apiFetch<any>(`/squad/${matchId}/${teamId}`),

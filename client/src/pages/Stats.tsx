@@ -1,22 +1,236 @@
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Save, AlertCircle } from "lucide-react";
-import { useState } from "react";
+import { Save, RotateCcw, Plus, Minus, Trophy, AlertTriangle, CheckCircle2, Zap, Shield, Target, Hand, ArrowUpCircle } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import logo from "@assets/afrocate_logo_1772226294597.png";
+import { Badge } from "@/components/ui/badge";
+
+type StatKey = "spikesKill" | "spikesError" | "servesAce" | "servesError" | "blocksSolo" | "blocksAssist" | "receivePerfect" | "receiveError" | "digs" | "settingAssist" | "settingError";
+
+const statCategories = [
+  {
+    label: "Attack",
+    icon: Zap,
+    color: "text-orange-500",
+    bgColor: "bg-orange-50",
+    borderColor: "border-orange-200",
+    fields: [
+      { key: "spikesKill" as StatKey, label: "Kills" },
+      { key: "spikesError" as StatKey, label: "Errors" },
+    ],
+  },
+  {
+    label: "Serve",
+    icon: Target,
+    color: "text-blue-500",
+    bgColor: "bg-blue-50",
+    borderColor: "border-blue-200",
+    fields: [
+      { key: "servesAce" as StatKey, label: "Aces" },
+      { key: "servesError" as StatKey, label: "Errors" },
+    ],
+  },
+  {
+    label: "Block",
+    icon: Shield,
+    color: "text-purple-500",
+    bgColor: "bg-purple-50",
+    borderColor: "border-purple-200",
+    fields: [
+      { key: "blocksSolo" as StatKey, label: "Solo" },
+      { key: "blocksAssist" as StatKey, label: "Assist" },
+    ],
+  },
+  {
+    label: "Receive",
+    icon: Hand,
+    color: "text-green-500",
+    bgColor: "bg-green-50",
+    borderColor: "border-green-200",
+    fields: [
+      { key: "receivePerfect" as StatKey, label: "Perfect" },
+      { key: "receiveError" as StatKey, label: "Errors" },
+    ],
+  },
+  {
+    label: "Defense",
+    icon: Shield,
+    color: "text-teal-500",
+    bgColor: "bg-teal-50",
+    borderColor: "border-teal-200",
+    fields: [
+      { key: "digs" as StatKey, label: "Digs" },
+    ],
+  },
+  {
+    label: "Setting",
+    icon: ArrowUpCircle,
+    color: "text-indigo-500",
+    bgColor: "bg-indigo-50",
+    borderColor: "border-indigo-200",
+    fields: [
+      { key: "settingAssist" as StatKey, label: "Assists" },
+      { key: "settingError" as StatKey, label: "Errors" },
+    ],
+  },
+];
+
+const allStatKeys: StatKey[] = [
+  "spikesKill", "spikesError", "servesAce", "servesError",
+  "blocksSolo", "blocksAssist", "receivePerfect", "receiveError",
+  "digs", "settingAssist", "settingError",
+];
+
+function computePoints(s: Record<string, number>): number {
+  return (
+    ((s.spikesKill || 0) * 2) +
+    ((s.servesAce || 0) * 2) +
+    ((s.blocksSolo || 0) * 2) +
+    (s.blocksAssist || 0) +
+    (s.digs || 0) +
+    (s.settingAssist || 0) -
+    ((s.spikesError || 0) * 2) -
+    ((s.servesError || 0) * 2) -
+    ((s.receiveError || 0) * 2) -
+    ((s.settingError || 0) * 2)
+  );
+}
+
+function computeErrors(s: Record<string, number>): number {
+  return (s.spikesError || 0) + (s.servesError || 0) + (s.receiveError || 0) + (s.settingError || 0);
+}
+
+function getInitials(firstName: string, lastName: string): string {
+  return `${(firstName || "")[0] || ""}${(lastName || "")[0] || ""}`.toUpperCase();
+}
+
+function PlayerStatCard({
+  player,
+  stats,
+  onIncrement,
+  onDecrement,
+}: {
+  player: any;
+  stats: Record<string, number>;
+  onIncrement: (key: StatKey) => void;
+  onDecrement: (key: StatKey) => void;
+}) {
+  const points = computePoints(stats);
+  const errors = computeErrors(stats);
+
+  return (
+    <Card className="overflow-hidden border-2 hover:border-primary/30 transition-all duration-200" data-testid={`card-player-${player.id}`}>
+      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            {player.photoUrl ? (
+              <img
+                src={player.photoUrl}
+                alt={`${player.firstName} ${player.lastName}`}
+                className="w-14 h-14 rounded-full object-cover border-2 border-primary/20"
+                data-testid={`img-player-photo-${player.id}`}
+              />
+            ) : (
+              <div
+                className="w-14 h-14 rounded-full bg-muted flex items-center justify-center border-2 border-primary/20 text-lg font-bold text-muted-foreground"
+                data-testid={`img-player-avatar-${player.id}`}
+              >
+                {getInitials(player.firstName, player.lastName)}
+              </div>
+            )}
+            <div className="absolute -bottom-1 -right-1 bg-primary text-primary-foreground text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-background">
+              {player.jerseyNo}
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-display font-bold text-sm truncate" data-testid={`text-player-name-${player.id}`}>
+              {player.firstName} {player.lastName}
+            </h3>
+            <Badge variant="secondary" className="text-[10px] mt-0.5" data-testid={`badge-position-${player.id}`}>
+              {player.position}
+            </Badge>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mt-3">
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold ${points >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`} data-testid={`text-points-${player.id}`}>
+            <Trophy className="w-3 h-3" />
+            {points} pts
+          </div>
+          {errors > 0 && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold bg-red-50 text-red-600" data-testid={`text-errors-${player.id}`}>
+              <AlertTriangle className="w-3 h-3" />
+              {errors} err
+            </div>
+          )}
+        </div>
+      </div>
+
+      <CardContent className="p-3 space-y-2">
+        {statCategories.map((cat) => (
+          <div key={cat.label} className={`rounded-lg p-2 ${cat.bgColor} border ${cat.borderColor}`}>
+            <div className={`flex items-center gap-1 mb-1.5 ${cat.color}`}>
+              <cat.icon className="w-3 h-3" />
+              <span className="text-[10px] font-bold uppercase tracking-wider">{cat.label}</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {cat.fields.map((f) => (
+                <div key={f.key} className="flex items-center gap-1 bg-white/80 rounded-md px-1.5 py-0.5">
+                  <button
+                    onClick={() => onDecrement(f.key)}
+                    className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
+                    data-testid={`button-dec-${f.key}-${player.id}`}
+                  >
+                    <Minus className="w-3 h-3" />
+                  </button>
+                  <div className="text-center min-w-[28px]">
+                    <span className="text-xs font-bold" data-testid={`text-stat-${f.key}-${player.id}`}>{stats[f.key] || 0}</span>
+                    <div className="text-[8px] text-muted-foreground leading-none">{f.label}</div>
+                  </div>
+                  <button
+                    onClick={() => onIncrement(f.key)}
+                    className="w-5 h-5 rounded flex items-center justify-center text-primary hover:bg-primary/10 transition-colors"
+                    data-testid={`button-inc-${f.key}-${player.id}`}
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Stats() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: matches = [] } = useQuery({ queryKey: ["/api/matches"], queryFn: api.getMatches });
   const { data: teams = [] } = useQuery({ queryKey: ["/api/teams"], queryFn: api.getTeams });
+  const { data: coachAssignments = [] } = useQuery({ queryKey: ["/api/coach-assignments"], queryFn: api.getCoachAssignments });
 
   const [selectedMatchId, setSelectedMatchId] = useState<string>("");
+  const [statsData, setStatsData] = useState<Record<string, Record<string, number>>>({});
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryData, setSummaryData] = useState<any>(null);
+
   const selectedMatch = matches.find((m: any) => m.id === selectedMatchId);
+  const selectedTeam = teams.find((t: any) => t.id === selectedMatch?.teamId);
+
+  const coachName = useMemo(() => {
+    if (!selectedMatch?.teamId) return "";
+    const assignment = coachAssignments.find(
+      (ca: any) => ca.teamId === selectedMatch.teamId && ca.active
+    );
+    if (!assignment) return "";
+    return "Assigned";
+  }, [selectedMatch?.teamId, coachAssignments]);
 
   const { data: matchPlayers = [] } = useQuery({
     queryKey: ["/api/players/team", selectedMatch?.teamId],
@@ -24,11 +238,80 @@ export default function Stats() {
     enabled: !!selectedMatch?.teamId,
   });
 
-  const [statsData, setStatsData] = useState<Record<string, any>>({});
+  const { data: existingStats = [] } = useQuery({
+    queryKey: ["/api/stats/match", selectedMatchId],
+    queryFn: () => api.getStatsByMatch(selectedMatchId),
+    enabled: !!selectedMatchId,
+  });
 
-  const updateStat = (playerId: string, field: string, value: number) => {
-    setStatsData(prev => ({ ...prev, [playerId]: { ...prev[playerId], [field]: value } }));
-  };
+  useEffect(() => {
+    if (existingStats.length > 0 && matchPlayers.length > 0) {
+      const loaded: Record<string, Record<string, number>> = {};
+      existingStats.forEach((s: any) => {
+        loaded[s.playerId] = {};
+        allStatKeys.forEach((k) => {
+          loaded[s.playerId][k] = s[k] || 0;
+        });
+      });
+      setStatsData(loaded);
+    } else if (matchPlayers.length > 0 && existingStats.length === 0) {
+      const empty: Record<string, Record<string, number>> = {};
+      matchPlayers.forEach((p: any) => {
+        empty[p.id] = {};
+        allStatKeys.forEach((k) => { empty[p.id][k] = 0; });
+      });
+      setStatsData(empty);
+    }
+  }, [existingStats, matchPlayers]);
+
+  const handleIncrement = useCallback((playerId: string, key: StatKey) => {
+    setStatsData((prev) => ({
+      ...prev,
+      [playerId]: { ...prev[playerId], [key]: (prev[playerId]?.[key] || 0) + 1 },
+    }));
+  }, []);
+
+  const handleDecrement = useCallback((playerId: string, key: StatKey) => {
+    setStatsData((prev) => ({
+      ...prev,
+      [playerId]: { ...prev[playerId], [key]: Math.max(0, (prev[playerId]?.[key] || 0) - 1) },
+    }));
+  }, []);
+
+  const handleReset = useCallback(() => {
+    const empty: Record<string, Record<string, number>> = {};
+    matchPlayers.forEach((p: any) => {
+      empty[p.id] = {};
+      allStatKeys.forEach((k) => { empty[p.id][k] = 0; });
+    });
+    setStatsData(empty);
+    setShowSummary(false);
+    setSummaryData(null);
+  }, [matchPlayers]);
+
+  const teamTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    allStatKeys.forEach((k) => { totals[k] = 0; });
+    totals.pointsTotal = 0;
+    totals.errorsTotal = 0;
+    Object.values(statsData).forEach((s) => {
+      allStatKeys.forEach((k) => { totals[k] += s[k] || 0; });
+      totals.pointsTotal += computePoints(s);
+      totals.errorsTotal += computeErrors(s);
+    });
+    return totals;
+  }, [statsData]);
+
+  const topPerformers = useMemo(() => {
+    return matchPlayers
+      .map((p: any) => ({
+        ...p,
+        points: computePoints(statsData[p.id] || {}),
+        errors: computeErrors(statsData[p.id] || {}),
+      }))
+      .sort((a: any, b: any) => b.points - a.points)
+      .slice(0, 5);
+  }, [matchPlayers, statsData]);
 
   const submitMut = useMutation({
     mutationFn: () => {
@@ -49,89 +332,249 @@ export default function Stats() {
       }));
       return api.submitStats(selectedMatchId, payload);
     },
-    onSuccess: () => { toast({ title: "Stats saved and Smart Focus generated!" }); queryClient.invalidateQueries({ queryKey: ["/api/stats"] }); },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
-  });
+    onSuccess: () => {
+      toast({
+        title: "✅ Stats Saved Successfully!",
+        description: "Smart Focus training recommendations have been generated.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
 
-  const fields = [
-    { key: "spikesKill", label: "Kill" }, { key: "spikesError", label: "Err" },
-    { key: "servesAce", label: "Ace" }, { key: "servesError", label: "Err" },
-    { key: "blocksSolo", label: "Solo" }, { key: "blocksAssist", label: "Ast" },
-    { key: "receivePerfect", label: "Perf" }, { key: "receiveError", label: "Err" },
-    { key: "digs", label: "Digs" }, { key: "settingAssist", label: "S.Ast" }, { key: "settingError", label: "S.Err" },
-  ];
+      setSummaryData({
+        teamTotals,
+        topPerformers,
+        smartFocusCount: matchPlayers.length,
+      });
+      setShowSummary(true);
+    },
+    onError: (e: any) =>
+      toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   return (
     <Layout>
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div>
-          <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">Enter Stats</h1>
-          <p className="text-muted-foreground mt-1">Record player performance and generate Smart Focus</p>
+        <div className="bg-gradient-to-r from-primary/15 via-primary/5 to-transparent rounded-2xl p-6 border border-primary/10">
+          <div className="flex items-center gap-4">
+            <img src={logo} alt="Afrocat Logo" className="w-16 h-16 object-contain" data-testid="img-afrocat-logo" />
+            <div>
+              <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-club-name">
+                AFROCAT VOLLEYBALL CLUB
+              </h1>
+              <p className="text-sm text-muted-foreground italic mt-0.5" data-testid="text-motto">
+                One Team One Dream — Passion Discipline Victory
+              </p>
+              <p className="text-lg font-display font-semibold text-primary mt-1" data-testid="text-page-title">
+                Enter Match Statistics
+              </p>
+            </div>
+          </div>
         </div>
 
         <Card>
           <CardHeader className="bg-muted/30 border-b">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <CardTitle>Select Match</CardTitle>
-              <Select value={selectedMatchId} onValueChange={setSelectedMatchId}>
-                <SelectTrigger className="w-full md:w-[300px]" data-testid="select-match">
-                  <SelectValue placeholder="Select a match" />
-                </SelectTrigger>
-                <SelectContent>
-                  {matches.map((m: any) => {
-                    const team = teams.find((t: any) => t.id === m.teamId);
-                    return <SelectItem key={m.id} value={m.id}>{m.matchDate} - {team?.name} vs {m.opponent}</SelectItem>;
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
+            <CardTitle className="text-base">Match Selection</CardTitle>
           </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Match</label>
+                <Select value={selectedMatchId} onValueChange={(v) => { setSelectedMatchId(v); setShowSummary(false); setSummaryData(null); }}>
+                  <SelectTrigger data-testid="select-match">
+                    <SelectValue placeholder="Select a match" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {matches.map((m: any) => {
+                      const team = teams.find((t: any) => t.id === m.teamId);
+                      return (
+                        <SelectItem key={m.id} value={m.id} data-testid={`select-match-option-${m.id}`}>
+                          {m.matchDate} — {team?.name || "?"} vs {m.opponent}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          {selectedMatchId && matchPlayers.length > 0 && (
-            <CardContent className="p-0">
-              <div className="p-4 bg-primary/5 border-b flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-primary mt-0.5" />
-                <p className="text-sm text-primary/80">Submitting stats will auto-generate Smart Focus training recommendations.</p>
+              {selectedMatch && (
+                <>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Team</label>
+                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-team-name">
+                      {selectedTeam?.name || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Opponent</label>
+                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-opponent">
+                      {selectedMatch.opponent}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Competition</label>
+                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-competition">
+                      {selectedMatch.competition}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Venue</label>
+                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-venue">
+                      {selectedMatch.venue}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Date</label>
+                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-match-date">
+                      {selectedMatch.matchDate}
+                    </div>
+                  </div>
+                  {coachName && (
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Coach</label>
+                      <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-coach-name">
+                        {coachName}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {selectedMatchId && matchPlayers.length > 0 && (
+          <>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-display font-bold" data-testid="text-player-count">
+                  Player Stats ({matchPlayers.length} Players)
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Use +/- buttons to record each stat. Points update live.
+                </p>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-xs text-muted-foreground uppercase bg-muted/20 border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-left sticky left-0 bg-background border-r">Player</th>
-                      {fields.map(f => <th key={f.key} className="px-2 py-3 text-center min-w-[60px]">{f.label}</th>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {matchPlayers.map((player: any) => (
-                      <tr key={player.id} className="border-b hover:bg-muted/10">
-                        <td className="px-4 py-2 font-medium sticky left-0 bg-background border-r whitespace-nowrap">
-                          #{player.jerseyNo} {player.firstName} {player.lastName[0]}.
-                        </td>
-                        {fields.map(f => (
-                          <td key={f.key} className="px-1 py-2">
-                            <Input type="number" className="w-14 h-8 text-center px-1"
-                              value={statsData[player.id]?.[f.key] || 0}
-                              onChange={e => updateStat(player.id, f.key, parseInt(e.target.value) || 0)}
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 font-bold text-primary" data-testid="text-team-points-total">
+                  <Trophy className="w-4 h-4" />
+                  Team: {teamTotals.pointsTotal} pts
+                </div>
+                {teamTotals.errorsTotal > 0 && (
+                  <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-50 font-bold text-red-600" data-testid="text-team-errors-total">
+                    <AlertTriangle className="w-4 h-4" />
+                    {teamTotals.errorsTotal} errors
+                  </div>
+                )}
               </div>
-              <div className="p-6 border-t bg-muted/10 flex justify-end">
-                <Button onClick={() => submitMut.mutate()} disabled={submitMut.isPending} data-testid="button-submit-stats">
-                  <Save className="w-4 h-4 mr-2" /> {submitMut.isPending ? "Saving..." : "Save Stats & Generate Insights"}
-                </Button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {matchPlayers.map((player: any) => (
+                <PlayerStatCard
+                  key={player.id}
+                  player={player}
+                  stats={statsData[player.id] || {}}
+                  onIncrement={(key) => handleIncrement(player.id, key)}
+                  onDecrement={(key) => handleDecrement(player.id, key)}
+                />
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-muted/20 rounded-xl border sticky bottom-4">
+              <Button
+                variant="outline"
+                onClick={handleReset}
+                data-testid="button-reset-stats"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Reset
+              </Button>
+              <Button
+                onClick={() => submitMut.mutate()}
+                disabled={submitMut.isPending}
+                size="lg"
+                className="px-8"
+                data-testid="button-submit-stats"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {submitMut.isPending ? "Saving..." : "Save Match Stats"}
+              </Button>
+            </div>
+          </>
+        )}
+
+        {selectedMatchId && matchPlayers.length === 0 && (
+          <Card>
+            <CardContent className="py-10 text-center text-muted-foreground" data-testid="text-no-players">
+              No players found for this team. Add players first.
+            </CardContent>
+          </Card>
+        )}
+
+        {showSummary && summaryData && (
+          <Card className="border-2 border-green-200 bg-green-50/30" data-testid="card-summary">
+            <CardHeader className="bg-green-100/50 border-b border-green-200">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                <CardTitle className="text-green-800">Match Stats Summary</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              <div>
+                <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Team Totals</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                  <div className="bg-white rounded-lg p-3 border text-center">
+                    <div className="text-2xl font-bold text-primary" data-testid="text-summary-points">{summaryData.teamTotals.pointsTotal}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase">Points</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border text-center">
+                    <div className="text-2xl font-bold text-orange-500" data-testid="text-summary-kills">{summaryData.teamTotals.spikesKill}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase">Kills</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border text-center">
+                    <div className="text-2xl font-bold text-blue-500" data-testid="text-summary-aces">{summaryData.teamTotals.servesAce}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase">Aces</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border text-center">
+                    <div className="text-2xl font-bold text-purple-500" data-testid="text-summary-blocks">{(summaryData.teamTotals.blocksSolo || 0) + (summaryData.teamTotals.blocksAssist || 0)}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase">Blocks</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border text-center">
+                    <div className="text-2xl font-bold text-teal-500" data-testid="text-summary-digs">{summaryData.teamTotals.digs}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase">Digs</div>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 border text-center">
+                    <div className="text-2xl font-bold text-red-500" data-testid="text-summary-errors">{summaryData.teamTotals.errorsTotal}</div>
+                    <div className="text-[10px] text-muted-foreground uppercase">Errors</div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Top Performers</h4>
+                <div className="space-y-2">
+                  {summaryData.topPerformers.map((p: any, i: number) => (
+                    <div key={p.id} className="flex items-center gap-3 bg-white rounded-lg p-3 border" data-testid={`text-top-performer-${i}`}>
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                        {i + 1}
+                      </div>
+                      <div className="flex-1">
+                        <span className="font-semibold text-sm">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
+                        <span className="text-xs text-muted-foreground ml-2">{p.position}</span>
+                      </div>
+                      <Badge variant={p.points >= 0 ? "default" : "destructive"} data-testid={`text-performer-points-${i}`}>
+                        {p.points} pts
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-sm text-green-700 flex items-center gap-2" data-testid="text-smartfocus-count">
+                <CheckCircle2 className="w-4 h-4" />
+                SmartFocus recommendations generated for {summaryData.smartFocusCount} players
               </div>
             </CardContent>
-          )}
-
-          {selectedMatchId && matchPlayers.length === 0 && (
-            <CardContent className="py-10 text-center text-muted-foreground">No players found for this team.</CardContent>
-          )}
-        </Card>
+          </Card>
+        )}
       </div>
     </Layout>
   );

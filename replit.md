@@ -67,6 +67,10 @@ Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions
 - **O-2bis Form Generation**: Server generates official team composition forms with club header, player roster, officials table, and approval signatures. Stored as MatchDocuments with metadata.
 - **Starting 12 Squad Selector**: Per-match squad selection with eligibility validation. Checks: ACTIVE status, no open injuries, valid active contract, eligibilityStatus field. Server-side enforcement on save. Max 12 players. UI integrated into Matches page with ineligibility badges.
 - **Coach Assignment Trigger**: Creating/updating matches with results auto-recomputes performance for the HEAD_COACH assigned to that team.
+- **Enter Stats (World-Class UI)**: Branded stat entry page with Afrocat logo/motto, match meta display, player cards with circular photo/avatar, jersey number badges, position badges, color-coded stat category groups (Attack/Serve/Block/Receive/Defense/Setting) with +/- increment buttons, live pointsTotal and error totals per player and per team, post-save summary panel with top performers and SmartFocus count. Edit mode pre-loads existing stats.
+- **Coach Dashboard Sync**: GET /api/dashboard/coach/summary?teamId= returns last 5 matches, team totals for latest match, top 5 performers, error leaders, SmartFocus highlights. Dashboard page shows Performance Insights section with team selector.
+- **Player Dashboard**: GET /api/players/:playerId/dashboard returns last 10 match stats with match context, performance trend, SmartFocus history, attendance summary, injury status, active contract. RBAC: coach+ can view any player, player can view only self.
+- **Match Report PDF**: POST /api/reports/match/:matchId/pdf generates branded HTML match report (club header, match info, result, team totals, top performers, error leaders, SmartFocus summary, full player stats table). Stored as MatchDocument with MATCH_REPORT type. Creates PlayerReport per player. Reports page has generate + view/print functionality.
 
 ## Brand
 - Primary: teal (174 100% 29%), Accent: gold (45 100% 51%)

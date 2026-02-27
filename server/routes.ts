@@ -667,6 +667,151 @@ export async function registerRoutes(
     }
   });
 
+  // ─── MATCH REPORT PDF GENERATION ────────────
+  app.post("/api/reports/match/:matchId/pdf", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const matchId = req.params.matchId;
+      const bodySchema = z.object({ teamId: z.string().optional() });
+      const { teamId: bodyTeamId } = bodySchema.parse(req.body || {});
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      const teamId = bodyTeamId || match.teamId;
+      const team = await storage.getTeam(teamId);
+      if (!team) return res.status(404).json({ message: "Team not found" });
+
+      const stats = await storage.getStatsByMatch(matchId);
+      if (stats.length === 0) return res.status(400).json({ message: "No stats recorded for this match" });
+
+      const players = await storage.getPlayersByTeam(teamId);
+      const playerMap = new Map(players.map(p => [p.id, p]));
+
+      const assignments = await storage.getCoachAssignmentsByTeam(teamId);
+      const headCoach = assignments.find(a => a.assignmentRole === "HEAD_COACH" && a.active);
+      let coachName = "";
+      if (headCoach) {
+        const coachUser = await storage.getUser(headCoach.coachUserId);
+        coachName = coachUser?.fullName || "";
+      }
+
+      const enrichedStats = stats.map(s => {
+        const player = playerMap.get(s.playerId);
+        return {
+          ...s,
+          playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
+          jerseyNo: player?.jerseyNo ?? 0,
+          position: player?.position ?? "",
+        };
+      }).sort((a, b) => (b.pointsTotal || 0) - (a.pointsTotal || 0));
+
+      const teamTotals = {
+        spikesKill: enrichedStats.reduce((sum, s) => sum + (s.spikesKill || 0), 0),
+        spikesError: enrichedStats.reduce((sum, s) => sum + (s.spikesError || 0), 0),
+        servesAce: enrichedStats.reduce((sum, s) => sum + (s.servesAce || 0), 0),
+        servesError: enrichedStats.reduce((sum, s) => sum + (s.servesError || 0), 0),
+        blocksSolo: enrichedStats.reduce((sum, s) => sum + (s.blocksSolo || 0), 0),
+        blocksAssist: enrichedStats.reduce((sum, s) => sum + (s.blocksAssist || 0), 0),
+        receivePerfect: enrichedStats.reduce((sum, s) => sum + (s.receivePerfect || 0), 0),
+        receiveError: enrichedStats.reduce((sum, s) => sum + (s.receiveError || 0), 0),
+        digs: enrichedStats.reduce((sum, s) => sum + (s.digs || 0), 0),
+        settingAssist: enrichedStats.reduce((sum, s) => sum + (s.settingAssist || 0), 0),
+        settingError: enrichedStats.reduce((sum, s) => sum + (s.settingError || 0), 0),
+        pointsTotal: enrichedStats.reduce((sum, s) => sum + (s.pointsTotal || 0), 0),
+      };
+
+      const topPerformers = enrichedStats.slice(0, 5);
+
+      const errorStats = enrichedStats.map(s => ({
+        ...s,
+        totalErrors: (s.spikesError || 0) + (s.servesError || 0) + (s.receiveError || 0) + (s.settingError || 0),
+      })).sort((a, b) => b.totalErrors - a.totalErrors).slice(0, 5);
+
+      const allSmartFocus: any[] = [];
+      for (const s of stats) {
+        const sf = await storage.getSmartFocusByPlayer(s.playerId);
+        const matchSf = sf.filter(f => f.matchId === matchId);
+        for (const f of matchSf) {
+          const player = playerMap.get(s.playerId);
+          allSmartFocus.push({
+            playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
+            focusAreas: f.focusAreas,
+          });
+        }
+      }
+
+      const reportData = {
+        clubName: "AFROCAT VOLLEYBALL CLUB",
+        motto: "One Team One Dream — Passion Discipline Victory",
+        teamName: team.name,
+        opponent: match.opponent,
+        matchDate: match.matchDate,
+        venue: match.venue,
+        competition: match.competition,
+        result: match.result,
+        setsFor: match.setsFor,
+        setsAgainst: match.setsAgainst,
+        coachName,
+        teamTotals,
+        topPerformers: topPerformers.map(s => ({
+          jerseyNo: s.jerseyNo,
+          name: s.playerName,
+          position: s.position,
+          pointsTotal: s.pointsTotal || 0,
+          spikesKill: s.spikesKill || 0,
+          servesAce: s.servesAce || 0,
+          blocks: (s.blocksSolo || 0) + (s.blocksAssist || 0),
+          digs: s.digs || 0,
+          settingAssist: s.settingAssist || 0,
+        })),
+        errorLeaders: errorStats.map(s => ({
+          jerseyNo: s.jerseyNo,
+          name: s.playerName,
+          position: s.position,
+          totalErrors: s.totalErrors,
+          spikesError: s.spikesError || 0,
+          servesError: s.servesError || 0,
+          receiveError: s.receiveError || 0,
+          settingError: s.settingError || 0,
+        })),
+        smartFocus: allSmartFocus,
+        allPlayerStats: enrichedStats.map(s => ({
+          jerseyNo: s.jerseyNo,
+          name: s.playerName,
+          position: s.position,
+          pointsTotal: s.pointsTotal || 0,
+          spikesKill: s.spikesKill || 0,
+          servesAce: s.servesAce || 0,
+          blocks: (s.blocksSolo || 0) + (s.blocksAssist || 0),
+          digs: s.digs || 0,
+          settingAssist: s.settingAssist || 0,
+        })),
+      };
+
+      const docRecord = await storage.createMatchDocument({
+        matchId,
+        teamId,
+        documentType: "MATCH_REPORT",
+        fileUrl: `/api/reports/match/${matchId}/view/${Date.now()}`,
+        metadata: reportData,
+      });
+
+      for (const s of stats) {
+        await storage.createPlayerReport({
+          playerId: s.playerId,
+          reportType: "MATCH_REPORT",
+          pdfUrl: docRecord.fileUrl,
+          generatedDate: new Date().toISOString().split("T")[0],
+        });
+      }
+
+      res.status(201).json({ documentId: docRecord.id, fileUrl: docRecord.fileUrl, data: reportData });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
   // ─── STARTING 12 SQUAD SELECTOR ──────────────
   app.get("/api/squad/eligibility/:teamId", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
@@ -679,7 +824,7 @@ export async function registerRoutes(
         if (p.status !== "ACTIVE") reasons.push(`Status: ${p.status}`);
         if (p.eligibilityStatus === "NOT_ELIGIBLE") reasons.push(p.eligibilityNotes || "Marked ineligible");
         const openInjury = injuries.find(i => i.playerId === p.id && i.status === "OPEN");
-        if (openInjury) reasons.push(`Injury: ${openInjury.description || openInjury.type}`);
+        if (openInjury) reasons.push(`Injury: ${openInjury.injuryType}`);
         const activeContract = contracts.find(c => c.playerId === p.id && c.status === "ACTIVE");
         if (!activeContract) reasons.push("No active contract");
         return {
@@ -757,6 +902,220 @@ export async function registerRoutes(
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
     }
+  });
+
+  // ─── DASHBOARD ─────────────────────────────────
+  app.get("/api/dashboard/coach/summary", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const teamId = req.query.teamId as string;
+      if (!teamId) return res.status(400).json({ message: "teamId query parameter is required" });
+
+      const matches = await storage.getMatchesByTeam(teamId);
+      const last5Matches = matches.slice(0, 5);
+
+      const players = await storage.getPlayersByTeam(teamId);
+      const playerMap = new Map(players.map(p => [p.id, p]));
+
+      let latestMatchTotals: Record<string, number> = {};
+      let topPerformers: any[] = [];
+      let errorLeaders: any[] = [];
+
+      if (last5Matches.length > 0) {
+        const latestMatchStats = await storage.getStatsByMatch(last5Matches[0].id);
+
+        latestMatchTotals = {
+          spikesKill: 0, spikesError: 0, servesAce: 0, servesError: 0,
+          blocksSolo: 0, blocksAssist: 0, receivePerfect: 0, receiveError: 0,
+          digs: 0, settingAssist: 0, settingError: 0, pointsTotal: 0,
+        };
+        for (const s of latestMatchStats) {
+          latestMatchTotals.spikesKill += s.spikesKill ?? 0;
+          latestMatchTotals.spikesError += s.spikesError ?? 0;
+          latestMatchTotals.servesAce += s.servesAce ?? 0;
+          latestMatchTotals.servesError += s.servesError ?? 0;
+          latestMatchTotals.blocksSolo += s.blocksSolo ?? 0;
+          latestMatchTotals.blocksAssist += s.blocksAssist ?? 0;
+          latestMatchTotals.receivePerfect += s.receivePerfect ?? 0;
+          latestMatchTotals.receiveError += s.receiveError ?? 0;
+          latestMatchTotals.digs += s.digs ?? 0;
+          latestMatchTotals.settingAssist += s.settingAssist ?? 0;
+          latestMatchTotals.settingError += s.settingError ?? 0;
+          latestMatchTotals.pointsTotal += s.pointsTotal ?? 0;
+        }
+
+        const allStats: any[] = [];
+        for (const m of last5Matches) {
+          const mStats = m.id === last5Matches[0].id ? latestMatchStats : await storage.getStatsByMatch(m.id);
+          allStats.push(...mStats);
+        }
+
+        const playerPointsMap = new Map<string, number>();
+        const playerErrorsMap = new Map<string, number>();
+        for (const s of allStats) {
+          playerPointsMap.set(s.playerId, (playerPointsMap.get(s.playerId) || 0) + (s.pointsTotal ?? 0));
+          const totalErrors = (s.spikesError ?? 0) + (s.servesError ?? 0) + (s.receiveError ?? 0) + (s.settingError ?? 0);
+          playerErrorsMap.set(s.playerId, (playerErrorsMap.get(s.playerId) || 0) + totalErrors);
+        }
+
+        topPerformers = Array.from(playerPointsMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([playerId, points]) => {
+            const p = playerMap.get(playerId);
+            return {
+              playerId,
+              name: p ? `${p.firstName} ${p.lastName}` : "Unknown",
+              jerseyNo: p?.jerseyNo,
+              position: p?.position,
+              pointsTotal: points,
+            };
+          });
+
+        errorLeaders = Array.from(playerErrorsMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([playerId, errors]) => {
+            const p = playerMap.get(playerId);
+            return {
+              playerId,
+              name: p ? `${p.firstName} ${p.lastName}` : "Unknown",
+              jerseyNo: p?.jerseyNo,
+              position: p?.position,
+              totalErrors: errors,
+            };
+          });
+      }
+
+      const smartFocusMap = new Map<string, number>();
+      for (const p of players) {
+        const focuses = await storage.getSmartFocusByPlayer(p.id);
+        for (const f of focuses) {
+          if (Array.isArray(f.focusAreas)) {
+            for (const area of f.focusAreas) {
+              smartFocusMap.set(area, (smartFocusMap.get(area) || 0) + 1);
+            }
+          }
+        }
+      }
+      const smartFocusHighlights = Array.from(smartFocusMap.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([area, count]) => ({ area, count }));
+
+      res.json({
+        last5Matches: last5Matches.map(m => ({
+          id: m.id, opponent: m.opponent, matchDate: m.matchDate,
+          result: m.result, setsFor: m.setsFor, setsAgainst: m.setsAgainst,
+          venue: m.venue, competition: m.competition,
+        })),
+        latestMatchTotals,
+        topPerformers,
+        errorLeaders,
+        smartFocusHighlights,
+      });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/players/:playerId/dashboard", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.params.playerId;
+      const userRole = req.user!.role;
+      const userId = req.user!.userId;
+
+      if (userRole === "PLAYER") {
+        const user = await storage.getUser(userId);
+        if (!user || user.playerId !== playerId) {
+          return res.status(403).json({ message: "You can only view your own dashboard" });
+        }
+      } else if (!["ADMIN", "MANAGER", "COACH"].includes(userRole)) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
+
+      const player = await storage.getPlayer(playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      const allStats = await storage.getStatsByPlayer(playerId);
+      const matches = await storage.getMatches();
+      const matchMap = new Map(matches.map(m => [m.id, m]));
+
+      const statsWithMatch = allStats
+        .map(s => {
+          const m = matchMap.get(s.matchId);
+          return {
+            ...s,
+            matchDate: m?.matchDate,
+            opponent: m?.opponent,
+            result: m?.result,
+            venue: m?.venue,
+            competition: m?.competition,
+          };
+        })
+        .sort((a, b) => (b.matchDate || "").localeCompare(a.matchDate || ""))
+        .slice(0, 10);
+
+      const performanceTrend = statsWithMatch
+        .slice()
+        .reverse()
+        .map(s => ({
+          matchId: s.matchId,
+          matchDate: s.matchDate,
+          opponent: s.opponent,
+          pointsTotal: s.pointsTotal ?? 0,
+        }));
+
+      const smartFocusHistory = await storage.getSmartFocusByPlayer(playerId);
+
+      const attendanceRecords = await storage.getAttendanceRecordsByPlayer(playerId);
+      const attendanceSummary = {
+        total: attendanceRecords.length,
+        present: attendanceRecords.filter(r => r.status === "PRESENT").length,
+        late: attendanceRecords.filter(r => r.status === "LATE").length,
+        absent: attendanceRecords.filter(r => r.status === "ABSENT").length,
+        excused: attendanceRecords.filter(r => r.status === "EXCUSED").length,
+      };
+
+      const injuries = await storage.getInjuriesByPlayer(playerId);
+      const openInjury = injuries.find(i => i.status === "OPEN");
+
+      const contracts = await storage.getPlayerContracts(playerId);
+      const activeContract = contracts.find((c: any) => c.status === "ACTIVE");
+
+      res.json({
+        player: {
+          id: player.id,
+          firstName: player.firstName,
+          lastName: player.lastName,
+          jerseyNo: player.jerseyNo,
+          position: player.position,
+          status: player.status,
+          photoUrl: player.photoUrl,
+          teamId: player.teamId,
+        },
+        recentStats: statsWithMatch,
+        performanceTrend,
+        smartFocusHistory: smartFocusHistory.map(f => ({
+          id: f.id,
+          matchId: f.matchId,
+          focusAreas: f.focusAreas,
+          generatedAt: f.generatedAt,
+          opponent: matchMap.get(f.matchId)?.opponent,
+          matchDate: matchMap.get(f.matchId)?.matchDate,
+        })),
+        attendanceSummary,
+        injuryStatus: openInjury ? {
+          injuryType: openInjury.injuryType,
+          severity: openInjury.severity,
+          startDate: openInjury.startDate,
+          status: openInjury.status,
+        } : null,
+        activeContract: activeContract ? {
+          contractType: activeContract.contractType,
+          startDate: activeContract.startDate,
+          endDate: activeContract.endDate,
+          status: activeContract.status,
+        } : null,
+      });
+    } catch (e) { next(e); }
   });
 
   app.delete("/api/squad/:matchId/:teamId", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {

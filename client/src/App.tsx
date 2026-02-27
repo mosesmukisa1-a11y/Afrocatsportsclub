@@ -20,6 +20,7 @@ import Coaches from "@/pages/Coaches";
 import Contracts from "@/pages/Contracts";
 import Documents from "@/pages/Documents";
 import Reports from "@/pages/Reports";
+import PlayerDashboard from "@/pages/PlayerDashboard";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/contracts">{() => <ProtectedRoute component={Contracts} />}</Route>
       <Route path="/documents">{() => <ProtectedRoute component={Documents} />}</Route>
       <Route path="/reports">{() => <ProtectedRoute component={Reports} />}</Route>
+      <Route path="/player-dashboard">{() => <ProtectedRoute component={PlayerDashboard} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
