@@ -1,0 +1,165 @@
+UPGRADE: ENTER STATS PLATFORM (WORLD-CLASS UI) + DASHBOARD SYNC
+
+REFERENCE
+Use the Afrocat Live Stat Entry panel styling + behavior as the UI baseline:
+- Club logo at the top
+- Motto line
+- Player cards with circular photo, name, jersey number, position
+- Stat increment buttons
+- Save match stats button
+(See existing HTML reference.) :contentReference[oaicite:2]{index=2}
+
+Also respect the existing configuration approach for player photos and report folders. :contentReference[oaicite:3]{index=3}
+
+GOAL
+1) Replace/upgrade the current "Enter Stats" page with a modern panel:
+   - Afrocat logo displayed
+   - Team + match meta fields
+   - Player cards showing:
+     photo + jersey number + name + position
+   - Stat buttons (increment/decrement) per player
+   - Live totals visible and editable
+   - Save / Update match stats
+
+2) When stats are saved:
+   - Stats must immediately reflect on:
+     A) each Player dashboard (individual performance history + match breakdown)
+     B) Coaches dashboard (team performance + player summaries)
+   - Generate SmartFocus on save (existing rules)
+   - Update efficiency score (pointsTotal) on save
+
+DATA REQUIREMENTS
+A) Player photo and jersey
+- Player model must include jerseyNo and photoUrl (or pictureUrl).
+- If photoUrl missing, show default silhouette avatar.
+- Support a SystemAssetConfig table for Drive folder IDs (player photos & reports) as per config summary. :contentReference[oaicite:4]{index=4}
+
+B) Match meta fields (must be included in UI and saved)
+- teamId
+- opponent
+- competition
+- venue
+- matchDate
+- matchTime
+- coachName (autofill from CoachAssignment if available)
+
+DATABASE / API CHANGES
+
+1) Ensure API can fetch players with photos, jersey numbers, positions:
+GET /teams/:teamId/players
+Return player fields: id, fullName, jerseyNo, position, dob, photoUrl
+
+2) Stats entry endpoints (bulk upsert)
+POST /stats/match/:matchId
+Body:
+{
+  matchMeta: { opponent, competition, venue, matchDate, matchTime, coachName },
+  stats: [
+    {
+      playerId,
+      spikesKill, spikesError,
+      servesAce, servesError,
+      blocksSolo, blocksAssist,
+      receivePerfect, receiveError,
+      digs,
+      settingAssist, settingError,
+      minutesPlayed
+    }
+  ]
+}
+
+Server actions on save:
+- upsert PlayerMatchStat for each player
+- compute efficiency score pointsTotal using current formula
+- generate SmartFocus for each player (store focusAreas JSON)
+- return a summary response:
+  { matchId, updatedCount, topPerformers, teamTotals }
+
+3) Coach dashboard aggregation endpoints
+GET /dashboard/coach/summary?teamId=...
+Return:
+- last 5 matches summary
+- team totals for selected match
+- top 5 players by pointsTotal
+- players with highest errors
+- SmartFocus highlights (top 3 focus areas)
+
+4) Player dashboard endpoints (self + coach view)
+Player self:
+GET /players/me/dashboard
+Return:
+- last 10 match stats
+- performance trend (pointsTotal per match)
+- SmartFocus history
+- attendance summary
+- injury status
+- active contract summary (if present)
+
+Coach viewing player:
+GET /players/:playerId/dashboard
+RBAC:
+- Admin/Manager/Coach can view players in their tenant/team
+- Player can only view their own
+
+CLIENT UI IMPLEMENTATION
+
+A) Enter Stats Page (new design)
+Route: /stats/enter
+Layout:
+- Top header with Afrocat Logo + motto text (like reference) :contentReference[oaicite:5]{index=5}
+- Match meta form row:
+  Team select, opponent, competition, venue, date, time, coach
+- Player card grid:
+  Each card shows:
+    - photo (circle)
+    - name + jersey number (#)
+    - position
+    - stat buttons grouped by category:
+      Attack: spikesKill (+/-), spikesError (+/-)
+      Serve: servesAce (+/-), servesError (+/-)
+      Block: blocksSolo (+/-), blocksAssist (+/-)
+      Receive: receivePerfect (+/-), receiveError (+/-)
+      Defense: digs (+/-)
+      Setting: settingAssist (+/-), settingError (+/-)
+    - A small “Totals” line showing:
+      pointsTotal (live computed)
+      errors total
+
+Controls:
+- “Save Match Stats” (creates match if needed then saves stats)
+- “Update Match Stats” (if stats already exist)
+- “Reset” (clears unsaved changes)
+
+B) Save Behavior
+After save:
+- show toast “✅ Match Stats Saved”
+- redirect to match report page OR stay and show summary panel:
+  - team totals
+  - top performers
+  - SmartFocus generated count
+
+C) Player Dashboard Updates
+Player dashboard must show:
+- Profile header with photo + jersey number + position
+- Recent match cards:
+  match date, opponent, result, pointsTotal, key stats
+- Stat detail view per match
+- SmartFocus recommendations list per match
+Coaches viewing a player should see the same dashboard view.
+
+D) Coach Dashboard Updates
+Coach dashboard must show:
+- Team summary
+- Latest match quick stats
+- Top performers
+- Players needing focus (from SmartFocus)
+- Errors leaderboard
+
+BRANDING REQUIREMENTS
+- Afrocat club name + motto displayed on Enter Stats page header
+- Use club logo image URL (make it configurable via SystemAssetConfig so it can change later)
+- Keep design clean, mobile-friendly, cards like the reference :contentReference[oaicite:6]{index=6}
+
+DELIVERABLE
+Implement the full UI upgrade + backend endpoints + dashboard synchronization.
+Ensure tenant scoping and RBAC are enforced for all endpoints.

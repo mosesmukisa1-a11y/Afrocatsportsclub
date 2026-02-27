@@ -10,7 +10,8 @@ import type {
   Award, InsertAward, CoachAssignment, InsertCoachAssignment,
   CoachPerformanceSnapshot, InsertCoachPerformanceSnapshot,
   PlayerContract, InsertPlayerContract, TeamOfficial, InsertTeamOfficial,
-  MatchDocument, InsertMatchDocument, PlayerReport, InsertPlayerReport
+  MatchDocument, InsertMatchDocument, MatchSquad, InsertMatchSquad,
+  MatchSquadEntry, InsertMatchSquadEntry, PlayerReport, InsertPlayerReport
 } from "@shared/schema";
 
 export interface IStorage {
@@ -67,6 +68,7 @@ export interface IStorage {
   getCoachPerformance(coachUserId: string): Promise<CoachPerformanceSnapshot | undefined>;
   upsertCoachPerformance(data: InsertCoachPerformanceSnapshot): Promise<CoachPerformanceSnapshot>;
   getPlayerContracts(playerId: string): Promise<PlayerContract[]>;
+  getAllContracts(): Promise<PlayerContract[]>;
   getPlayerContract(id: string): Promise<PlayerContract | undefined>;
   createPlayerContract(contract: InsertPlayerContract): Promise<PlayerContract>;
   updatePlayerContract(id: string, data: Partial<InsertPlayerContract>): Promise<PlayerContract | undefined>;
@@ -76,6 +78,12 @@ export interface IStorage {
   getMatchDocuments(matchId?: string, teamId?: string): Promise<MatchDocument[]>;
   createMatchDocument(doc: InsertMatchDocument): Promise<MatchDocument>;
   getMatchDocument(id: string): Promise<MatchDocument | undefined>;
+  getMatchSquad(matchId: string, teamId: string): Promise<MatchSquad | undefined>;
+  createMatchSquad(squad: InsertMatchSquad): Promise<MatchSquad>;
+  deleteMatchSquad(id: string): Promise<void>;
+  getMatchSquadEntries(squadId: string): Promise<MatchSquadEntry[]>;
+  createMatchSquadEntry(entry: InsertMatchSquadEntry): Promise<MatchSquadEntry>;
+  deleteMatchSquadEntries(squadId: string): Promise<void>;
   getPlayerReports(playerId: string): Promise<PlayerReport[]>;
   createPlayerReport(report: InsertPlayerReport): Promise<PlayerReport>;
 }
@@ -302,6 +310,9 @@ export class DatabaseStorage implements IStorage {
       .where(eq(schema.playerContracts.playerId, playerId))
       .orderBy(desc(schema.playerContracts.createdAt));
   }
+  async getAllContracts() {
+    return db.select().from(schema.playerContracts);
+  }
   async getPlayerContract(id: string) {
     const [contract] = await db.select().from(schema.playerContracts).where(eq(schema.playerContracts.id, id));
     return contract;
@@ -338,6 +349,30 @@ export class DatabaseStorage implements IStorage {
   async getMatchDocument(id: string) {
     const [doc] = await db.select().from(schema.matchDocuments).where(eq(schema.matchDocuments.id, id));
     return doc;
+  }
+
+  async getMatchSquad(matchId: string, teamId: string) {
+    const [squad] = await db.select().from(schema.matchSquads)
+      .where(and(eq(schema.matchSquads.matchId, matchId), eq(schema.matchSquads.teamId, teamId)));
+    return squad;
+  }
+  async createMatchSquad(squad: InsertMatchSquad) {
+    const [created] = await db.insert(schema.matchSquads).values(squad).returning();
+    return created;
+  }
+  async deleteMatchSquad(id: string) {
+    await db.delete(schema.matchSquadEntries).where(eq(schema.matchSquadEntries.squadId, id));
+    await db.delete(schema.matchSquads).where(eq(schema.matchSquads.id, id));
+  }
+  async getMatchSquadEntries(squadId: string) {
+    return db.select().from(schema.matchSquadEntries).where(eq(schema.matchSquadEntries.squadId, squadId));
+  }
+  async createMatchSquadEntry(entry: InsertMatchSquadEntry) {
+    const [created] = await db.insert(schema.matchSquadEntries).values(entry).returning();
+    return created;
+  }
+  async deleteMatchSquadEntries(squadId: string) {
+    await db.delete(schema.matchSquadEntries).where(eq(schema.matchSquadEntries.squadId, squadId));
   }
 
   async getPlayerReports(playerId: string) {

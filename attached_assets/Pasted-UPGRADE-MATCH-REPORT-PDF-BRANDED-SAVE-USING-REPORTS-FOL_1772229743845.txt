@@ -1,0 +1,173 @@
+UPGRADE: MATCH REPORT PDF (BRANDED) + SAVE USING REPORTS FOLDER LOGIC
+
+REFERENCE
+Branding style should match Afrocat Live Stat Entry header:
+- Club logo at top
+- Motto line
+- Clean, professional layout :contentReference[oaicite:2]{index=2}
+
+Reports saving logic must follow existing approach:
+- A configured "Report Drive Folder ID" is used for storing generated PDFs :contentReference[oaicite:3]{index=3}
+
+GOAL
+Add a "Match Report PDF" button on:
+1) Match Report page (primary)
+2) Match detail page
+3) Team reports area (history list)
+
+When clicked, the system generates a branded PDF match report containing:
+- Club header: AFROCAT VOLLEYBALL CLUB + logo + motto
+- Match details: Team, Opponent, Date, Time, Venue, Competition, Coach
+- Result: W/L, setsFor/setsAgainst
+- Team totals: key aggregates
+- Top performers (Top 5 by pointsTotal)
+- Error leaders (Top 5 errors)
+- Smart Focus summary:
+  - Most common focus areas across the team
+- Player table:
+  Jersey | Name | Position | Points | Key stats (serve/spike/block/receive/digs)
+
+PDF must then be:
+- Saved to storage using the "reports folder" logic
+- Recorded in the database with a permanent download link
+- Visible from Player dashboards as “Reports that include me”
+
+DATABASE (Prisma)
+
+1) Ensure SystemAssetConfig exists (or create it) with:
+SystemAssetConfig {
+  id String @id
+  playerPhotoDriveFolderId String?
+  reportDriveFolderId String?   // from config logic :contentReference[oaicite:4]{index=4}
+  clubLogoUrl String?
+  clubName String?
+  clubMotto String?
+}
+
+2) Add/extend MatchDocument:
+MatchDocument {
+  id           String @id @default(cuid())
+  tenantId     String
+  matchId      String
+  documentType MatchDocumentType
+  fileUrl      String
+  storageType  StorageType @default(LOCAL)
+  externalId   String?     // e.g. Google Drive fileId if stored on Drive
+  createdAt    DateTime @default(now())
+  match Match @relation(fields:[matchId], references:[id])
+  @@index([tenantId])
+  @@index([matchId])
+}
+
+enum MatchDocumentType { O2BIS MATCH_REPORT REFEREE_FORM SCOUTING_FORM }
+enum StorageType { LOCAL GOOGLE_DRIVE }
+
+3) Add a PlayerReport row per included player (optional but recommended):
+PlayerReport {
+  id         String @id @default(cuid())
+  tenantId   String
+  playerId   String
+  matchId    String?
+  reportType PlayerReportType
+  pdfUrl     String
+  externalId String?
+  createdAt  DateTime @default(now())
+  @@index([tenantId])
+  @@index([playerId])
+  @@index([matchId])
+}
+
+enum PlayerReportType { MATCH_REPORT PERFORMANCE_REPORT }
+
+BACKEND API
+
+A) Generate Match Report PDF
+POST /reports/match/:matchId/pdf
+Body: { teamId? }  // teamId optional if match already has teamId
+
+Server must:
+1) Fetch:
+- match meta
+- team
+- coach (from CoachAssignment if available)
+- all PlayerMatchStat rows for that match
+- Player profiles (name, jerseyNo, position, dob)
+- SmartFocus rows for that match
+2) Compute:
+- team totals
+- top performers
+- errors leaderboard
+- focus summary (top focus areas frequency)
+3) Build PDF:
+- Use a server-side PDF generator (recommended: pdfkit or puppeteer->html->pdf).
+- MUST include logo + club name + motto (from SystemAssetConfig; fallback to default if missing) :contentReference[oaicite:5]{index=5}
+4) Save to storage using reports folder logic:
+- Implement StorageAdapter interface:
+  - savePdf(buffer, filename): returns { fileUrl, storageType, externalId? }
+- Provide two implementations:
+  1) LOCAL (default in dev): save into /server/uploads/reports and serve static
+  2) GOOGLE_DRIVE (optional switch): if GOOGLE_SERVICE_ACCOUNT_JSON is provided, upload to Google Drive folder ID = SystemAssetConfig.reportDriveFolderId :contentReference[oaicite:6]{index=6}
+     - store returned Drive fileId as externalId
+     - fileUrl should be a downloadable/view link
+
+5) Create MatchDocument record:
+documentType=MATCH_REPORT
+fileUrl, storageType, externalId
+
+6) For each player included in the match stats, create PlayerReport row
+reportType=MATCH_REPORT, pdfUrl same as match pdf
+
+Return:
+{ documentId, fileUrl }
+
+B) List match documents
+GET /matches/:matchId/documents
+Return all docs, including MATCH_REPORT.
+
+C) List team match reports
+GET /teams/:teamId/reports/match
+Return documents filtered by documentType=MATCH_REPORT.
+
+D) Player dashboard reports
+GET /players/me/reports
+Return PlayerReport list (match reports that include the player).
+
+RBAC
+- Admin/Manager/Coach/Statistician: can generate and download match reports
+- Player: can download only reports linked to their PlayerReport rows
+
+CLIENT UI
+
+1) Match Report Page
+Add button:
+[ 📄 Download Match Report PDF ]
+- On click: calls POST /reports/match/:matchId/pdf
+- Then downloads fileUrl
+- If already exists, show:
+  [ Download Latest ] and list report history
+
+2) Match Detail Page
+Add a “Documents” section:
+- O2BIS download
+- MATCH REPORT PDF download
+- Upload other docs
+
+3) Team Page -> Reports tab
+List match report PDFs (date/opponent filters)
+
+4) Player Dashboard -> Reports tab
+List match reports they participated in (download links)
+
+CONFIG UI (Admin)
+Add Admin Settings -> "Assets"
+- clubLogoUrl
+- clubName
+- clubMotto
+- reportDriveFolderId (shows current value; editable) :contentReference[oaicite:7]{index=7}
+- playerPhotoDriveFolderId
+
+NOTES
+- Keep branding consistent with Afrocat style header :contentReference[oaicite:8]{index=8}
+- Ensure tenant scoping for ALL queries.
+- Make sure file URLs are secure and not leaking cross-tenant documents.
+- Add README section: “How Match Report PDF works (Local vs Drive)”.

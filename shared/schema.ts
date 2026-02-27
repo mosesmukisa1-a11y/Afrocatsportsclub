@@ -18,6 +18,7 @@ export const contractStatusEnum = pgEnum("contract_status", ["DRAFT", "ACTIVE", 
 export const coachAssignmentRoleEnum = pgEnum("coach_assignment_role", ["HEAD_COACH", "ASSISTANT_COACH"]);
 export const teamOfficialRoleEnum = pgEnum("team_official_role", ["HEAD_COACH", "ASSISTANT_COACH", "TRAINER", "TEAM_MANAGER", "PHYSIOTHERAPIST", "MEDIC"]);
 export const matchDocumentTypeEnum = pgEnum("match_document_type", ["O2BIS", "MATCH_REPORT", "REFEREE_FORM", "SCOUTING_FORM"]);
+export const eligibilityStatusEnum = pgEnum("eligibility_status", ["ELIGIBLE", "NOT_ELIGIBLE", "PENDING"]);
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
@@ -49,6 +50,8 @@ export const players = pgTable("players", {
   phone: text("phone"),
   position: text("position").notNull(),
   status: playerStatusEnum("status").notNull().default("ACTIVE"),
+  eligibilityStatus: eligibilityStatusEnum("eligibility_status").notNull().default("ELIGIBLE"),
+  eligibilityNotes: text("eligibility_notes"),
   photoUrl: text("photo_url"),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -214,6 +217,22 @@ export const matchDocuments = pgTable("match_documents", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const matchSquads = pgTable("match_squads", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  matchId: varchar("match_id", { length: 36 }).notNull(),
+  teamId: varchar("team_id", { length: 36 }).notNull(),
+  createdByUserId: varchar("created_by_user_id", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const matchSquadEntries = pgTable("match_squad_entries", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  squadId: varchar("squad_id", { length: 36 }).notNull(),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  jerseyNo: integer("jersey_no"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const playerReports = pgTable("player_reports", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   playerId: varchar("player_id", { length: 36 }).notNull(),
@@ -240,6 +259,8 @@ export const insertCoachPerformanceSnapshotSchema = createInsertSchema(coachPerf
 export const insertPlayerContractSchema = createInsertSchema(playerContracts).omit({ id: true, createdAt: true });
 export const insertTeamOfficialSchema = createInsertSchema(teamOfficials).omit({ id: true, createdAt: true });
 export const insertMatchDocumentSchema = createInsertSchema(matchDocuments).omit({ id: true, createdAt: true });
+export const insertMatchSquadSchema = createInsertSchema(matchSquads).omit({ id: true, createdAt: true });
+export const insertMatchSquadEntrySchema = createInsertSchema(matchSquadEntries).omit({ id: true, createdAt: true });
 export const insertPlayerReportSchema = createInsertSchema(playerReports).omit({ id: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -278,5 +299,9 @@ export type InsertTeamOfficial = z.infer<typeof insertTeamOfficialSchema>;
 export type TeamOfficial = typeof teamOfficials.$inferSelect;
 export type InsertMatchDocument = z.infer<typeof insertMatchDocumentSchema>;
 export type MatchDocument = typeof matchDocuments.$inferSelect;
+export type InsertMatchSquad = z.infer<typeof insertMatchSquadSchema>;
+export type MatchSquad = typeof matchSquads.$inferSelect;
+export type InsertMatchSquadEntry = z.infer<typeof insertMatchSquadEntrySchema>;
+export type MatchSquadEntry = typeof matchSquadEntries.$inferSelect;
 export type InsertPlayerReport = z.infer<typeof insertPlayerReportSchema>;
 export type PlayerReport = typeof playerReports.$inferSelect;

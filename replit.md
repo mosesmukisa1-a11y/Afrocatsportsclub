@@ -33,7 +33,7 @@ A full-stack management portal for the Afrocat Volleyball Club. Manages match st
 ```
 
 ## Key Entities
-Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, TeamOfficials, MatchDocuments, PlayerReports
+Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports
 
 ## RBAC Roles
 - **Admin/Manager**: Full access to all modules
@@ -65,6 +65,7 @@ Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions
 - **Coach Performance & Stars**: Auto-computed from match results for assigned HEAD_COACHes. Stars: 1 (<30%), 2 (30-44%), 3 (45-59%), 4 (60-74%), 5 (>=75%). Provisional badge if <5 matches.
 - **Player Contracts**: Full lifecycle — DRAFT → ACTIVE (via approve) → EXPIRED/TERMINATED. Contract termination sets player status to SUSPENDED_CONTRACT. Renewal warning when ≤60 days to expiry.
 - **O-2bis Form Generation**: Server generates official team composition forms with club header, player roster, officials table, and approval signatures. Stored as MatchDocuments with metadata.
+- **Starting 12 Squad Selector**: Per-match squad selection with eligibility validation. Checks: ACTIVE status, no open injuries, valid active contract, eligibilityStatus field. Server-side enforcement on save. Max 12 players. UI integrated into Matches page with ineligibility badges.
 - **Coach Assignment Trigger**: Creating/updating matches with results auto-recomputes performance for the HEAD_COACH assigned to that team.
 
 ## Brand

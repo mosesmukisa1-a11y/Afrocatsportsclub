@@ -667,5 +667,106 @@ export async function registerRoutes(
     }
   });
 
+  // ─── STARTING 12 SQUAD SELECTOR ──────────────
+  app.get("/api/squad/eligibility/:teamId", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const players = await storage.getPlayersByTeam(req.params.teamId);
+      const injuries = await storage.getInjuries();
+      const contracts = await storage.getAllContracts();
+
+      const enriched = players.map(p => {
+        const reasons: string[] = [];
+        if (p.status !== "ACTIVE") reasons.push(`Status: ${p.status}`);
+        if (p.eligibilityStatus === "NOT_ELIGIBLE") reasons.push(p.eligibilityNotes || "Marked ineligible");
+        const openInjury = injuries.find(i => i.playerId === p.id && i.status === "OPEN");
+        if (openInjury) reasons.push(`Injury: ${openInjury.description || openInjury.type}`);
+        const activeContract = contracts.find(c => c.playerId === p.id && c.status === "ACTIVE");
+        if (!activeContract) reasons.push("No active contract");
+        return {
+          ...p,
+          eligible: reasons.length === 0,
+          ineligibilityReasons: reasons,
+        };
+      });
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/squad/:matchId/:teamId", requireAuth, async (req, res, next) => {
+    try {
+      const squad = await storage.getMatchSquad(req.params.matchId, req.params.teamId);
+      if (!squad) return res.json({ squad: null, entries: [] });
+      const entries = await storage.getMatchSquadEntries(squad.id);
+      res.json({ squad, entries });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/squad", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        matchId: z.string(),
+        teamId: z.string(),
+        playerIds: z.array(z.string()).min(1).max(12),
+      }).parse(req.body);
+
+      const teamPlayers = await storage.getPlayersByTeam(body.teamId);
+      const teamPlayerIds = new Set(teamPlayers.map(p => p.id));
+      const invalidIds = body.playerIds.filter(id => !teamPlayerIds.has(id));
+      if (invalidIds.length > 0) {
+        return res.status(400).json({ message: "Some players do not belong to this team" });
+      }
+
+      const injuries = await storage.getInjuries();
+      const contracts = await storage.getAllContracts();
+      const ineligible = body.playerIds.filter(pid => {
+        const p = teamPlayers.find(tp => tp.id === pid)!;
+        if (p.status !== "ACTIVE") return true;
+        if (p.eligibilityStatus === "NOT_ELIGIBLE") return true;
+        if (injuries.some(i => i.playerId === pid && i.status === "OPEN")) return true;
+        if (!contracts.some(c => c.playerId === pid && c.status === "ACTIVE")) return true;
+        return false;
+      });
+      if (ineligible.length > 0) {
+        return res.status(400).json({ message: "Some selected players are not eligible" });
+      }
+
+      const existing = await storage.getMatchSquad(body.matchId, body.teamId);
+      if (existing) {
+        await storage.deleteMatchSquad(existing.id);
+      }
+
+      const squad = await storage.createMatchSquad({
+        matchId: body.matchId,
+        teamId: body.teamId,
+        createdByUserId: req.user!.userId,
+      });
+
+      const entries = [];
+      for (const pid of body.playerIds) {
+        const player = teamPlayers.find(p => p.id === pid);
+        const entry = await storage.createMatchSquadEntry({
+          squadId: squad.id,
+          playerId: pid,
+          jerseyNo: player?.jerseyNo || null,
+        });
+        entries.push(entry);
+      }
+
+      res.status(201).json({ squad, entries });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.delete("/api/squad/:matchId/:teamId", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const existing = await storage.getMatchSquad(req.params.matchId, req.params.teamId);
+      if (!existing) return res.status(404).json({ message: "Squad not found" });
+      await storage.deleteMatchSquad(existing.id);
+      res.status(204).send();
+    } catch (e) { next(e); }
+  });
+
   return httpServer;
 }

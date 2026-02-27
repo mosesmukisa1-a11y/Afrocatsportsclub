@@ -107,4 +107,11 @@ export const api = {
   },
   createMatchDocument: (data: any) => apiFetch<any>("/match-documents", { method: "POST", body: JSON.stringify(data) }),
   generateO2bis: (data: any) => apiFetch<any>("/o2bis/generate", { method: "POST", body: JSON.stringify(data) }),
+
+  getSquadEligibility: (teamId: string) => apiFetch<any[]>(`/squad/eligibility/${teamId}`),
+  getMatchSquad: (matchId: string, teamId: string) => apiFetch<any>(`/squad/${matchId}/${teamId}`),
+  saveMatchSquad: (data: { matchId: string; teamId: string; playerIds: string[] }) =>
+    apiFetch<any>("/squad", { method: "POST", body: JSON.stringify(data) }),
+  deleteMatchSquad: (matchId: string, teamId: string) =>
+    apiFetch<void>(`/squad/${matchId}/${teamId}`, { method: "DELETE" }),
 };

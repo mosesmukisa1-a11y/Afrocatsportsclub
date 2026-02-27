@@ -5,12 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Calendar, MapPin } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Calendar, MapPin, Users } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { SquadSelector } from "@/components/SquadSelector";
 
 export default function Matches() {
   const { user } = useAuth();
@@ -21,6 +23,8 @@ export default function Matches() {
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ teamId: "", opponent: "", matchDate: "", venue: "Home", competition: "", result: "" as string, setsFor: 0, setsAgainst: 0 });
+  const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
+  const [squadTeamId, setSquadTeamId] = useState<string | null>(null);
 
   const createMut = useMutation({
     mutationFn: () => api.createMatch({ ...form, result: form.result || null, setsFor: Number(form.setsFor), setsAgainst: Number(form.setsAgainst) }),
@@ -29,6 +33,7 @@ export default function Matches() {
   });
 
   const canCreate = user && ["ADMIN","MANAGER","COACH","STATISTICIAN"].includes(user.role);
+  const canSelectSquad = user && ["ADMIN","MANAGER","COACH"].includes(user.role);
 
   return (
     <Layout>
@@ -36,7 +41,7 @@ export default function Matches() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">Matches</h1>
-            <p className="text-muted-foreground mt-1">Schedule and results</p>
+            <p className="text-muted-foreground mt-1">Schedule, results & squad selection</p>
           </div>
           {canCreate && (
             <Dialog open={open} onOpenChange={setOpen}>
@@ -82,6 +87,7 @@ export default function Matches() {
             {matches.map((match: any) => {
               const team = teams.find((t: any) => t.id === match.teamId);
               const isWin = match.result === "W";
+              const showingSquad = squadMatchId === match.id && squadTeamId === match.teamId;
               return (
                 <Card key={match.id} className="overflow-hidden" data-testid={`card-match-${match.id}`}>
                   <div className="flex flex-col md:flex-row">
@@ -104,7 +110,36 @@ export default function Matches() {
                             <div className="flex-1"><h3 className="text-xl font-bold font-display">{match.opponent}</h3></div>
                           </div>
                         </div>
+                        {canSelectSquad && (
+                          <Button
+                            variant={showingSquad ? "secondary" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                              if (showingSquad) {
+                                setSquadMatchId(null);
+                                setSquadTeamId(null);
+                              } else {
+                                setSquadMatchId(match.id);
+                                setSquadTeamId(match.teamId);
+                              }
+                            }}
+                            data-testid={`button-squad-${match.id}`}
+                          >
+                            <Users className="h-4 w-4 mr-2" />
+                            Starting 12
+                          </Button>
+                        )}
                       </div>
+
+                      {showingSquad && (
+                        <div className="mt-4 pt-4 border-t">
+                          <SquadSelector
+                            matchId={match.id}
+                            teamId={match.teamId}
+                            onClose={() => { setSquadMatchId(null); setSquadTeamId(null); }}
+                          />
+                        </div>
+                      )}
                     </CardContent>
                   </div>
                 </Card>
