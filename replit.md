@@ -82,6 +82,12 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Player Profile PDF**: POST /api/players/:id/profile/pdf generates branded HTML profile document with personal info, contacts, next of kin, emergency, medical, team info, signature lines. Stored as PlayerDocument. RBAC: admin/manager/coach can generate for any, player can generate for self only.
 - **Player Documents**: playerDocuments table (PLAYER_PROFILE, CONTRACT, MEDICAL_CLEARANCE types). GET /api/player-documents/:playerId.
 
+## GitHub Repository
+- **Repo**: https://github.com/mosesmukisa1-a11y/afrocat-club-portal
+- **Branch**: main
+- **Last push**: Afrocat Portal Production Version
+- **GitHub Integration**: Uses Replit GitHub connector (server/github.ts)
+
 ## Brand
 - Primary: teal (174 100% 29%), Accent: gold (45 100% 51%)
 - Logo: `@assets/afrocate_logo_1772226294597.png`
