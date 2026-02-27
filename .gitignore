@@ -1,6 +1,13 @@
 node_modules
 dist
+.env
+uploads
+.prisma
 .DS_Store
 server/public
 vite.config.ts.*
 *.tar.gz
+.cache
+.upm
+.local
+/tmp
