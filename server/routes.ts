@@ -193,11 +193,11 @@ export async function registerRoutes(
 
       const settings = await storage.getSecuritySettings();
 
-      if (settings?.requireEmailVerification !== false && !user.emailVerified && user.role === "PLAYER") {
+      if (settings?.requireEmailVerification !== false && !user.emailVerified) {
         return res.status(403).json({ message: "Please verify your email before logging in.", code: "EMAIL_NOT_VERIFIED" });
       }
 
-      if (settings?.requireAdminApproval !== false && user.accountStatus !== "ACTIVE" && user.role === "PLAYER") {
+      if (settings?.requireAdminApproval !== false && user.accountStatus !== "ACTIVE") {
         if (user.accountStatus === "REJECTED") {
           return res.status(403).json({ message: "Your registration has been rejected.", code: "ACCOUNT_REJECTED" });
         }
@@ -208,7 +208,11 @@ export async function registerRoutes(
       }
 
       const token = signToken({ userId: user.id, email: user.email, role: user.role });
-      return res.json({ token, user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId, accountStatus: user.accountStatus } });
+      return res.json({
+        token,
+        user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId, accountStatus: user.accountStatus },
+        mustChangePassword: user.mustChangePassword || false,
+      });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
@@ -219,8 +223,156 @@ export async function registerRoutes(
     try {
       const user = await storage.getUser(req.user!.userId);
       if (!user) return res.status(404).json({ message: "User not found" });
-      return res.json({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId, accountStatus: user.accountStatus });
+      return res.json({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId, accountStatus: user.accountStatus, mustChangePassword: !!user.mustChangePassword });
     } catch (e) { next(e); }
+  });
+
+  // ─── CHANGE PASSWORD (authenticated) ─────────────
+  app.post("/api/auth/change-password", requireAuth, async (req, res, next) => {
+    try {
+      const body = z.object({
+        oldPassword: z.string().min(1),
+        newPassword: z.string().min(6),
+      }).parse(req.body);
+
+      const user = await storage.getUser(req.user!.userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const valid = await comparePassword(body.oldPassword, user.passwordHash);
+      if (!valid) return res.status(400).json({ message: "Current password is incorrect" });
+
+      const newHash = await hashPassword(body.newPassword);
+      await storage.updateUser(user.id, {
+        passwordHash: newHash,
+        mustChangePassword: false,
+        lastPasswordResetAt: new Date(),
+      } as any);
+
+      return res.json({ message: "Password changed successfully" });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── RESET PASSWORD (public, token-based) ────────
+  app.post("/api/auth/reset-password", async (req, res, next) => {
+    try {
+      const body = z.object({
+        email: z.string().email(),
+        token: z.string().min(1),
+        newPassword: z.string().min(6),
+      }).parse(req.body);
+
+      const tokenHash = crypto.createHash("sha256").update(body.token).digest("hex");
+      const user = await storage.getUserByResetToken(tokenHash);
+
+      if (!user || user.email !== body.email) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+      if (user.passwordResetTokenExp && new Date(user.passwordResetTokenExp) < new Date()) {
+        return res.status(400).json({ message: "Reset token has expired. Contact admin for a new one." });
+      }
+
+      const newHash = await hashPassword(body.newPassword);
+      await storage.updateUser(user.id, {
+        passwordHash: newHash,
+        passwordResetTokenHash: null,
+        passwordResetTokenExp: null,
+        mustChangePassword: false,
+        lastPasswordResetAt: new Date(),
+      } as any);
+
+      return res.json({ message: "Password reset successfully. You may now log in." });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── ADMIN: USER MANAGEMENT ──────────────────────
+  app.get("/api/admin/users", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const query = (req.query.query as string) || "";
+      const users = query ? await storage.searchUsers(query) : await storage.getAllUsers();
+      res.json(users.map(u => ({
+        id: u.id,
+        fullName: u.fullName,
+        email: u.email,
+        role: u.role,
+        accountStatus: u.accountStatus,
+        emailVerified: u.emailVerified,
+        mustChangePassword: u.mustChangePassword,
+        lastPasswordResetAt: u.lastPasswordResetAt,
+        createdAt: u.createdAt,
+      })));
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/admin/users/:userId/reset-password", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        method: z.enum(["TEMP_PASSWORD", "ONE_TIME_LINK"]),
+        tempPassword: z.string().min(6).optional(),
+      }).parse(req.body);
+
+      const targetUser = await storage.getUser(req.params.userId);
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      if (body.method === "TEMP_PASSWORD") {
+        if (!body.tempPassword) return res.status(400).json({ message: "tempPassword is required for TEMP_PASSWORD method" });
+
+        const newHash = await hashPassword(body.tempPassword);
+        await storage.updateUser(targetUser.id, {
+          passwordHash: newHash,
+          mustChangePassword: true,
+          passwordResetTokenHash: null,
+          passwordResetTokenExp: null,
+          lastPasswordResetAt: new Date(),
+        } as any);
+
+        await storage.createPasswordResetAudit({
+          adminUserId: req.user!.userId,
+          targetUserId: targetUser.id,
+          resetMethod: "TEMP_PASSWORD",
+          notes: `Temporary password set by admin`,
+        });
+
+        return res.json({ ok: true, message: "Temporary password set. User must change password on next login." });
+      } else {
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+        const exp = new Date(Date.now() + 60 * 60 * 1000);
+
+        await storage.updateUser(targetUser.id, {
+          passwordResetTokenHash: tokenHash,
+          passwordResetTokenExp: exp,
+          mustChangePassword: true,
+          lastPasswordResetAt: new Date(),
+        } as any);
+
+        await storage.createPasswordResetAudit({
+          adminUserId: req.user!.userId,
+          targetUserId: targetUser.id,
+          resetMethod: "ONE_TIME_LINK",
+          notes: `One-time reset link generated by admin`,
+        });
+
+        const frontendUrl = process.env.FRONTEND_URL
+          ? process.env.FRONTEND_URL
+          : (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
+        const resetLink = `${frontendUrl}/reset-password?token=${rawToken}&email=${encodeURIComponent(targetUser.email)}`;
+
+        return res.json({
+          ok: true,
+          message: "One-time reset link generated. Link expires in 1 hour.",
+          resetLink,
+        });
+      }
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
   });
 
   // ─── PUBLIC TEAMS (for registration dropdown) ───
@@ -1841,13 +1993,18 @@ th{background:#0d7377;color:white}
   });
 
   // ─── ADMIN: REGISTRATION APPROVALS ─────────────────
-  app.get("/api/admin/registrations/pending", requireAuth, requireRole(["ADMIN","MANAGER"]), async (_req, res, next) => {
+  app.get("/api/admin/registrations/pending", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
     try {
+      const roleFilter = req.query.role as string | undefined;
       const pending = await storage.getPendingRegistrations();
-      res.json(pending.map(({ user: u, player: p }) => ({
+      const filtered = roleFilter
+        ? pending.filter(({ user: u }) => u.role === roleFilter)
+        : pending;
+      res.json(filtered.map(({ user: u, player: p }) => ({
         userId: u.id,
         fullName: u.fullName,
         email: u.email,
+        role: u.role,
         emailVerified: u.emailVerified,
         accountStatus: u.accountStatus,
         createdAt: u.createdAt,
@@ -1865,11 +2022,13 @@ th{background:#0d7377;color:white}
 
   app.post("/api/admin/registrations/:userId/approve", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
     try {
+      const body = z.object({ roleOverride: z.enum(["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL","PLAYER"]).optional() }).parse(req.body || {});
       const user = await storage.getUser(req.params.userId);
       if (!user) return res.status(404).json({ message: "User not found" });
       if (user.accountStatus === "ACTIVE") return res.status(400).json({ message: "User is already active" });
 
-      await storage.updateUser(user.id, { accountStatus: "ACTIVE" } as any);
+      const finalRole = body.roleOverride || user.role;
+      await storage.updateUser(user.id, { accountStatus: "ACTIVE", role: finalRole } as any);
 
       if (user.playerId) {
         const updateData: any = { registrationStatus: "APPROVED" };

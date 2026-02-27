@@ -17,7 +17,8 @@ import type {
   ContractTransportBenefit, InsertContractTransportBenefit,
   NvfTransferFeeSchedule, InsertNvfTransferFeeSchedule,
   PlayerTransferCase, InsertPlayerTransferCase,
-  SystemSecuritySettings, InsertSystemSecuritySettings
+  SystemSecuritySettings, InsertSystemSecuritySettings,
+  PasswordResetAudit, InsertPasswordResetAudit
 } from "@shared/schema";
 
 export interface IStorage {
@@ -120,6 +121,11 @@ export interface IStorage {
   upsertSecuritySettings(data: Partial<InsertSystemSecuritySettings>): Promise<SystemSecuritySettings>;
   getPendingRegistrations(): Promise<Array<{ user: User; player: Player | undefined }>>;
   getPlayersByJerseyAndTeam(teamId: string, jerseyNo: number): Promise<Player[]>;
+  searchUsers(query: string): Promise<User[]>;
+  getAllUsers(): Promise<User[]>;
+  getUserByResetToken(tokenHash: string): Promise<User | undefined>;
+  createPasswordResetAudit(audit: InsertPasswordResetAudit): Promise<PasswordResetAudit>;
+  getPasswordResetAudits(targetUserId?: string): Promise<PasswordResetAudit[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -546,6 +552,32 @@ export class DatabaseStorage implements IStorage {
   async getPlayersByJerseyAndTeam(teamId: string, jerseyNo: number) {
     return db.select().from(schema.players)
       .where(and(eq(schema.players.teamId, teamId), eq(schema.players.jerseyNo, jerseyNo)));
+  }
+  async searchUsers(query: string) {
+    const q = `%${query.toLowerCase()}%`;
+    return db.select().from(schema.users)
+      .where(sql`(lower(${schema.users.fullName}) like ${q} or lower(${schema.users.email}) like ${q})`)
+      .orderBy(schema.users.fullName);
+  }
+  async getAllUsers() {
+    return db.select().from(schema.users).orderBy(schema.users.fullName);
+  }
+  async getUserByResetToken(tokenHash: string) {
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.passwordResetTokenHash, tokenHash));
+    return user;
+  }
+  async createPasswordResetAudit(audit: InsertPasswordResetAudit) {
+    const [created] = await db.insert(schema.passwordResetAudits).values(audit).returning();
+    return created;
+  }
+  async getPasswordResetAudits(targetUserId?: string) {
+    if (targetUserId) {
+      return db.select().from(schema.passwordResetAudits)
+        .where(eq(schema.passwordResetAudits.targetUserId, targetUserId))
+        .orderBy(desc(schema.passwordResetAudits.createdAt));
+    }
+    return db.select().from(schema.passwordResetAudits)
+      .orderBy(desc(schema.passwordResetAudits.createdAt));
   }
 }
 

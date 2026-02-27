@@ -1,0 +1,158 @@
+UI UPGRADE: PLAYER DASHBOARD (DIGITAL FIFA-STYLE) WITH PHOTO + UPCOMING FIXTURE + EXISTING METRICS (AFROCAT COLORS)
+
+GOAL
+Redesign the Player Dashboard UI to match the attached reference layout:
+- Left: Player Profile Card with photo + jersey + team + position + key totals
+- Right: Performance chart panel + secondary chart panel + Statistics panel
+- Add Upcoming Fixture card/section (next match) on the dashboard
+- Keep all existing data already shown in the dashboard (stats history, smart focus, attendance, injury, reports)
+
+STYLE (AFROCAT THEME)
+Use Afrocat colors + premium dark UI:
+- Background: deep charcoal/near-black
+- Cards: dark slate with soft gradients
+- Accent: Afrocat gold + white text
+- Buttons: gold primary, subtle outline secondary
+- Rounded corners, soft shadows, clean spacing
+- Typography similar to reference (bold headings, small muted labels)
+
+TECH
+Client: React + TypeScript + Tailwind
+Charts: Recharts (bar chart + line chart)
+No external UI kit required; keep it sleek.
+
+DATA REQUIREMENTS (API)
+1) Player dashboard endpoint (already exists or create):
+GET /players/me/dashboard
+Return:
+{
+  player: { id, fullName, photoUrl, jerseyNo, position, team: { id, name }, totals: { matches, points, aces, blocks, digs }, status },
+  performanceByMatch: [{ date, opponent, pointsTotal, result, isHome }],
+  performanceTrend: [{ label, value }],            // pointsTotal by match date
+  smartFocus: [{ matchDate, focusAreas }],
+  attendance: { rate30d, absent30d, late30d },
+  injury: { status, notes },
+  reports: [{ type, date, url }]
+}
+
+2) Upcoming fixture endpoint:
+GET /players/me/upcoming-fixture
+Return:
+{
+  matchId,
+  date,
+  time,
+  venue,
+  competition,
+  opponent,
+  teamName,
+  isHome,
+  coachName
+}
+If no upcoming fixture: return null.
+
+3) Coach can view same dashboard for a player:
+GET /players/:playerId/dashboard
+RBAC: Admin/Manager/Coach only, tenant-scoped.
+
+UI LAYOUT (MATCH THE REFERENCE)
+
+A) Top nav (optional if you already have layout)
+- Page title: “My Dashboard”
+- Small profile bubble at top right
+
+B) Main grid (desktop)
+- Two columns:
+  Left column: Player Card (fixed width like reference)
+  Right column: 2x2 cards:
+    1) Performance Bar Chart (top wide)
+    2) Price/Trend Line Chart (bottom left)
+    3) Statistics panel (bottom right)
+- Add Upcoming Fixture card either:
+  - as a small card under Player Card (left), OR
+  - as a small card to the right beneath Performance chart (recommended for visibility)
+
+C) Player Card (left)
+Show:
+- large player photo (portrait)
+- player name + jersey number
+- team badge/name
+- position
+- quick totals:
+  matches played
+  points total
+  key category stats (e.g., aces/blocks/digs)
+- status pill (ACTIVE/INJURED/etc.)
+- button row:
+  “View Profile”
+  “Download Reports” (optional)
+
+D) Performance Chart (top right)
+Recharts bar chart:
+- x-axis: match dates
+- bars: pointsTotal per match
+- toggle: All | Home | Away (like reference)
+- tooltip includes opponent + result + points
+- highlight latest match
+
+E) Trend Chart (bottom left)
+Line chart:
+- pointsTotal trend (or efficiency trend)
+- optionally allow selector: last 10 / season
+
+F) Statistics panel (bottom right)
+Digital stats list similar to reference:
+- Matches played
+- Minutes played
+- Points
+- Aces
+- Blocks
+- Serve errors
+- Spike errors
+- Receive errors
+- Attendance %
+- Yellow cards / sanctions (if you have discipline)
+Keep icons simple (lucide-react).
+
+G) Upcoming Fixture Card (NEW)
+Card shows:
+- “Upcoming Fixture”
+- Team vs Opponent
+- date + time
+- venue + competition
+- Home/Away badge
+- Button: “View Match” (opens match details)
+If none: “No upcoming fixtures scheduled.”
+
+H) Keep Existing Information
+Add a collapsible/secondary section below charts (or a tab row):
+Tabs:
+- Overview (the new FIFA-style dashboard)
+- Smart Focus
+- Attendance
+- Injury & Wellness
+- Reports
+Do NOT remove existing data; just reorganize it cleanly.
+
+RESPONSIVE
+On mobile:
+- Stack cards vertically:
+  Player card → Upcoming fixture → Performance chart → Trend → Statistics → Tabs content
+
+IMPLEMENTATION STEPS
+1) Create a new React page component: /client/src/pages/PlayerDashboardNew.tsx
+2) Wire route for PLAYER role to use the new page as default dashboard.
+3) Build reusable components:
+- PlayerProfileCard
+- UpcomingFixtureCard
+- PerformanceBarChart (All/Home/Away filter)
+- TrendLineChart
+- StatsPanel
+4) Ensure empty states and loading skeletons.
+5) Ensure Afrocat colors applied consistently.
+
+DELIVERABLE
+- Fully implemented new dashboard matching reference layout
+- Uses existing API data + new upcoming fixture endpoint
+- Tenant secure + RBAC correct
+- No breaking existing features

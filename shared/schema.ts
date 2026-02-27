@@ -24,6 +24,7 @@ export const transportFrequencyEnum = pgEnum("transport_frequency", ["ONE_TIME",
 export const nvfFeeTypeEnum = pgEnum("nvf_fee_type", ["INTER_ASSOCIATION_TRANSFER_FEE", "OTHER"]);
 export const transferCaseStatusEnum = pgEnum("transfer_case_status", ["DRAFT", "CONFIRMED", "PAID", "CLOSED"]);
 export const accountStatusEnum = pgEnum("account_status", ["PENDING_APPROVAL", "ACTIVE", "REJECTED", "SUSPENDED"]);
+export const resetMethodEnum = pgEnum("reset_method", ["TEMP_PASSWORD", "ONE_TIME_LINK"]);
 export const approvalStatusEnum = pgEnum("approval_status", ["PENDING", "APPROVED", "REJECTED"]);
 export const registrationStatusEnum = pgEnum("registration_status", ["PENDING_APPROVAL", "APPROVED", "REJECTED"]);
 
@@ -40,6 +41,10 @@ export const users = pgTable("users", {
   verificationToken: text("verification_token"),
   verificationTokenExp: timestamp("verification_token_exp"),
   accountStatus: accountStatusEnum("account_status").notNull().default("PENDING_APPROVAL"),
+  passwordResetTokenHash: text("password_reset_token_hash"),
+  passwordResetTokenExp: timestamp("password_reset_token_exp"),
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
+  lastPasswordResetAt: timestamp("last_password_reset_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -362,6 +367,16 @@ export const systemSecuritySettings = pgTable("system_security_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const passwordResetAudits = pgTable("password_reset_audits", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  adminUserId: varchar("admin_user_id", { length: 36 }).notNull(),
+  targetUserId: varchar("target_user_id", { length: 36 }).notNull(),
+  resetMethod: resetMethodEnum("reset_method").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPasswordResetAuditSchema = createInsertSchema(passwordResetAudits).omit({ id: true, createdAt: true });
 export const insertSystemSecuritySettingsSchema = createInsertSchema(systemSecuritySettings).omit({ createdAt: true, updatedAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, createdAt: true });
@@ -444,3 +459,5 @@ export type InsertPlayerDocument = z.infer<typeof insertPlayerDocumentSchema>;
 export type PlayerDocument = typeof playerDocuments.$inferSelect;
 export type InsertSystemSecuritySettings = z.infer<typeof insertSystemSecuritySettingsSchema>;
 export type SystemSecuritySettings = typeof systemSecuritySettings.$inferSelect;
+export type InsertPasswordResetAudit = z.infer<typeof insertPasswordResetAuditSchema>;
+export type PasswordResetAudit = typeof passwordResetAudits.$inferSelect;

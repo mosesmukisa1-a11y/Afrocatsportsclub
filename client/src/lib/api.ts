@@ -56,6 +56,15 @@ export const api = {
   getSecuritySettings: () => apiFetch<any>("/admin/security-settings"),
   updateSecuritySettings: (data: any) => apiFetch<any>("/admin/security-settings", { method: "PUT", body: JSON.stringify(data) }),
 
+  changePassword: (data: { oldPassword: string; newPassword: string }) =>
+    apiFetch<any>("/auth/change-password", { method: "POST", body: JSON.stringify(data) }),
+  resetPassword: (data: { email: string; token: string; newPassword: string }) =>
+    apiFetch<any>("/auth/reset-password", { method: "POST", body: JSON.stringify(data) }),
+
+  getAdminUsers: (query?: string) => apiFetch<any[]>(`/admin/users${query ? `?query=${encodeURIComponent(query)}` : ""}`),
+  adminResetPassword: (userId: string, data: { method: "TEMP_PASSWORD" | "ONE_TIME_LINK"; tempPassword?: string }) =>
+    apiFetch<any>(`/admin/users/${userId}/reset-password`, { method: "POST", body: JSON.stringify(data) }),
+
   getTeams: () => apiFetch<any[]>("/teams"),
   createTeam: (data: any) => apiFetch<any>("/teams", { method: "POST", body: JSON.stringify(data) }),
   updateTeam: (id: string, data: any) => apiFetch<any>(`/teams/${id}`, { method: "PUT", body: JSON.stringify(data) }),

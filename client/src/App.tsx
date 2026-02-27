@@ -25,11 +25,15 @@ import Register from "@/pages/Register";
 import ProfileSetup from "@/pages/ProfileSetup";
 import VerifyEmail from "@/pages/VerifyEmail";
 import AdminRegistrations from "@/pages/AdminRegistrations";
+import ChangePassword from "@/pages/ChangePassword";
+import ResetPassword from "@/pages/ResetPassword";
+import AdminUsers from "@/pages/AdminUsers";
 
-function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
   if (!user) return <Redirect to="/" />;
+  if (user.mustChangePassword && !allowMustChange) return <Redirect to="/change-password" />;
   return <Component />;
 }
 
@@ -39,6 +43,8 @@ function Router() {
       <Route path="/" component={Login}/>
       <Route path="/register" component={Register}/>
       <Route path="/verify-email" component={VerifyEmail}/>
+      <Route path="/reset-password" component={ResetPassword}/>
+      <Route path="/change-password">{() => <ProtectedRoute component={ChangePassword} allowMustChange />}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute component={Dashboard} />}</Route>
       <Route path="/profile-setup">{() => <ProtectedRoute component={ProfileSetup} />}</Route>
       <Route path="/teams">{() => <ProtectedRoute component={Teams} />}</Route>
@@ -55,6 +61,7 @@ function Router() {
       <Route path="/reports">{() => <ProtectedRoute component={Reports} />}</Route>
       <Route path="/player-dashboard">{() => <ProtectedRoute component={PlayerDashboard} />}</Route>
       <Route path="/admin/registrations">{() => <ProtectedRoute component={AdminRegistrations} />}</Route>
+      <Route path="/admin/users">{() => <ProtectedRoute component={AdminUsers} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

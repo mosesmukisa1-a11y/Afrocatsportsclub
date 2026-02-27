@@ -82,6 +82,9 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Player Profile PDF**: POST /api/players/:id/profile/pdf generates branded HTML profile document with personal info, contacts, next of kin, emergency, medical, team info, signature lines. Stored as PlayerDocument. RBAC: admin/manager/coach can generate for any, player can generate for self only.
 - **Player Documents**: playerDocuments table (PLAYER_PROFILE, CONTRACT, MEDICAL_CLEARANCE types). GET /api/player-documents/:playerId.
 
+- **Password Reset Flow (Admin-Only)**: Admin can reset any user's password via /admin/users page. Two methods: TEMP_PASSWORD (sets password + mustChangePassword flag) or ONE_TIME_LINK (generates 1-hour expiry token link to /reset-password). Login returns mustChangePassword flag; ProtectedRoute enforces redirect to /change-password. After successful change, user is redirected to dashboard. POST /api/admin/users/:userId/reset-password, POST /api/auth/change-password, POST /api/auth/reset-password. Password reset audits stored in passwordResetAudits table.
+- **Permanent Admin Provisioning**: Run `npx tsx server/scripts/ensureAdmin.ts` with ADMIN_EMAIL + ADMIN_PASSWORD env vars to create/update permanent admin account. ADMIN_EMAIL=mosesmukisa1@gmail.com.
+
 ## GitHub Repository
 - **Repo**: https://github.com/mosesmukisa1-a11y/afrocat-club-portal
 - **Branch**: main

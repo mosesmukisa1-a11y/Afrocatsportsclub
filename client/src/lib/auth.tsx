@@ -8,6 +8,7 @@ interface AuthUser {
   email: string;
   role: string;
   playerId?: string;
+  mustChangePassword?: boolean;
 }
 
 interface RegisterResult {
@@ -17,10 +18,14 @@ interface RegisterResult {
   verificationLink?: string;
 }
 
+interface LoginResult {
+  mustChangePassword?: boolean;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
   register: (fullName: string, email: string, password: string, extra?: { requestedTeamId?: string; requestedPosition?: string; requestedJerseyNo?: number }) => Promise<RegisterResult>;
   logout: () => void;
 }
@@ -28,7 +33,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  login: async () => {},
+  login: async () => ({}),
   register: async () => ({ message: "", requiresVerification: false, requiresApproval: false }),
   logout: () => {},
 });
@@ -47,10 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<LoginResult> => {
     const res = await api.login({ email, password });
     setToken(res.token);
     setUser(res.user);
+    return { mustChangePassword: res.mustChangePassword };
   };
 
   const register = async (fullName: string, email: string, password: string, extra?: { requestedTeamId?: string; requestedPosition?: string; requestedJerseyNo?: number }): Promise<RegisterResult> => {

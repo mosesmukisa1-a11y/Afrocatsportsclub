@@ -24,8 +24,12 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
-      setLocation("/dashboard");
+      const result = await login(email, password);
+      if (result?.mustChangePassword) {
+        setLocation("/change-password");
+      } else {
+        setLocation("/dashboard");
+      }
     } catch (err: any) {
       toast({ title: "Login Failed", description: err.message, variant: "destructive" });
     } finally {

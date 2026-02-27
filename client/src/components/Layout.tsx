@@ -27,6 +27,7 @@ const allNavItems = [
   { icon: Users, label: "Player Stats", href: "/player-dashboard", roles: ["ADMIN","MANAGER","COACH","PLAYER"] },
   { icon: UserCircle, label: "My Profile", href: "/profile-setup", roles: ["PLAYER"] },
   { icon: UserCheck, label: "Registrations", href: "/admin/registrations", roles: ["ADMIN","MANAGER"] },
+  { icon: ShieldAlert, label: "User Management", href: "/admin/users", roles: ["ADMIN"] },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
