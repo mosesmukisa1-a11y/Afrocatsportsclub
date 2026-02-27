@@ -1,0 +1,185 @@
+You are a senior full-stack engineer. You have already generated the Afrocat Club Portal project in this Replit workspace, but it has incomplete/broken parts.
+
+TASK
+Perform a full “Fix Pack” pass to make the app fully functional end-to-end:
+- Identify missing routes/pages and implement them
+- Fix runtime errors (server + client)
+- Fix Prisma/schema/migration issues
+- Fix auth + RBAC + protected routes
+- Ensure the app boots with ONE command from the root: npm run dev
+- Ensure seed data works and demo logins work
+
+STRICT RULES
+- Do NOT redesign the whole UI. Keep it clean and minimal.
+- Prefer small, safe code changes rather than rewriting everything.
+- After each fix, ensure TypeScript builds and routes compile.
+- If you find multiple issues, fix them in a logical order: build errors → server boot → DB → auth → core CRUD → reports.
+
+STEP 1 — HEALTH CHECK (must do first)
+1) Run/inspect the server and client startup commands, then list:
+   - Current scripts in root/package.json, server/package.json, client/package.json
+   - Current errors (exact stack traces)
+   - Missing dependencies
+2) If concurrent dev script is missing, implement:
+   - root package.json using concurrently
+   - npm run dev runs server+client
+3) Ensure correct ports:
+   - server on 4000
+   - client on 5173
+   - set VITE_API_URL=http://localhost:4000
+
+STEP 2 — SERVER FIXES
+A) CORS
+- Enable CORS for the React dev origin (http://localhost:5173).
+- Ensure credentials are not required unless needed.
+
+B) JSON + error handling
+- Ensure express.json() enabled
+- Add centralized error middleware:
+  - return { message, details } format
+  - handle zod validation nicely
+
+C) AUTH
+Implement/fix:
+- POST /auth/register
+- POST /auth/login
+- GET /auth/me
+- Password hashing via bcrypt
+- JWT signing via JWT_SECRET env var
+- auth middleware: verifies token, attaches req.user
+- RBAC middleware: requireRole([...])
+
+D) RBAC ENFORCEMENT
+Confirm each module enforces roles:
+- Admin/Manager: full access
+- Coach: matches, attendance, players (read), reports
+- Statistician: matches + stats entry + reports
+- Finance: finance module only + read-only lists
+- Medical: injury module only + read-only lists
+- Player: can only access /me endpoints and own data
+
+Add “/me” scoped endpoints to avoid leaking data:
+- GET /players/me
+- GET /stats/me
+- GET /attendance/me/summary
+- GET /injuries/me
+- GET /awards/me
+
+STEP 3 — DATABASE / PRISMA FIXES
+A) Prisma schema correctness
+- Confirm all relations are valid and indexes added:
+  - Player.teamId → Team.id
+  - PlayerMatchStat.matchId → Match.id
+  - PlayerMatchStat.playerId → Player.id
+  - AttendanceRecord.sessionId → AttendanceSession.id
+  - AttendanceRecord.playerId → Player.id
+- Ensure enums are consistent (match the ones used in code).
+
+B) Migration stability
+- Ensure: npx prisma migrate dev works
+- Ensure: npx prisma generate works
+- Ensure: npx prisma db seed works with NO errors
+
+C) Seed Data + Demo Users (must implement)
+Seed must create:
+- Teams (MEN, WOMEN)
+- At least 8 players across teams
+- A sample match + stats
+- Attendance sessions + records
+- Finance txns
+- Injuries + one cleared workflow example
+- Awards
+
+Create demo users for each role with known passwords:
+- admin@afrocat.test / Passw0rd!
+- manager@afrocat.test / Passw0rd!
+- coach@afrocat.test / Passw0rd!
+- stats@afrocat.test / Passw0rd!
+- finance@afrocat.test / Passw0rd!
+- medical@afrocat.test / Passw0rd!
+- player1@afrocat.test / Passw0rd! (linked to an actual Player)
+
+STEP 4 — CORE MODULE COMPLETION (IMPLEMENT ANY MISSING CRUD)
+If any of these routes/pages are missing or broken, build them:
+
+SERVER ROUTES (REST)
+- /teams CRUD
+- /players CRUD + search/filter
+- /matches CRUD
+- /stats:
+   - POST /stats/match/:matchId (bulk upsert stats for players)
+   - GET /stats/match/:matchId
+- /attendance:
+   - POST /attendance/sessions
+   - POST /attendance/sessions/:id/records (bulk)
+   - GET /attendance/teams/:teamId/summary
+- /finance CRUD + monthly summary endpoint
+- /injuries CRUD + clearance endpoint
+- /awards CRUD
+- /reports:
+   - GET /reports/match/:matchId
+   - GET /reports/player/:playerId
+   - GET /reports/attendance/team/:teamId
+   - GET /reports/finance/monthly?yyyy=YYYY&mm=MM
+
+CLIENT PAGES
+Ensure these pages exist and route correctly:
+- /login, /register
+- /dashboard (role-based widgets)
+- /teams
+- /players (table + filters)
+- /matches
+- /stats/enter (select match → input grid → submit)
+- /attendance (create session + mark grid)
+- /finance
+- /injuries
+- /awards
+- /reports/match/:id
+- /reports/player/:id
+- /reports/attendance/team/:id
+- /reports/finance/monthly
+
+Protected routes:
+- If not logged in: redirect to /login
+- If role not allowed: show “Access denied”
+
+STEP 5 — SMART FOCUS ENGINE (must verify)
+On stats submit, generate SmartFocus:
+Rules:
+- servesError high => "Serving consistency"
+- spikesError high => "Attack control"
+- receiveError high => "Serve reception"
+- settingError high => "Setting accuracy"
+- if player.position contains 'MIDDLE' and blocks low => "Blocking timing"
+Store as JSON array ordered by priority.
+Also compute efficiency score and store pointsTotal.
+
+STEP 6 — ATTENDANCE DISCIPLINE AUTO-WARN
+After attendance save:
+- If player has >=3 ABSENT in last 30 days:
+  auto-create DisciplineCase with:
+  caseType="Attendance warning", points, actionTaken suggestion.
+
+STEP 7 — UI/UX FIXES (minimal)
+- Add loading states, empty states
+- Add toasts for success/error
+- Add global API client with token injection
+- Ensure tables are readable on mobile
+
+STEP 8 — README + TROUBLESHOOTING
+Update README with:
+- How to run (root)
+- How to migrate + seed
+- Demo logins
+- Common fixes:
+  - prisma generate
+  - reset DB
+  - missing env vars
+
+DELIVERABLE
+Make the code run cleanly without manual patching:
+- npm install (root) works
+- npm run dev (root) starts both
+- app is usable immediately with demo accounts
+
+Before finishing, output a short “FIX SUMMARY” listing what you changed and where.
