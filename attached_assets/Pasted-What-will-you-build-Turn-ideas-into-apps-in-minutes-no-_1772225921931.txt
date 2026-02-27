@@ -1,0 +1,315 @@
+What will you build?
+Turn ideas into apps in minutes — no coding needed
+
+Design me a website, slide deck, interactive prototype…
+Start with an idea
+AI Chat screenshot 1
+Use this idea
+AI Chat
+AI Apps
+Replit
+Brainstorming buddy screenshot 1
+Use this idea
+Brainstorming buddy
+AI Apps
+Replit
+Recipe generator screenshot 1
+Use this idea
+Recipe generator
+AI Apps
+Replit
+Landing page screenshot 1
+Use this idea
+Landing page
+Websites
+Replit
+Portfolio screenshot 1
+Use this idea
+Portfolio
+Websites
+Replit
+Link-in-bio screenshot 1
+Use this idea
+Link-in-bio
+Websites
+Replit
+KPI dashboard screenshot 1
+Use this idea
+KPI dashboard
+Business Apps
+Replit
+Roadmap planner screenshot 1
+Use this idea
+Roadmap planner
+Business Apps
+Replit
+Ecommerce store screenshot 1
+Use this idea
+Ecommerce store
+Business Apps
+Replit
+Habit tracker screenshot 1
+Use this idea
+Habit tracker
+Personal Software
+Replit
+Local landmarks screenshot 1
+Use this idea
+Local landmarks
+Personal Software
+Replit
+Electronic synth screenshot 1
+Use this idea
+Electronic synth
+Personal Software
+Replit
+Build smarter, ship faster
+Workflow Automation
+Automate the routine, focus on what matters.Create agents and automations to handle repetitive or operational work. Plug them into tools & data you already use, and build bots or automations that save you time to focus on what truly matters
+Agent Chat
+Describe it. Publish It. Improve it.Tell the Agent what you're building — it writes real production-ready code, evolves it as you iterate, and stays out of your way while you build.
+Design Controls
+Granular controls so your app matches your vision.Import your designs or integrate your design system, refine in a live visual editor, and ship instantly with no friction. What you design is exactly what users see.
+Full-Stack Infrastructure
+Built-in services and powerful integrations with zero setupBuilt-in Authentication, Database, Hosting, and Monitoring — ready to go from day one. Need Stripe or OpenAI? They plug in cleanly, securely, no API keys required.
+Enterprise Controls
+Security & controls that scale to enterprise.SSO/SAML, SOC2 & all the standard Enterprise admin controls. Plus, pre deployment security screening, secure in-built services and better defaults to ensure the apps you build remain secure too.
+Learn how to get the most out of Replit
+Our collaboration with Replit democratizes application development
+Our collaboration with Replit democratizes application development enabling business teams across enterprises to innovate and solve problems without traditional technical barriers. Our relationship exemplifies our commitment to making powerful development tools accessible to everyone.
+Deb Cupp
+Deb CuppPresident, Microsoft Americas
+Replit gets you from 0→1 in breakneck speed
+If I went to my developer and said, make this, it would probably take him a week of his time. I did it in an hour or two
+Preston Zeller
+Preston ZellerChief Growth Officer, Batchdata
+I asked Replit to "clone LinkedIn"
+just to see how far it would get with a single prompt. The result? A surprisingly functional prototype. It's a powerful reminder: with the right framing, today's AI tools can turn a single idea into working software.
+Reid Hoffman
+Reid HoffmanCo-founder, LinkedIn
+I can honestly say that if it weren't for Replit
+and that prototype that I was able to build in two weeks, it just wouldn't have happened. The opportunity would have perished. Someone else would have done it first... Replit for us was the way to actually do it. And it actually completely and utterly changed the trajectory of our company in a massive way.
+Scott Stevenson
+Scott StevensonCo-founder & CEO, Spellbook
+Ok, I'm addicted to Replit
+For my entire design career, I've always had to hire developers to do even the most basic stuff for me. Having an absolute blast having a free AI programmer at my behest.
+Andrew Wilkinson
+Andrew WilkinsonCo-founder, Tiny
+The ability to go from idea to working application in minutes
+has opened new possibilities for innovation across our portfolio. We're seeing apps built in 45 minutes that saves our team hours every week.
+Key Vaidya
+Key VaidyaPortfolio CTO, HG Capital
+Plans & Pricing
+Starter
+Free
+For exploring what’s possible
+Free daily Agent credits
+Free credits for AI integrations
+Publish 1 app
+Limited Agent intelligence
+Replit Core
+$17
+per monthbilled annually
+For personal projects & simple apps
+$20 of monthly credits
+Includes up to 5 collaborators
+Unlimited workspaces
+Autonomous long builds
+Remove "Made with Replit" badge
+Replit Pro
+$100$95
+per monthbilled annually
+For commercial and professional builds
+Everything in Core
+$100 monthly credits
+Includes up to 15 collaborators
+Includes up to 50 viewers
+Access to the most powerful models
+Private deployments
+Up to 28 days of data retention
+Premium support
+Exclusive community
+Enterprise
+Custom pricing
+For enterprise-grade security & controls
+Everything in Pro
+Custom seat limits
+Custom Viewer Seats
+SSO / SAML
+Advanced privacy controls
+Design system support
+Data warehouse connections
+Custom groups
+Custom pricing
+Dedicated support
+Handy Links
+
+    About us
+    Vibe Coding 101
+    Help
+    How to guides
+    Import from GitHub
+    Status
+    Additional resources
+    Brand kit
+    Certifications
+    Partnerships
+
+Legal
+
+    Terms of service
+    Commercial agreement
+    Privacy
+    Subprocessors
+    DPA
+    Report abuse
+
+Connect
+
+    X / Twitter
+    Tiktok
+    Facebook
+    Instagram
+    Linkedin
+
+All rights reserved. Copyright © 2026 Replit, Inc.
+
+Attached file
+Pasted-You-are-a-senior-full-stack-engineer-building-a-product_1772225716524.txt
+You are a senior full-stack engineer building a production-ready web app called:
+
+AFROCAT CLUB PORTAL
+
+GOAL
+Build a modern responsive portal for a volleyball club that manages:
+- Match stats & player performance reports
+- Smart Focus training recommendations
+- Attendance & discipline tracking
+- Finance module (income/expenses, reports)
+- Wellness & injury management (medical clearance)
+- Awards, scouting, talent pipeline
+- Role-based access control (RBAC): Admin, Manager, Coach, Statistician, Finance, Medical, Player
+
+TECH STACK (use this exactly)
+- Frontend: Vite + React + TypeScript + Tailwind
+- Backend: Node.js + Express + TypeScript
+- Database: SQLite via Prisma (so it runs free in Replit easily)
+- Auth: email+password with JWT + bcrypt
+- Validation: zod
+- UI: clean dashboard with sidebar, tables, filters, export buttons
+- Use a shared API client on the frontend (fetch wrapper)
+
+PROJECT SETUP
+1) Create a monorepo structure:
+   /server (Express API)
+   /client (React app)
+2) Provide a single "npm run dev" root script that runs both server and client concurrently.
+3) Add seed data so the app is usable immediately after run.
+
+CORE ENTITIES (Prisma schema)
+- User: id, fullName, email, passwordHash, role, teamId(optional), playerId(optional), createdAt
+- Team: id, name, category (MEN|WOMEN|VETERANS|JUNIORS), season, createdAt
+- Player: id, teamId, firstName, lastName, gender, dob, jerseyNo, phone, position, status (ACTIVE|SUSPENDED|INJURED), photoUrl(optional), createdAt
+- Match: id, teamId, opponent, matchDate, venue, competition, result (W|L), setsFor, setsAgainst, notes(optional)
+- PlayerMatchStat: id, matchId, playerId,
+    spikesKill, spikesError,
+    servesAce, servesError,
+    blocksSolo, blocksAssist,
+    receivePerfect, receiveError,
+    digs, settingAssist, settingError,
+    pointsTotal, minutesPlayed
+- SmartFocus: id, playerId, matchId, focusAreas (JSON array), generatedAt
+- AttendanceSession: id, teamId, sessionDate, sessionType (TRAINING|MATCH|GYM), notes(optional)
+- AttendanceRecord: id, sessionId, playerId, status (PRESENT|LATE|ABSENT|EXCUSED), reason(optional)
+- DisciplineCase: id, playerId, caseType, description, points, actionTaken, caseDate
+- FinanceTxn: id, txnDate, type (INCOME|EXPENSE), category, amount, description, reference(optional), createdByUserId
+- Injury: id, playerId, injuryType, severity (LOW|MEDIUM|HIGH), startDate, status (OPEN|CLEARED), clearanceNote(optional), clearedByUserId(optional)
+- ScoutingReport: id, playerId(optional), prospectName(optional), notes, rating (1-10), createdAt
+- Award: id, playerId, awardType (MVP|MOST_IMPROVED|BEST_SERVER|BEST_BLOCKER|COACH_AWARD), awardMonth, notes(optional)
+
+BUSINESS RULES
+A) RBAC
+- Admin/Manager: everything
+- Coach: teams, players, attendance, matches, stats view, smart focus view
+- Statistician: create matches + enter stats + generate reports
+- Finance: finance module only (plus read-only team/player lists)
+- Medical: injury module only (plus read-only player lists)
+- Player: can only view own profile, own stats history, smart focus, attendance summary, awards, injury status
+
+B) Smart Focus Engine
+After stats are submitted for a match, auto-generate Smart Focus for each player using simple rule logic:
+- If servesError high => "Serving consistency"
+- If spikesError high => "Attack control"
+- If receiveError high => "Serve reception"
+- If settingError high => "Setting accuracy"
+- If blocks low and position is middle => "Blocking timing"
+Store focusAreas as JSON array with priority ordering.
+
+C) Attendance & Discipline
+- If a player has >=3 ABSENT in last 30 days => auto-create a DisciplineCase "Attendance warning" with points.
+- Show attendance % per player and per team.
+
+D) Injury clearance
+- If Injury status is OPEN => player status becomes INJURED and show as "Unavailable"
+- Only Medical/Admin can set CLEARED.
+
+E) Performance scoring
+Compute an efficiency score for each PlayerMatchStat:
+- Start at 0
+- Add: spikesKill*2 + servesAce*2 + blocksSolo*2 + blocksAssist + digs + settingAssist
+- Subtract: spikesError*2 + servesError*2 + receiveError*2 + settingError*2
+Save computed score to pointsTotal.
+
+FEATURES (must implement)
+1) Auth pages (login/register) + role-based routing
+2) Dashboard:
+   - Admin view: stats cards (players, teams, matches, income/expenses, injuries open)
+   - Coach view: next sessions, team attendance, player focus list
+   - Player view: own performance trend + smart focus list
+3) Teams CRUD (Admin/Manager)
+4) Players CRUD with search/filter (Admin/Manager/Coach read, Player self-view)
+5) Matches CRUD (Coach/Statistician)
+6) Enter stats page:
+   - pick match
+   - table of players
+   - input stats
+   - submit => saves PlayerMatchStat + generates SmartFocus
+7) Reports pages:
+   - Match report (team summary + top performers)
+   - Player report (history, scores, focus)
+   - Attendance report (per team, per player)
+   - Finance report (monthly summary)
+   Provide “Export JSON” and “Print-friendly view” (PDF-ready HTML page).
+8) Attendance module:
+   - create session
+   - mark attendance in a grid
+9) Finance module:
+   - add income/expense
+   - categories
+   - monthly totals
+10) Injury module:
+   - log injury
+   - clearance workflow
+11) Awards module:
+   - assign awards
+12) Seed data:
+   - create at least 1 team and 8 players
+   - create sample match, stats, finance txns, attendance sessions, injuries
+
+API REQUIREMENTS
+- REST endpoints grouped by module: /auth, /teams, /players, /matches, /stats, /attendance, /finance, /injuries, /awards, /reports
+- Use zod validation on inputs
+- Consistent error handling and auth middleware
+
+QUALITY
+- Clean UI, not cluttered, mobile friendly
+- Use loading states, empty states, and toasts
+- Add README with:
+  - how to run
+  - how to seed
+  - demo login credentials for each role
+  - project structure
+  - common troubleshooting
+
+DELIVERABLE
+Generate the full working codebase now, including Prisma schema, migrations/seed, server routes, client pages, and styling.
