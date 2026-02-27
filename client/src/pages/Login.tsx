@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
+import logo from "@assets/afrocate_logo_1772226294597.png";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -16,10 +17,9 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-display font-bold text-3xl shadow-lg">
-            AC
-          </div>
+        <div className="flex flex-col items-center mb-8">
+          <img src={logo} alt="Afrocat Logo" className="w-32 h-32 object-contain mb-4 animate-in zoom-in-50 duration-500" />
+          <h2 className="text-2xl font-display font-bold text-primary tracking-tight">Afrocat Sports Club</h2>
         </div>
         
         <Card className="border-none shadow-xl">

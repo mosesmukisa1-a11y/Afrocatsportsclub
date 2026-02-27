@@ -6,6 +6,7 @@ import {
   LogOut, ShieldAlert
 } from "lucide-react";
 import { mockUser } from "@/lib/mock-data";
+import logo from "@assets/afrocate_logo_1772226294597.png";
 
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
@@ -27,9 +28,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside className="w-full md:w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
         <div className="p-6 flex items-center gap-3 border-b border-sidebar-border">
-          <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-display font-bold text-xl">
-            AC
-          </div>
+          <img src={logo} alt="Afrocat Logo" className="w-12 h-12 object-contain" />
           <div>
             <h1 className="font-display font-bold text-lg leading-tight tracking-tight text-sidebar-foreground">
               Afrocat Portal
@@ -61,8 +60,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
         <div className="p-4 border-t border-sidebar-border">
           <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center">
-              <ShieldAlert size={16} className="text-muted-foreground" />
+            <div className="w-8 h-8 rounded-full bg-accent flex items-center justify-center border border-primary/20">
+              <ShieldAlert size={16} className="text-primary" />
             </div>
             <div>
               <p className="text-sm font-semibold">{mockUser.fullName}</p>
