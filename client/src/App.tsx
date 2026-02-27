@@ -16,6 +16,9 @@ import Attendance from "@/pages/Attendance";
 import Finance from "@/pages/Finance";
 import Injuries from "@/pages/Injuries";
 import Awards from "@/pages/Awards";
+import Coaches from "@/pages/Coaches";
+import Contracts from "@/pages/Contracts";
+import Documents from "@/pages/Documents";
 import Reports from "@/pages/Reports";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -38,6 +41,9 @@ function Router() {
       <Route path="/finance">{() => <ProtectedRoute component={Finance} />}</Route>
       <Route path="/injuries">{() => <ProtectedRoute component={Injuries} />}</Route>
       <Route path="/awards">{() => <ProtectedRoute component={Awards} />}</Route>
+      <Route path="/coaches">{() => <ProtectedRoute component={Coaches} />}</Route>
+      <Route path="/contracts">{() => <ProtectedRoute component={Contracts} />}</Route>
+      <Route path="/documents">{() => <ProtectedRoute component={Documents} />}</Route>
       <Route path="/reports">{() => <ProtectedRoute component={Reports} />}</Route>
       <Route component={NotFound} />
     </Switch>

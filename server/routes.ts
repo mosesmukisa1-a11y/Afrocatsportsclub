@@ -4,12 +4,54 @@ import { storage } from "./storage";
 import { hashPassword, comparePassword, signToken, requireAuth, requireRole } from "./auth";
 import { z } from "zod";
 
+function computeStars(winRate: number): number {
+  if (winRate >= 0.75) return 5;
+  if (winRate >= 0.60) return 4;
+  if (winRate >= 0.45) return 3;
+  if (winRate >= 0.30) return 2;
+  return 1;
+}
+
+async function recomputeCoachPerformance(teamId: string, matchDate: string) {
+  const assignment = await storage.getActiveHeadCoachForTeam(teamId, matchDate);
+  if (!assignment) return;
+
+  const allAssignments = await storage.getCoachAssignmentsByTeam(teamId);
+  const headAssignments = allAssignments.filter(
+    a => a.coachUserId === assignment.coachUserId && a.assignmentRole === "HEAD_COACH"
+  );
+
+  let totalMatches = 0;
+  let totalWins = 0;
+
+  for (const a of headAssignments) {
+    const teamMatches = await storage.getMatchesByTeam(a.teamId);
+    for (const m of teamMatches) {
+      if (!m.result) continue;
+      if (m.matchDate < a.startDate) continue;
+      if (a.endDate && m.matchDate > a.endDate) continue;
+      totalMatches++;
+      if (m.result === "W") totalWins++;
+    }
+  }
+
+  const winRate = totalMatches > 0 ? totalWins / totalMatches : 0;
+  const stars = computeStars(winRate);
+
+  await storage.upsertCoachPerformance({
+    coachUserId: assignment.coachUserId,
+    matches: totalMatches,
+    wins: totalWins,
+    winRate,
+    stars,
+  });
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
 
-  // Health
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
   // ─── AUTH ────────────────────────────────────────
@@ -119,7 +161,7 @@ export async function registerRoutes(
         teamId: z.string(), firstName: z.string(), lastName: z.string(),
         gender: z.string(), jerseyNo: z.number(), position: z.string(),
         dob: z.string().optional(), phone: z.string().optional(),
-        status: z.enum(["ACTIVE","SUSPENDED","INJURED"]).optional(),
+        status: z.enum(["ACTIVE","SUSPENDED","INJURED","SUSPENDED_CONTRACT"]).optional(),
       }).parse(req.body);
       res.status(201).json(await storage.createPlayer(body));
     } catch (e: any) {
@@ -162,7 +204,11 @@ export async function registerRoutes(
         setsFor: z.number().optional(), setsAgainst: z.number().optional(),
         notes: z.string().optional().nullable(),
       }).parse(req.body);
-      res.status(201).json(await storage.createMatch(body));
+      const match = await storage.createMatch(body);
+      if (match.result) {
+        await recomputeCoachPerformance(match.teamId, match.matchDate);
+      }
+      res.status(201).json(match);
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
@@ -173,6 +219,9 @@ export async function registerRoutes(
     try {
       const updated = await storage.updateMatch(req.params.id, req.body);
       if (!updated) return res.status(404).json({ message: "Match not found" });
+      if (updated.result) {
+        await recomputeCoachPerformance(updated.teamId, updated.matchDate);
+      }
       res.json(updated);
     } catch (e) { next(e); }
   });
@@ -213,7 +262,6 @@ export async function registerRoutes(
         const saved = await storage.upsertStat({ ...stat, matchId, pointsTotal });
         results.push(saved);
 
-        // Smart Focus generation
         const player = await storage.getPlayer(stat.playerId);
         const focusAreas: string[] = [];
         if (stat.servesError >= 3) focusAreas.push("Serving consistency");
@@ -275,7 +323,6 @@ export async function registerRoutes(
         const saved = await storage.createAttendanceRecord({ ...rec, sessionId });
         results.push(saved);
 
-        // Auto discipline check
         if (rec.status === "ABSENT") {
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -389,6 +436,231 @@ export async function registerRoutes(
         notes: z.string().optional().nullable(),
       }).parse(req.body);
       res.status(201).json(await storage.createAward(body));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── COACH ASSIGNMENTS ──────────────────────────
+  app.get("/api/coach-assignments", requireAuth, requireRole(["ADMIN","MANAGER"]), async (_req, res, next) => {
+    try { res.json(await storage.getCoachAssignments()); } catch (e) { next(e); }
+  });
+
+  app.get("/api/coach-assignments/team/:teamId", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try { res.json(await storage.getCoachAssignmentsByTeam(req.params.teamId)); } catch (e) { next(e); }
+  });
+
+  app.post("/api/coach-assignments", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        coachUserId: z.string(),
+        teamId: z.string(),
+        assignmentRole: z.enum(["HEAD_COACH","ASSISTANT_COACH"]),
+        startDate: z.string(),
+        endDate: z.string().optional().nullable(),
+        active: z.boolean().optional(),
+      }).parse(req.body);
+      const created = await storage.createCoachAssignment(body);
+      const teamMatches = await storage.getMatchesByTeam(body.teamId);
+      for (const m of teamMatches) {
+        if (m.result) await recomputeCoachPerformance(m.teamId, m.matchDate);
+      }
+      res.status(201).json(created);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/coach-assignments/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updateCoachAssignment(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ message: "Assignment not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── COACH PERFORMANCE ──────────────────────────
+  app.get("/api/coaches/:id/performance", requireAuth, async (req, res, next) => {
+    try {
+      const snap = await storage.getCoachPerformance(req.params.id);
+      if (!snap) {
+        return res.json({ coachUserId: req.params.id, matches: 0, wins: 0, winRate: 0, stars: 0, provisional: true });
+      }
+      res.json({ ...snap, provisional: snap.matches < 5 });
+    } catch (e) { next(e); }
+  });
+
+  // ─── PLAYER CONTRACTS ──────────────────────────
+  app.get("/api/contracts/player/:playerId", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const contracts = await storage.getPlayerContracts(req.params.playerId);
+      const today = new Date().toISOString().split("T")[0];
+      const enriched = contracts.map((c: any) => {
+        const daysToExpiry = Math.ceil((new Date(c.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        const renewalWarning = c.status === "ACTIVE" && daysToExpiry <= 60 && daysToExpiry > 0;
+        const isExpired = c.status === "ACTIVE" && c.endDate < today;
+        return { ...c, daysToExpiry, renewalWarning, isExpired };
+      });
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/contracts", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        playerId: z.string(),
+        contractType: z.enum(["PERMANENT","SEASONAL","TRIAL","YOUTH"]),
+        startDate: z.string(),
+        endDate: z.string(),
+        signOnFee: z.number().optional().nullable(),
+        weeklyTransport: z.number().optional().nullable(),
+        salaryAmount: z.number().optional().nullable(),
+        obligations: z.string().optional().nullable(),
+        status: z.enum(["DRAFT","ACTIVE","EXPIRED","TERMINATED"]).optional(),
+      }).parse(req.body);
+      res.status(201).json(await storage.createPlayerContract({ ...body, createdByUserId: req.user!.userId }));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/contracts/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerContract(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ message: "Contract not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/contracts/:id/approve", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerContract(req.params.id, {
+        status: "ACTIVE",
+        approvedByUserId: req.user!.userId,
+      });
+      if (!updated) return res.status(404).json({ message: "Contract not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/contracts/:id/terminate", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const contract = await storage.getPlayerContract(req.params.id);
+      if (!contract) return res.status(404).json({ message: "Contract not found" });
+      const updated = await storage.updatePlayerContract(req.params.id, { status: "TERMINATED" });
+      await storage.updatePlayer(contract.playerId, { status: "SUSPENDED_CONTRACT" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── TEAM OFFICIALS ────────────────────────────
+  app.get("/api/team-officials/:teamId", requireAuth, async (req, res, next) => {
+    try { res.json(await storage.getTeamOfficials(req.params.teamId)); } catch (e) { next(e); }
+  });
+
+  app.post("/api/team-officials", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        teamId: z.string(),
+        role: z.enum(["HEAD_COACH","ASSISTANT_COACH","TRAINER","TEAM_MANAGER","PHYSIOTHERAPIST","MEDIC"]),
+        name: z.string().min(1),
+      }).parse(req.body);
+      res.status(201).json(await storage.createTeamOfficial(body));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.delete("/api/team-officials/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try { await storage.deleteTeamOfficial(req.params.id); res.status(204).send(); } catch (e) { next(e); }
+  });
+
+  // ─── MATCH DOCUMENTS ───────────────────────────
+  app.get("/api/match-documents", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      res.json(await storage.getMatchDocuments(
+        req.query.matchId as string | undefined,
+        req.query.teamId as string | undefined
+      ));
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/match-documents", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        matchId: z.string().optional().nullable(),
+        teamId: z.string().optional().nullable(),
+        documentType: z.enum(["O2BIS","MATCH_REPORT","REFEREE_FORM","SCOUTING_FORM"]),
+        fileUrl: z.string(),
+        metadata: z.record(z.any()).optional().nullable(),
+      }).parse(req.body);
+      res.status(201).json(await storage.createMatchDocument(body));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── O-2BIS GENERATION ─────────────────────────
+  app.post("/api/o2bis/generate", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        teamId: z.string(),
+        matchId: z.string().optional().nullable(),
+        opponent: z.string(),
+        matchDate: z.string(),
+        matchTime: z.string().optional(),
+        venue: z.string(),
+        competition: z.string(),
+        coachName: z.string().optional(),
+        selectedPlayerIds: z.array(z.string()).optional(),
+      }).parse(req.body);
+
+      const team = await storage.getTeam(body.teamId);
+      if (!team) return res.status(404).json({ message: "Team not found" });
+
+      let playerList;
+      if (body.selectedPlayerIds && body.selectedPlayerIds.length > 0) {
+        const allPlayers = await storage.getPlayersByTeam(body.teamId);
+        playerList = allPlayers.filter(p => body.selectedPlayerIds!.includes(p.id));
+      } else {
+        const allPlayers = await storage.getPlayersByTeam(body.teamId);
+        playerList = allPlayers.filter(p => p.status === "ACTIVE");
+      }
+
+      const officials = await storage.getTeamOfficials(body.teamId);
+
+      const o2bisData = {
+        clubName: "AFROCAT VOLLEYBALL CLUB",
+        teamName: team.name,
+        opponent: body.opponent,
+        matchDate: body.matchDate,
+        matchTime: body.matchTime || "",
+        venue: body.venue,
+        competition: body.competition,
+        coachName: body.coachName || "",
+        players: playerList.map(p => ({
+          jerseyNo: p.jerseyNo,
+          name: `${p.lastName} ${p.firstName}`,
+          position: p.position,
+          dob: p.dob || "",
+        })),
+        officials: officials.map(o => ({ role: o.role, name: o.name })),
+      };
+
+      const docRecord = await storage.createMatchDocument({
+        matchId: body.matchId || null,
+        teamId: body.teamId,
+        documentType: "O2BIS",
+        fileUrl: `/api/o2bis/view/${Date.now()}`,
+        metadata: o2bisData,
+      });
+
+      res.status(201).json({ documentId: docRecord.id, fileUrl: docRecord.fileUrl, data: o2bisData });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);

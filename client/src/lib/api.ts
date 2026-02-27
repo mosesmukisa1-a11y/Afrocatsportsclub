@@ -32,20 +32,17 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
 }
 
 export const api = {
-  // Auth
   login: (data: { email: string; password: string }) =>
     apiFetch<{ token: string; user: any }>("/auth/login", { method: "POST", body: JSON.stringify(data) }),
   register: (data: { fullName: string; email: string; password: string }) =>
     apiFetch<{ token: string; user: any }>("/auth/register", { method: "POST", body: JSON.stringify(data) }),
   me: () => apiFetch<any>("/auth/me"),
 
-  // Teams
   getTeams: () => apiFetch<any[]>("/teams"),
   createTeam: (data: any) => apiFetch<any>("/teams", { method: "POST", body: JSON.stringify(data) }),
   updateTeam: (id: string, data: any) => apiFetch<any>(`/teams/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteTeam: (id: string) => apiFetch<void>(`/teams/${id}`, { method: "DELETE" }),
 
-  // Players
   getPlayers: () => apiFetch<any[]>("/players"),
   getPlayersByTeam: (teamId: string) => apiFetch<any[]>(`/players/team/${teamId}`),
   getPlayer: (id: string) => apiFetch<any>(`/players/${id}`),
@@ -53,41 +50,61 @@ export const api = {
   updatePlayer: (id: string, data: any) => apiFetch<any>(`/players/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deletePlayer: (id: string) => apiFetch<void>(`/players/${id}`, { method: "DELETE" }),
 
-  // Matches
   getMatches: () => apiFetch<any[]>("/matches"),
   getMatch: (id: string) => apiFetch<any>(`/matches/${id}`),
   createMatch: (data: any) => apiFetch<any>("/matches", { method: "POST", body: JSON.stringify(data) }),
+  updateMatch: (id: string, data: any) => apiFetch<any>(`/matches/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
-  // Stats
   getStatsByMatch: (matchId: string) => apiFetch<any[]>(`/stats/match/${matchId}`),
   getStatsByPlayer: (playerId: string) => apiFetch<any[]>(`/stats/player/${playerId}`),
   submitStats: (matchId: string, data: any[]) =>
     apiFetch<any[]>(`/stats/match/${matchId}`, { method: "POST", body: JSON.stringify(data) }),
 
-  // Attendance
   getAttendanceSessions: (teamId?: string) => apiFetch<any[]>(`/attendance/sessions${teamId ? `?teamId=${teamId}` : ""}`),
   createAttendanceSession: (data: any) => apiFetch<any>("/attendance/sessions", { method: "POST", body: JSON.stringify(data) }),
   getAttendanceRecords: (sessionId: string) => apiFetch<any[]>(`/attendance/sessions/${sessionId}/records`),
   submitAttendanceRecords: (sessionId: string, data: any[]) =>
     apiFetch<any[]>(`/attendance/sessions/${sessionId}/records`, { method: "POST", body: JSON.stringify(data) }),
 
-  // Finance
   getFinanceTxns: () => apiFetch<any[]>("/finance"),
   createFinanceTxn: (data: any) => apiFetch<any>("/finance", { method: "POST", body: JSON.stringify(data) }),
   deleteFinanceTxn: (id: string) => apiFetch<void>(`/finance/${id}`, { method: "DELETE" }),
 
-  // Injuries
   getInjuries: () => apiFetch<any[]>("/injuries"),
   getInjuriesByPlayer: (playerId: string) => apiFetch<any[]>(`/injuries/player/${playerId}`),
   createInjury: (data: any) => apiFetch<any>("/injuries", { method: "POST", body: JSON.stringify(data) }),
   clearInjury: (id: string, clearanceNote: string) =>
     apiFetch<any>(`/injuries/${id}/clear`, { method: "PUT", body: JSON.stringify({ clearanceNote }) }),
 
-  // Awards
   getAwards: () => apiFetch<any[]>("/awards"),
   getAwardsByPlayer: (playerId: string) => apiFetch<any[]>(`/awards/player/${playerId}`),
   createAward: (data: any) => apiFetch<any>("/awards", { method: "POST", body: JSON.stringify(data) }),
 
-  // Smart Focus
   getSmartFocus: (playerId: string) => apiFetch<any[]>(`/smart-focus/player/${playerId}`),
+
+  getCoachAssignments: () => apiFetch<any[]>("/coach-assignments"),
+  getCoachAssignmentsByTeam: (teamId: string) => apiFetch<any[]>(`/coach-assignments/team/${teamId}`),
+  createCoachAssignment: (data: any) => apiFetch<any>("/coach-assignments", { method: "POST", body: JSON.stringify(data) }),
+  updateCoachAssignment: (id: string, data: any) => apiFetch<any>(`/coach-assignments/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+
+  getCoachPerformance: (coachUserId: string) => apiFetch<any>(`/coaches/${coachUserId}/performance`),
+
+  getPlayerContracts: (playerId: string) => apiFetch<any[]>(`/contracts/player/${playerId}`),
+  createContract: (data: any) => apiFetch<any>("/contracts", { method: "POST", body: JSON.stringify(data) }),
+  updateContract: (id: string, data: any) => apiFetch<any>(`/contracts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  approveContract: (id: string) => apiFetch<any>(`/contracts/${id}/approve`, { method: "POST" }),
+  terminateContract: (id: string) => apiFetch<any>(`/contracts/${id}/terminate`, { method: "POST" }),
+
+  getTeamOfficials: (teamId: string) => apiFetch<any[]>(`/team-officials/${teamId}`),
+  createTeamOfficial: (data: any) => apiFetch<any>("/team-officials", { method: "POST", body: JSON.stringify(data) }),
+  deleteTeamOfficial: (id: string) => apiFetch<void>(`/team-officials/${id}`, { method: "DELETE" }),
+
+  getMatchDocuments: (matchId?: string, teamId?: string) => {
+    const params = new URLSearchParams();
+    if (matchId) params.set("matchId", matchId);
+    if (teamId) params.set("teamId", teamId);
+    return apiFetch<any[]>(`/match-documents?${params.toString()}`);
+  },
+  createMatchDocument: (data: any) => apiFetch<any>("/match-documents", { method: "POST", body: JSON.stringify(data) }),
+  generateO2bis: (data: any) => apiFetch<any>("/o2bis/generate", { method: "POST", body: JSON.stringify(data) }),
 };

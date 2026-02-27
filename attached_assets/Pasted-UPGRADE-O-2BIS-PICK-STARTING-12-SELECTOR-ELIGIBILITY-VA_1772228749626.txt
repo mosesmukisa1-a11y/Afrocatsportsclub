@@ -1,0 +1,172 @@
+UPGRADE: O-2BIS “PICK STARTING 12” SELECTOR + ELIGIBILITY VALIDATION
+
+REFERENCE
+O-2bis form layout and fields must follow the official Afrocat sample:
+Team, Opponent, Date, Time, Venue, Competition, Coach, Players table (Jersey/Name/Position/DOB), Officials table, approval lines. :contentReference[oaicite:1]{index=1}
+
+GOAL
+When generating O-2bis:
+- User can select exactly 12 players (Starting 12 / Match Squad)
+- System validates each selected player is ELIGIBLE
+- If any player is ineligible, block generation and show reasons
+- Officials auto-fill from system records (CoachAssignment + TeamOfficial)
+- Generated PDF is saved as MatchDocument(O2BIS) and can be re-downloaded per team
+
+DATABASE CHANGES
+
+1) Add player eligibility tracking fields (extend Player model):
+- status already exists (ACTIVE|SUSPENDED|INJURED etc.)
+Add:
+Player {
+  ...
+  eligibilityStatus EligibilityStatus @default(ELIGIBLE)
+  eligibilityNotes  String?
+}
+
+enum EligibilityStatus {
+  ELIGIBLE
+  NOT_ELIGIBLE
+  PENDING
+}
+
+2) Add match squad selection model:
+MatchSquad {
+  id        String @id @default(cuid())
+  tenantId  String
+  matchId   String
+  teamId    String
+  createdByUserId String
+  createdAt DateTime @default(now())
+
+  entries   MatchSquadEntry[]
+
+  @@index([tenantId])
+  @@index([matchId])
+  @@index([teamId])
+}
+
+MatchSquadEntry {
+  id        String @id @default(cuid())
+  tenantId  String
+  squadId   String
+  playerId  String
+  jerseyNo  Int?
+  createdAt DateTime @default(now())
+
+  squad  MatchSquad @relation(fields:[squadId], references:[id])
+  player Player     @relation(fields:[playerId], references:[id])
+
+  @@index([tenantId])
+  @@unique([tenantId, squadId, playerId])
+}
+
+ELIGIBILITY RULES (must enforce)
+
+A player is ELIGIBLE only if:
+1) Player.status == ACTIVE
+2) No OPEN Injury exists for the player (Injury.status != CLEARED)
+3) PlayerContract (if contract system exists):
+   - must have at least one ACTIVE contract OR contract rules allow no contract
+   - if contract expired => NOT eligible
+4) Player.eligibilityStatus != NOT_ELIGIBLE
+
+On validation failure, return a reason list per player:
+- "Player is INJURED (open injury)"
+- "Player is SUSPENDED"
+- "Contract expired"
+- "Eligibility set to NOT_ELIGIBLE: <eligibilityNotes>"
+
+BACKEND API
+
+1) Fetch eligible players for team
+GET /teams/:teamId/players/eligible?matchDate=YYYY-MM-DD
+Returns:
+- eligiblePlayers[]
+- ineligiblePlayers[] with reasons
+
+2) Create/Update match squad (Starting 12)
+POST /matches/:matchId/squad
+Body:
+{
+  playerIds: string[]   // must be exactly 12
+}
+Rules:
+- Must be exactly 12 players
+- Validate eligibility for all selected
+- Save MatchSquad + MatchSquadEntry (upsert: replace old selection)
+
+3) Get match squad
+GET /matches/:matchId/squad
+Returns selected players
+
+4) Generate O-2bis must use MatchSquad if present
+POST /o2bis/generate
+Body:
+{
+  teamId,
+  matchId,
+  opponent, date, time, venue, competition
+  // optional: playerIds override; if absent use saved squad
+}
+Rules:
+- If MatchSquad exists -> use it
+- Else require playerIds exactly 12
+- Validate eligibility before generating
+- Auto-fill coach and officials (see below)
+Return { fileUrl, documentId }
+
+OFFICIALS AUTO-FILL (no manual typing)
+
+Coach:
+- Determine HEAD_COACH based on CoachAssignment where:
+  teamId matches, isActive=true, startDate <= matchDate, (endDate null or >= matchDate), role=HEAD_COACH
+- If not found: allow manual coachName entry but show warning "No Head Coach assigned"
+
+Officials table should auto populate:
+- Head Coach: Head coach name
+- Assistant Coach: active assistant coach if exists
+- Trainer: active trainer if exists
+- Team Manager: from TeamOfficial role TEAM_MANAGER
+- Physiotherapist: from TeamOfficial role PHYSIOTHERAPIST
+- Medic: from TeamOfficial role MEDIC
+
+CLIENT UI CHANGES
+
+A) Match Page: “Squad / O-2bis”
+Add a section:
+1) “Pick Starting 12”
+- Left side list: all team players (search, filter by position)
+- Each player card shows:
+  - name, jersey, position, DOB
+  - eligibility badge (Eligible / Not eligible)
+  - if not eligible: hover/click shows reasons
+- Right side: Selected 12 list with order 1..12
+- Show counter: 0/12, must be 12/12 to save
+- Button: “Save Starting 12”
+
+2) “Generate O-2bis”
+- Button disabled until:
+  - squad saved with 12
+  - all eligible
+- On click:
+  - generate O-2bis and show Download link
+  - store in match documents history list
+
+B) Team Page: “O-2bis Forms”
+- History list with Download
+- Filter by season/date/opponent
+
+RBAC
+- Admin/Manager/Coach: can select squad + generate O-2bis
+- Statistician: can view squad; optional allow selection if you want
+- Player: no access (default)
+
+PDF OUTPUT REQUIREMENTS
+- Print exactly 12 players in the players table.
+- If fewer/more attempt, block.
+- Maintain official O-2bis styling per sample :contentReference[oaicite:2]{index=2}
+
+DELIVERABLE
+Implement all schema + routes + UI.
+Ensure no tenant data leakage:
+- all queries scoped by req.user.tenantId.

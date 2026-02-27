@@ -3,7 +3,8 @@ import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, Users, Trophy, ClipboardList, 
   CalendarCheck, DollarSign, Activity, FileText, 
-  LogOut, ShieldAlert, Award, Menu, X
+  LogOut, ShieldAlert, Award, Menu, X, Star,
+  ScrollText, FolderOpen
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import logo from "@assets/afrocate_logo_1772226294597.png";
@@ -19,6 +20,9 @@ const allNavItems = [
   { icon: DollarSign, label: "Finance", href: "/finance", roles: ["ADMIN","MANAGER","FINANCE"] },
   { icon: Activity, label: "Injuries", href: "/injuries", roles: ["ADMIN","MANAGER","MEDICAL"] },
   { icon: Award, label: "Awards", href: "/awards", roles: ["ADMIN","MANAGER","COACH"] },
+  { icon: Star, label: "Coaches", href: "/coaches", roles: ["ADMIN","MANAGER"] },
+  { icon: ScrollText, label: "Contracts", href: "/contracts", roles: ["ADMIN","MANAGER","COACH"] },
+  { icon: FolderOpen, label: "Documents", href: "/documents", roles: ["ADMIN","MANAGER","COACH"] },
   { icon: FileText, label: "Reports", href: "/reports", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
 ];
 

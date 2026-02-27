@@ -1,0 +1,135 @@
+You must integrate Afrocat operational digital assets into the portal.
+
+These assets already exist outside the system and must be supported.
+
+ASSET 1 — PLAYER PHOTO STORAGE
+
+Player photos originate from Google Drive folder.
+
+Create configuration table:
+
+SystemAssetConfig {
+ id String @id
+ playerPhotoDriveFolderId String
+ reportDriveFolderId String
+}
+
+Admin settings page must allow updating folder IDs.
+
+Player photoUrl logic:
+If photo missing locally,
+system can reference Drive link.
+
+------------------------------------------------
+
+ASSET 2 — PLAYER REPORT STORAGE
+
+Performance reports are exported as PDF.
+
+Reports must support:
+
+- Auto-save location reference
+- Download history
+- Report metadata tracking.
+
+Add:
+
+PlayerReport {
+ id
+ playerId
+ reportType
+ pdfUrl
+ generatedDate
+}
+
+------------------------------------------------
+
+ASSET 3 — O-2bis OFFICIAL MATCH FORM
+
+Matches must support attachment:
+
+Add:
+
+MatchDocument {
+ id
+ matchId
+ documentType
+ fileUrl
+}
+
+documentType enum:
+
+O2BIS
+MATCH_REPORT
+REFEREE_FORM
+SCOUTING_FORM
+
+UI:
+
+Match Page →
+Upload Official Documents.
+
+------------------------------------------------
+
+ASSET 4 — LIVE MATCH STAT PANEL INTEGRATION
+
+Existing Afrocat live stat workflow must be supported.
+
+Create endpoint:
+
+POST /stats/live-import
+
+Accept payload:
+
+team
+competition
+venue
+date
+coach
+playerStats
+
+System converts live stats into PlayerMatchStat records automatically.
+
+------------------------------------------------
+
+ASSET 5 — CLUB BRANDING
+
+System branding defaults:
+
+Club Name:
+Afrocat Volleyball Club
+
+Motto:
+One Team One Dream — Passion Discipline Victory
+
+Logo support across:
+PDF reports
+Contracts
+Match forms.
+
+------------------------------------------------
+
+ASSET 6 — DOCUMENT CENTER
+
+Add global module:
+
+DOCUMENT CENTER
+
+Stores:
+
+Contracts
+O2bis
+Reports
+Medical clearance
+Player transfers.
+
+Searchable by:
+player
+team
+season.
+
+------------------------------------------------
+
+DELIVERABLE
+
+System must treat these assets as native platform components — not external files.

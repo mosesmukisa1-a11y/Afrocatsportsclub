@@ -1,0 +1,153 @@
+You are upgrading the Afrocat Club Portal by adding a PROFESSIONAL PLAYER CONTRACT MANAGEMENT MODULE integrated directly inside Player Profiles.
+
+GOAL
+Every player profile must support:
+- Contract creation
+- Contract upload (PDF/DOC)
+- Contract duration tracking
+- Renewal alerts
+- Financial obligations tracking
+- Transport obligations tracking
+- Contract approval workflow
+
+DATABASE (PRISMA)
+
+Create new model:
+
+PlayerContract {
+  id                String @id @default(cuid())
+  tenantId          String
+  playerId          String
+  contractType      ContractType
+  startDate         DateTime
+  endDate           DateTime
+  signOnFee         Float?
+  weeklyTransport   Float?
+  salaryAmount      Float?
+  obligations       String?
+  contractFileUrl   String?
+  status            ContractStatus
+  approvedByUserId  String?
+  createdAt         DateTime @default(now())
+
+  player Player @relation(fields:[playerId], references:[id])
+
+  @@index([tenantId])
+}
+
+enum ContractType {
+  PERMANENT
+  SEASONAL
+  TRIAL
+  YOUTH
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+}
+
+------------------------------------------------
+
+BACKEND API
+
+Create routes:
+
+POST /contracts
+GET /contracts/player/:playerId
+PUT /contracts/:id
+POST /contracts/:id/upload
+POST /contracts/:id/approve
+POST /contracts/:id/terminate
+
+Rules:
+
+Only Admin or Manager:
+- create contracts
+- approve contracts
+- terminate contracts
+
+Coach:
+- read only
+
+Player:
+- view own contract only.
+
+------------------------------------------------
+
+SMART AUTOMATION
+
+Add automatic checks:
+
+1) Contract Expiry Monitor
+Daily job:
+
+IF contract ends within 60 days:
+create notification:
+"Contract renewal required"
+
+Dashboard alert visible to:
+Admin + Manager.
+
+2) Player Status Sync
+
+IF contract expired:
+Player.status becomes:
+
+SUSPENDED_CONTRACT
+
+------------------------------------------------
+
+PLAYER PROFILE UI
+
+Inside Player Profile add new TAB:
+
+[ Overview ]
+[ Performance ]
+[ Attendance ]
+[ Injury ]
+[ Contracts ✅ ]
+
+Contracts Tab shows:
+
+- Contract Type
+- Duration
+- Status badge
+- Financial terms
+- Upload button
+- Download PDF
+- Renewal warning indicator
+
+------------------------------------------------
+
+PDF CONTRACT SUPPORT
+
+Allow upload OR generated contract.
+
+Add button:
+
+Generate Contract PDF
+
+Include:
+- Player Name
+- Club Name Afrocat Volleyball Club
+- Manager Approval
+- Obligations clause
+- Signature placeholders.
+
+------------------------------------------------
+
+AUDIT TRAIL
+
+Track:
+createdBy
+approvedBy
+date approved.
+
+------------------------------------------------
+
+SEED DATA
+
+Create one ACTIVE contract example for demo player.

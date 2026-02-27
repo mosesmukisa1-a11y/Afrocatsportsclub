@@ -1,7 +1,7 @@
 # Afrocat Club Portal
 
 ## Overview
-A full-stack management portal for the Afrocat Volleyball Club. Manages match stats, player performance, attendance, finance, injuries, awards, and more with role-based access control.
+A full-stack management portal for the Afrocat Volleyball Club. Manages match stats, player performance, attendance, finance, injuries, awards, coach performance, player contracts, official documents (O-2bis), and more with role-based access control.
 
 ## Tech Stack
 - **Frontend**: Vite + React + TypeScript + Tailwind CSS v4 + shadcn/ui
@@ -33,11 +33,11 @@ A full-stack management portal for the Afrocat Volleyball Club. Manages match st
 ```
 
 ## Key Entities
-Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports
+Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, TeamOfficials, MatchDocuments, PlayerReports
 
 ## RBAC Roles
 - **Admin/Manager**: Full access to all modules
-- **Coach**: Teams, players, matches, attendance, stats, awards
+- **Coach**: Teams, players, matches, attendance, stats, awards, contracts (read), documents
 - **Statistician**: Matches, stats entry, reports
 - **Finance**: Finance module only + read-only lists
 - **Medical**: Injury module only + read-only lists
@@ -62,3 +62,12 @@ Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions
 - **Attendance Discipline**: Auto-creates warning if player has 3+ absences in 30 days
 - **Injury Workflow**: Logging injury sets player status to INJURED; clearance resets to ACTIVE
 - **Efficiency Score**: Computed from stats on submit (kills, aces, blocks, digs, assists minus errors)
+- **Coach Performance & Stars**: Auto-computed from match results for assigned HEAD_COACHes. Stars: 1 (<30%), 2 (30-44%), 3 (45-59%), 4 (60-74%), 5 (>=75%). Provisional badge if <5 matches.
+- **Player Contracts**: Full lifecycle — DRAFT → ACTIVE (via approve) → EXPIRED/TERMINATED. Contract termination sets player status to SUSPENDED_CONTRACT. Renewal warning when ≤60 days to expiry.
+- **O-2bis Form Generation**: Server generates official team composition forms with club header, player roster, officials table, and approval signatures. Stored as MatchDocuments with metadata.
+- **Coach Assignment Trigger**: Creating/updating matches with results auto-recomputes performance for the HEAD_COACH assigned to that team.
+
+## Brand
+- Primary: teal (174 100% 29%), Accent: gold (45 100% 51%)
+- Logo: `@assets/afrocate_logo_1772226294597.png`
+- Club: AFROCAT VOLLEYBALL CLUB — One Team One Dream — Passion Discipline Victory

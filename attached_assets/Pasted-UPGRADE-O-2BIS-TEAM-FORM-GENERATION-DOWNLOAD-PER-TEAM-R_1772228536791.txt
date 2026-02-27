@@ -1,0 +1,128 @@
+UPGRADE: O-2BIS TEAM FORM GENERATION + DOWNLOAD PER TEAM
+
+REFERENCE
+Implement an official "O-2bis - Official Team Composition Form" similar to the Afrocat sample (club header, team name, opponent, date, venue, competition, coach, players table, officials table, approval lines). :contentReference[oaicite:1]{index=1}
+
+GOAL
+For every Team in the portal:
+- Admin/Manager/Coach can generate an O-2bis PDF for any match
+- Download O-2bis per team anytime (history list)
+- O-2bis is saved as a MatchDocument + TeamDocument history
+
+DATABASE (Prisma)
+
+Add models:
+
+TeamOfficial {
+  id        String @id @default(cuid())
+  tenantId  String
+  teamId    String
+  role      TeamOfficialRole
+  name      String
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields:[teamId], references:[id])
+
+  @@index([tenantId])
+  @@index([teamId])
+}
+
+enum TeamOfficialRole {
+  HEAD_COACH
+  ASSISTANT_COACH
+  TRAINER
+  TEAM_MANAGER
+  PHYSIOTHERAPIST
+  MEDIC
+}
+
+MatchDocument {
+  id           String @id @default(cuid())
+  tenantId     String
+  matchId      String
+  documentType MatchDocumentType
+  fileUrl      String
+  createdAt    DateTime @default(now())
+
+  match Match @relation(fields:[matchId], references:[id])
+
+  @@index([tenantId])
+  @@index([matchId])
+}
+
+enum MatchDocumentType {
+  O2BIS
+  MATCH_REPORT
+  REFEREE_FORM
+  SCOUTING_FORM
+}
+
+OPTIONAL (nice): allow team-level quick downloads
+TeamDocument {
+  id           String @id @default(cuid())
+  tenantId     String
+  teamId       String
+  matchId      String?
+  documentType MatchDocumentType
+  fileUrl      String
+  createdAt    DateTime @default(now())
+
+  team Team @relation(fields:[teamId], references:[id])
+
+  @@index([tenantId])
+  @@index([teamId])
+}
+
+BACKEND API
+
+1) Generate O-2bis PDF (server-side)
+POST /o2bis/generate
+Body:
+{
+  teamId,
+  matchId (optional, recommended),
+  opponent,
+  matchDate,
+  matchTime,
+  venue,
+  competition,
+  coachName,
+  selectedPlayerIds (optional; default: all ACTIVE players in team),
+  officials (optional; default: TeamOfficial records)
+}
+
+Server should:
+- fetch players for team (jersey, name, position, DOB)
+- generate a PDF that matches the O-2bis structure :contentReference[oaicite:2]{index=2}
+- store it (local filesystem for dev; for production store to a “documents” storage path; return fileUrl)
+- create MatchDocument(documentType=O2BIS) + TeamDocument(optional)
+Return:
+{ fileUrl, documentId }
+
+2) List O-2bis documents per team
+GET /teams/:teamId/o2bis
+Return list sorted desc by date.
+
+3) Download endpoint (or direct static link)
+GET /documents/:id/download
+(or simply serve fileUrl statically)
+
+RBAC
+- Admin/Manager/Coach: can generate + list + download
+- Player: view/download only if their team and match is visible to them (or disallow completely; default: disallow)
+
+CLIENT UI
+
+Team Page -> new tab: "O-2bis Forms"
+- Filters: season, competition, date
+- Button: "Generate O-2bis"
+- Modal collects: opponent, date, time, venue, competition, coach, players selection
+- After generate: show "Download PDF" + save to history list
+
+Match Page
+- Button: "Generate O-2bis"
+- Also show list of documents attached to that match.
+
+NOTES
+- Use club header: "AFROCAT VOLLEYBALL CLUB"
+- Include approval lines like sample with Team Manager + Head Coach approvals :contentReference[oaicite:3]{index=3}

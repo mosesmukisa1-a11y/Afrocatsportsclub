@@ -6,7 +6,6 @@ import { sql } from "drizzle-orm";
 async function seed() {
   console.log("Seeding database...");
 
-  // Check if already seeded
   const existingUsers = await db.select().from(schema.users).limit(1);
   if (existingUsers.length > 0) {
     console.log("Database already seeded, skipping.");
@@ -15,11 +14,9 @@ async function seed() {
 
   const hash = await hashPassword("Passw0rd!");
 
-  // Teams
   const [menTeam] = await db.insert(schema.teams).values({ name: "Afrocat Men A", category: "MEN", season: "2024/2025" }).returning();
   const [womenTeam] = await db.insert(schema.teams).values({ name: "Afrocat Women A", category: "WOMEN", season: "2024/2025" }).returning();
 
-  // Players
   const playerData = [
     { teamId: menTeam.id, firstName: "James", lastName: "Okonkwo", gender: "Male", jerseyNo: 9, position: "Setter", dob: "1998-05-12", phone: "+27123456701" },
     { teamId: menTeam.id, firstName: "Michael", lastName: "Ndaba", gender: "Male", jerseyNo: 12, position: "Outside Hitter", dob: "2000-02-20", phone: "+27123456702" },
@@ -37,29 +34,38 @@ async function seed() {
     players.push(created);
   }
 
-  // Users (demo accounts)
+  const [coachUser] = await db.insert(schema.users).values({
+    fullName: "Coach User", email: "coach@afrocat.test", passwordHash: hash, role: "COACH", teamId: menTeam.id,
+  }).returning();
+
   await db.insert(schema.users).values([
     { fullName: "Admin User", email: "admin@afrocat.test", passwordHash: hash, role: "ADMIN" },
     { fullName: "Manager User", email: "manager@afrocat.test", passwordHash: hash, role: "MANAGER" },
-    { fullName: "Coach User", email: "coach@afrocat.test", passwordHash: hash, role: "COACH", teamId: menTeam.id },
     { fullName: "Stats User", email: "stats@afrocat.test", passwordHash: hash, role: "STATISTICIAN" },
     { fullName: "Finance User", email: "finance@afrocat.test", passwordHash: hash, role: "FINANCE" },
     { fullName: "Medical User", email: "medical@afrocat.test", passwordHash: hash, role: "MEDICAL" },
     { fullName: "James Okonkwo", email: "player1@afrocat.test", passwordHash: hash, role: "PLAYER", playerId: players[0].id, teamId: menTeam.id },
   ]);
 
-  // Matches
   const [match1] = await db.insert(schema.matches).values({
     teamId: menTeam.id, opponent: "Eagles VC", matchDate: "2024-03-10",
     venue: "Home", competition: "National League", result: "W", setsFor: 3, setsAgainst: 1,
   }).returning();
+
+  await db.insert(schema.matches).values([
+    { teamId: menTeam.id, opponent: "Lions VC", matchDate: "2024-03-17", venue: "Away", competition: "National League", result: "W", setsFor: 3, setsAgainst: 0 },
+    { teamId: menTeam.id, opponent: "Thunder VC", matchDate: "2024-03-24", venue: "Home", competition: "National League", result: "L", setsFor: 1, setsAgainst: 3 },
+    { teamId: menTeam.id, opponent: "Hawks VC", matchDate: "2024-03-31", venue: "Away", competition: "Regional Cup", result: "W", setsFor: 3, setsAgainst: 2 },
+    { teamId: menTeam.id, opponent: "Storm VC", matchDate: "2024-04-07", venue: "Home", competition: "National League", result: "W", setsFor: 3, setsAgainst: 1 },
+    { teamId: menTeam.id, opponent: "Wolves VC", matchDate: "2024-04-14", venue: "Away", competition: "National League", result: "W", setsFor: 3, setsAgainst: 0 },
+    { teamId: menTeam.id, opponent: "Rhinos VC", matchDate: "2024-04-21", venue: "Home", competition: "National League", result: "L", setsFor: 2, setsAgainst: 3 },
+  ]);
 
   const [match2] = await db.insert(schema.matches).values({
     teamId: womenTeam.id, opponent: "Panthers VC", matchDate: "2024-03-12",
     venue: "Away", competition: "Regional Cup", result: "L", setsFor: 2, setsAgainst: 3,
   }).returning();
 
-  // Stats for match1 - men team
   for (const player of players.slice(0, 4)) {
     const stats = {
       matchId: match1.id, playerId: player.id,
@@ -81,7 +87,6 @@ async function seed() {
     await db.insert(schema.playerMatchStats).values({ ...stats, pointsTotal: pt });
   }
 
-  // Attendance
   const [session1] = await db.insert(schema.attendanceSessions).values({
     teamId: menTeam.id, sessionDate: "2024-03-08", sessionType: "TRAINING", notes: "Pre-match training",
   }).returning();
@@ -92,7 +97,6 @@ async function seed() {
     });
   }
 
-  // Finance
   await db.insert(schema.financeTxns).values([
     { txnDate: "2024-03-01", type: "INCOME", category: "Sponsorship", amount: 5000, description: "Local Gym Sponsor" },
     { txnDate: "2024-03-05", type: "EXPENSE", category: "Equipment", amount: 450, description: "New Volleyballs" },
@@ -100,19 +104,42 @@ async function seed() {
     { txnDate: "2024-03-12", type: "EXPENSE", category: "Travel", amount: 300, description: "Bus rental for away match" },
   ]);
 
-  // Injuries
   await db.insert(schema.injuries).values([
     { playerId: players[2].id, injuryType: "Ankle Sprain", severity: "MEDIUM", startDate: "2024-03-01", status: "OPEN" },
     { playerId: players[3].id, injuryType: "Knee Pain", severity: "LOW", startDate: "2024-02-15", status: "CLEARED", clearanceNote: "Fully recovered" },
   ]);
 
-  // Update injured player status
   await db.update(schema.players).set({ status: "INJURED" }).where(sql`${schema.players.id} = ${players[2].id}`);
 
-  // Awards
   await db.insert(schema.awards).values([
     { playerId: players[0].id, awardType: "MVP", awardMonth: "2024-03", notes: "Outstanding setting performance" },
     { playerId: players[1].id, awardType: "MOST_IMPROVED", awardMonth: "2024-03" },
+  ]);
+
+  await db.insert(schema.coachAssignments).values({
+    coachUserId: coachUser.id, teamId: menTeam.id,
+    assignmentRole: "HEAD_COACH", startDate: "2024-01-01", active: true,
+  });
+
+  const winRate = 5 / 7;
+  const stars = winRate >= 0.75 ? 5 : winRate >= 0.60 ? 4 : winRate >= 0.45 ? 3 : winRate >= 0.30 ? 2 : 1;
+  await db.insert(schema.coachPerformanceSnapshots).values({
+    coachUserId: coachUser.id, matches: 7, wins: 5,
+    winRate: Math.round(winRate * 100) / 100, stars,
+  });
+
+  await db.insert(schema.playerContracts).values({
+    playerId: players[0].id, contractType: "PERMANENT",
+    startDate: "2024-01-01", endDate: "2025-06-30",
+    signOnFee: 500, weeklyTransport: 50, salaryAmount: 0,
+    obligations: "Training attendance minimum 80%. Match availability required.",
+    status: "ACTIVE", createdByUserId: coachUser.id,
+  });
+
+  await db.insert(schema.teamOfficials).values([
+    { teamId: menTeam.id, role: "HEAD_COACH", name: "Coach User" },
+    { teamId: menTeam.id, role: "TEAM_MANAGER", name: "Manager User" },
+    { teamId: menTeam.id, role: "PHYSIOTHERAPIST", name: "Dr. Physio" },
   ]);
 
   console.log("Seed complete!");
