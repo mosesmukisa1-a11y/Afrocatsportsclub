@@ -1,0 +1,153 @@
+You are Replit AI Agent acting as a senior full-stack engineer + DevOps. 
+Take over this Afrocat Club Portal codebase and deliver a finished Phase 2 production-ready product.
+
+NON-NEGOTIABLE OUTCOME
+When you are done:
+1) The app runs locally in Replit with: npm run dev (root)
+2) The backend is ready for Railway deployment using PostgreSQL
+3) Prisma is configured for PostgreSQL, migrations run with prisma migrate deploy
+4) Multi-tenancy is implemented with tenantId scoping across all data
+5) Auth/RBAC is correct and secure (no tenant data leakage)
+6) A clean README exists with exact Railway steps, env vars, and commands
+
+TARGET PLATFORM
+- Backend + Postgres: Railway
+- Frontend: Vite build (deployable to Vercel/Netlify OR Railway static service)
+- Database: Railway PostgreSQL using DATABASE_URL
+- Production migrations: npx prisma migrate deploy
+- Server must read process.env.PORT (Railway injects PORT)
+
+PHASE 2 WORK PLAN (do all, in this order)
+
+A) REPO + DEV SCRIPTS (ROOT)
+1) Ensure monorepo structure:
+   /server (Express + TS)
+   /client (Vite React + TS Tailwind)
+2) Ensure root has:
+   - npm run dev: runs client+server concurrently
+   - npm run build: builds both
+   - npm run start: starts server production build (and optionally serves client build if configured)
+3) Ensure client uses VITE_API_URL and has .env.example
+4) Ensure server has .env.example with:
+   DATABASE_URL=
+   JWT_SECRET=
+   PORT=4000
+
+B) POSTGRESQL SWITCH (PRISMA)
+1) Change Prisma datasource provider to postgresql.
+2) Ensure Prisma client generation is in build steps.
+3) Ensure production uses:
+   npx prisma migrate deploy
+4) Add scripts in server/package.json:
+   prisma:generate, prisma:migrate:deploy, prisma:migrate:dev, prisma:seed
+
+C) MULTI-TENANCY (SaaS READY)
+1) Add Tenant model:
+   Tenant { id, name, slug (unique), createdAt }
+2) Add tenantId to ALL core tables and relations:
+   Team, Player, Match, PlayerMatchStat, SmartFocus, AttendanceSession, AttendanceRecord,
+   DisciplineCase, FinanceTxn, Injury, Award, ScoutingReport, User
+3) Add indexes on tenantId everywhere (Prisma @@index([tenantId])).
+4) Enforce tenant scoping in EVERY query/mutation using req.user.tenantId.
+   - Build a Prisma helper that automatically injects tenantId in where clauses and create payloads where possible.
+5) Auth/JWT must include tenantId and role.
+
+D) TENANT ONBOARDING FLOW
+Implement a simple SaaS onboarding:
+Option 1 (recommended):
+- Registration requires tenantSlug + tenantName for first admin
+- If tenantSlug exists, allow user to join existing tenant (Manager/Coach/Player created by Admin invite)
+Implement:
+- POST /tenants (Admin only) to create new tenant
+- POST /auth/register supports:
+   { fullName, email, password, tenantSlug, tenantName?, role? }
+Rules:
+- If tenantSlug not found and tenantName provided => create tenant and create Admin user
+- If tenantSlug exists => create user inside that tenant (default role = Player unless Admin sets role later)
+Also support Admin ability to create users from UI for their tenant.
+
+E) RBAC + “ME” ENDPOINTS (SECURITY)
+1) Harden RBAC middleware:
+   requireAuth
+   requireRole([...])
+2) Add /me endpoints so Players never query others:
+   GET /players/me
+   GET /stats/me
+   GET /attendance/me/summary
+   GET /injuries/me
+   GET /awards/me
+3) Ensure server prevents IDOR:
+   - If role=PLAYER, forbid access to /players/:id unless it is their own playerId
+   - Same for stats/reports endpoints
+4) Add audit fields where sensible:
+   createdByUserId on key writes
+
+F) MODULE COMPLETENESS (NO BROKEN PAGES)
+Verify or implement missing:
+- Teams CRUD
+- Players CRUD + filters + pagination
+- Matches CRUD
+- Stats entry + bulk upsert + SmartFocus generation
+- Attendance sessions + grid marking + summaries + auto DisciplineCase for >=3 absences/30 days
+- Finance CRUD + monthly report
+- Injuries workflow + clearance (Medical/Admin only)
+- Awards CRUD
+- Reports pages are print-friendly (PDF-ready HTML) + export JSON
+
+G) UI FINALIZATION (MINIMAL BUT COMPLETE)
+1) Role-based sidebar menu (only show allowed modules)
+2) Dashboard cards per role
+3) Add:
+   - loading states
+   - empty states
+   - toast notifications
+4) Ensure mobile-friendly tables (horizontal scroll ok)
+5) Client stores token securely (localStorage acceptable for MVP)
+6) Add API client that injects Authorization header
+
+H) SEED DATA (POSTGRES READY)
+1) Update seed to create:
+   - Default tenant "Afrocat" slug "afrocat"
+   - Demo users for each role with password Passw0rd! in that tenant:
+     admin@afrocat.test
+     manager@afrocat.test
+     coach@afrocat.test
+     stats@afrocat.test
+     finance@afrocat.test
+     medical@afrocat.test
+     player1@afrocat.test (linked to a Player)
+2) Create sample teams, players, match, stats, attendance, finance, injuries, awards.
+3) Ensure seed is idempotent or safe to re-run.
+
+I) RAILWAY READINESS
+1) Ensure server start command works in production:
+   - node dist/index.js (or correct entry)
+2) Provide Railway build/start commands in README exactly:
+   Build:
+     cd server && npm ci && npx prisma generate && npm run build
+   Start:
+     cd server && npx prisma migrate deploy && npm run start
+3) CORS:
+   - allow localhost:5173
+   - allow production frontend domain via env FRONTEND_ORIGIN
+4) Add GET /health endpoint.
+
+J) FINAL QA CHECKLIST
+Before you finish, you must confirm:
+- npm run dev works at root
+- npm run build works at root
+- all pages load without blank screens
+- login works for each demo role
+- tenant isolation: user from tenant A cannot access tenant B records
+- migrations deploy cleanly
+- README includes exact step-by-step for Railway + Vercel/Netlify frontend
+
+DELIVERABLE FORMAT
+When done, output:
+1) A concise “WHAT I CHANGED” summary
+2) Exact commands to run locally in Replit
+3) Exact Railway steps (variables + build/start commands)
+4) Demo login credentials
+5) Any optional next steps (e.g. email sending, PDF generation)
+
+Now proceed and implement everything in the codebase. Do not ask me questions unless a required secret/value is missing. If a required env var is missing, tell me exactly what to add (name + example).

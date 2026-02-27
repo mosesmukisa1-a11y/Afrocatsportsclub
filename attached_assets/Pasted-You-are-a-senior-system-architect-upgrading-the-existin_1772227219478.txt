@@ -1,0 +1,81 @@
+You are a senior system architect upgrading the existing Afrocat Club Portal from SQLite to PostgreSQL for SaaS-scale deployment.
+
+CURRENT STATE
+- Monorepo: /server + /client
+- Prisma currently uses SQLite
+- Auth, RBAC, modules exist
+
+GOAL
+Upgrade to PostgreSQL while keeping the app behavior the same, then prepare it for production deploy (Railway/Supabase/Neon).
+
+STEP 1 — DATABASE SWITCH
+1) Update Prisma datasource:
+   - provider = "postgresql"
+   - use DATABASE_URL from env
+2) Create .env.example for server:
+   - DATABASE_URL=
+   - JWT_SECRET=
+   - PORT=4000
+3) Ensure Prisma migrations work on Postgres:
+   - npx prisma migrate dev
+   - npx prisma generate
+
+STEP 2 — MULTI-TENANCY (SaaS READY) — add now
+Add tenant support for “Club/League/Season” isolation.
+
+A) Schema updates
+Add:
+- Tenant: id, name, slug, createdAt
+Add tenantId to all core entities:
+- Team, Player, Match, PlayerMatchStat, SmartFocus, AttendanceSession, AttendanceRecord,
+  DisciplineCase, FinanceTxn, Injury, Award, ScoutingReport, User
+Add indexes:
+- @@index([tenantId])
+- Unique constraints where needed: e.g. Team unique by tenantId + name + season
+
+B) Auth tenant binding
+- Every user belongs to a tenantId
+- JWT must include tenantId
+- All queries must filter by req.user.tenantId
+- Admin can only manage within their tenant
+
+C) Tenant creation flow
+Option 1 (simple):
+- Seed creates default tenant “Afrocat”
+- All demo users belong to it
+Option 2 (SaaS):
+- Admin can create tenant
+- First admin registers with tenant slug
+
+STEP 3 — DEPLOYMENT PREP
+1) Update server to read PORT from env.
+2) Configure CORS to allow your deployed frontend origin.
+3) Ensure build scripts exist:
+   - client build (Vite)
+   - server build (tsc)
+4) Add a production start command:
+   - server runs compiled dist
+5) Add health endpoint:
+   - GET /health returns { ok: true }
+
+STEP 4 — MIGRATION / DATA SAFETY
+- Provide instructions to migrate from SQLite → Postgres:
+  - export old data (optional)
+  - reseed for now if easiest
+- Add a “reset database” script for dev only.
+
+STEP 5 — PERFORMANCE + RELIABILITY
+- Add pagination to heavy endpoints (/players, /matches, /finance)
+- Add server-side filtering (teamId, date ranges, search query)
+- Add basic request logging
+- Add rate limit on auth endpoints
+
+DELIVERABLE
+Implement the full upgrade in code:
+- Updated prisma schema with tenantId added everywhere
+- Updated routes to enforce tenant scoping
+- Updated seed to create a default tenant and demo users
+- Updated README with:
+  - Postgres setup (Railway/Supabase/Neon)
+  - environment variables
+  - deploy steps
