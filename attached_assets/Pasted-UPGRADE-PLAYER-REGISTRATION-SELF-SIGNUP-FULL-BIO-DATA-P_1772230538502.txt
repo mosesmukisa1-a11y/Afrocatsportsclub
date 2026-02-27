@@ -1,0 +1,221 @@
+UPGRADE: PLAYER REGISTRATION (SELF-SIGNUP) + FULL BIO DATA + PHOTO + PLAYER PROFILE PDF
+
+GOAL
+1) Upgrade "Add Player" to a full player onboarding platform:
+   - Photo upload
+   - Personal details (phone, email, address, DOB, gender)
+   - Next of kin details
+   - Emergency contact
+   - Medical notes (optional)
+   - ID/Passport number (optional)
+2) Players must be able to register themselves and login.
+3) Admin/Manager/Coach can also add players manually.
+4) Player Profile must be printable to a branded PDF (Afrocat logo + motto) and stored as a document.
+
+RBAC
+- Admin/Manager: full CRUD of players, link users to players, update any details
+- Coach: read-only + can edit limited fields (e.g. position, jerseyNo) OPTIONAL
+- Player: can edit only own personal profile fields (except team assignment, status, jerseyNo unless allowed)
+
+DATABASE (Prisma)
+
+A) Extend Player model with biodata fields:
+
+Player {
+  id            String @id @default(cuid())
+  tenantId      String
+
+  teamId        String?
+  firstName     String
+  lastName      String
+  fullName      String?    // store or compute
+  gender        String?
+  dob           DateTime?
+  jerseyNo      Int?
+  position      String?
+  status        PlayerStatus @default(ACTIVE)
+
+  phone         String?
+  email         String?
+  homeAddress   String?
+  town          String?
+  region        String?
+  nationality   String?
+  idNumber      String?    // optional
+
+  nextOfKinName     String?
+  nextOfKinRelation String?
+  nextOfKinPhone    String?
+  nextOfKinAddress  String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
+  medicalNotes   String?
+  allergies      String?
+  bloodGroup     String?   // optional
+  photoUrl       String?
+
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([teamId])
+}
+
+B) Ensure User model can link to a Player:
+
+User {
+  ...
+  playerId String?
+  player   Player? @relation(fields:[playerId], references:[id])
+}
+
+C) Add PlayerDocument model for profile PDFs:
+
+PlayerDocument {
+  id           String @id @default(cuid())
+  tenantId     String
+  playerId     String
+  documentType PlayerDocumentType
+  fileUrl      String
+  storageType  StorageType @default(LOCAL)
+  externalId   String?
+  createdAt    DateTime @default(now())
+
+  player Player @relation(fields:[playerId], references:[id])
+
+  @@index([tenantId])
+  @@index([playerId])
+}
+
+enum PlayerDocumentType {
+  PLAYER_PROFILE
+  CONTRACT
+  MEDICAL_CLEARANCE
+}
+
+enum StorageType { LOCAL GOOGLE_DRIVE }
+
+SELF-REGISTRATION DESIGN (IMPORTANT)
+
+We need TWO flows:
+
+FLOW 1: Player Self Signup (Recommended)
+- Player registers with email+password AND chooses tenantSlug (e.g. "afrocat")
+- Player then completes their Player Profile form
+- System creates:
+  - User role=PLAYER, tenantId resolved from tenantSlug
+  - Player record (tenantId same)
+  - links User.playerId -> Player.id
+- Team assignment is NOT chosen by player by default (Admin/Manager assigns team later)
+- Player is allowed to update only personal fields (phone, address, next-of-kin, photo, etc.)
+
+FLOW 2: Admin adds player then invites/links login
+- Admin creates Player record
+- Admin creates User record and links user.playerId to the player
+
+AUTH / API CHANGES
+
+1) Registration endpoint must support player self signup:
+POST /auth/register
+Body:
+{
+  fullName,
+  email,
+  password,
+  tenantSlug,
+  role: "PLAYER" (default if not provided)
+}
+Server:
+- find tenant by slug
+- create user with tenantId + role=PLAYER
+- create empty Player profile linked to user (firstName/lastName derived from fullName if possible)
+- return token + user
+
+2) “Complete profile” endpoint:
+PUT /players/me
+Body: editable fields + photoUrl
+Rules:
+- Player role can only update own player record
+
+3) Admin/Manager player CRUD:
+POST /players (admin)
+PUT /players/:id (admin)
+GET /players/:id (admin/coach with tenant/team rules)
+
+4) Photo Upload
+Implement:
+POST /players/:id/photo (Admin/Manager OR Player if own)
+- Accept multipart upload
+- Save locally (dev) OR via Google Drive folder if configured (playerPhotoDriveFolderId)
+- Save photoUrl
+
+NOTE: If you already have SystemAssetConfig with playerPhotoDriveFolderId, use it.
+
+CLIENT UI CHANGES
+
+A) Public pages
+- /register: supports tenantSlug input
+- /login
+
+B) Player onboarding wizard (for PLAYER role)
+After first login:
+If player profile incomplete (missing phone/address/dob):
+Redirect to /me/profile-setup
+Form includes:
+- Photo upload
+- Phone, Email (read-only from login email), Address, Town, Region
+- Next of kin name/phone/relation/address
+- Emergency contact name/phone
+- Optional medical notes/allergies
+Save button updates /players/me
+
+C) Admin Player Form (Add Player Platform)
+Replace old simple form with full sections:
+- Identity
+- Contacts
+- Next of Kin
+- Medical
+- Photo
+Include "Print Profile PDF" button.
+
+PLAYER PROFILE PDF (BRANDED)
+
+Add:
+POST /players/:id/profile/pdf
+
+PDF must include:
+- Afrocat logo + club name + motto (from SystemAssetConfig)
+- Player photo + jersey number
+- Personal info (DOB, gender, nationality, ID)
+- Contacts (phone/email/address/town/region)
+- Next of kin + emergency
+- Team info (team name/category/season)
+- Status (ACTIVE/INJURED/etc.)
+- Signature lines:
+  Player signature / Date
+  Club official signature / Date
+
+Storage:
+- Save to reports folder logic (SystemAssetConfig.reportDriveFolderId) if Drive storage enabled
+- Otherwise save locally and serve static
+Create PlayerDocument(documentType=PLAYER_PROFILE)
+
+UI:
+- Player profile page: Button “Download Profile PDF”
+- Admin can generate for any player; player can generate for own profile
+
+QUALITY & SECURITY
+- Enforce tenant scoping everywhere.
+- Prevent IDOR: players cannot access other players’ records/documents.
+- Ensure email uniqueness per tenant (or globally) in User model.
+- Ensure player self-signup cannot assign themselves to teams or elevate roles.
+
+SEED DATA
+- Keep demo users but also include one player self-signup example in README.
+
+README UPDATE
+Include:
+- How player self-registration works
+- Required env vars
+- How to enable Drive storage (optional)
+- How to generate Player Profile PDF

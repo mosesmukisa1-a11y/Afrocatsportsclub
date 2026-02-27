@@ -1,0 +1,225 @@
+UPGRADE: PLAYER CONTRACTS — ITEMS ISSUED + FEES + TRANSPORT + NVF TRANSFER FEE CALCULATOR
+
+REFERENCE (NVF)
+- Contract release fee may not exceed N$3,000 for transfer to any other club/team. :contentReference[oaicite:3]{index=3}
+- Transfer requests can include a transfer fee determined by NVF for the relevant year (if any). :contentReference[oaicite:4]{index=4}
+
+GOAL
+Under each Player Contract, implement:
+1) Items issued to player (item name, qty, value, date received)
+2) Membership payment tracking
+3) Development fee tracking
+4) Transport benefits tracking (value included in totals)
+5) A Transfer Fee Calculator:
+   - NVF transfer fee (configurable yearly table, since NVF may set it annually)
+   - Contract release fee (capped at N$3,000 by NVF rule)
+   - Plus total value of all items + transport + any unpaid fees (membership/development)
+   - Output a final “Transfer Amount Due” breakdown (transparent and auditable)
+
+DATABASE (Prisma)
+
+A) Extend PlayerContract to include fee fields (if not already)
+PlayerContract {
+  ...
+  membershipFeeRequired   Float?   // expected membership amount
+  membershipFeePaid       Float?   // amount paid so far
+  developmentFeeRequired  Float?
+  developmentFeePaid      Float?
+  currency               String? @default("NAD")
+}
+
+B) Add issued items ledger tied to a contract
+ContractIssuedItem {
+  id         String @id @default(cuid())
+  tenantId   String
+  contractId String
+  itemName   String
+  quantity   Int @default(1)
+  unitValue  Float @default(0)
+  totalValue Float @default(0)
+  dateIssued DateTime
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  contract PlayerContract @relation(fields:[contractId], references:[id])
+
+  @@index([tenantId])
+  @@index([contractId])
+}
+
+Rules:
+- totalValue = quantity * unitValue (computed server-side)
+
+C) Add transport ledger (to include in investment totals)
+ContractTransportBenefit {
+  id         String @id @default(cuid())
+  tenantId   String
+  contractId String
+  benefitType TransportBenefitType
+  dateFrom   DateTime
+  dateTo     DateTime?
+  amount     Float      // e.g. weekly amount or one-time amount
+  frequency  TransportFrequency
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  contract PlayerContract @relation(fields:[contractId], references:[id])
+
+  @@index([tenantId])
+  @@index([contractId])
+}
+
+enum TransportBenefitType { TRAINING_TRANSPORT MATCH_TRANSPORT OTHER }
+enum TransportFrequency { ONE_TIME WEEKLY MONTHLY PER_TRIP }
+
+D) NVF transfer fee config (yearly, adjustable)
+NVFTransferFeeSchedule {
+  id        String @id @default(cuid())
+  tenantId  String
+  year      Int
+  feeType   NVFFeeType
+  amount    Float
+  notes     String?
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, year, feeType])
+  @@index([tenantId])
+}
+
+enum NVFFeeType {
+  INTER_ASSOCIATION_TRANSFER_FEE
+  OTHER
+}
+
+E) Store computed transfer calculations per transfer event
+PlayerTransferCase {
+  id            String @id @default(cuid())
+  tenantId      String
+  playerId      String
+  fromClub      String
+  toClub        String
+  transferDate  DateTime
+  nvfYear       Int
+  contractId    String?
+
+  nvfFee        Float @default(0)
+  releaseFee    Float @default(0)
+  itemsValue    Float @default(0)
+  transportValue Float @default(0)
+  membershipOutstanding Float @default(0)
+  developmentOutstanding Float @default(0)
+
+  totalDue      Float @default(0)
+  breakdownJson String  // store full breakdown
+
+  status        TransferCaseStatus @default(DRAFT)
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([playerId])
+}
+
+enum TransferCaseStatus { DRAFT CONFIRMED PAID CLOSED }
+
+TRANSFER CALCULATION RULES
+
+1) NVF fee:
+- Fetch NVFTransferFeeSchedule where year = nvfYear and feeType=INTER_ASSOCIATION_TRANSFER_FEE
+- If not found, default nvfFee=0 and show warning: “NVF fee not configured for year”
+
+2) Release fee:
+- If contract has a termination/release fee value, use it BUT CAP at N$3,000 (NVF rule) :contentReference[oaicite:5]{index=5}
+- releaseFee = min(contractReleaseFee, 3000)
+
+3) Items value:
+- Sum ContractIssuedItem.totalValue
+
+4) Transport value:
+- Sum transport benefits using frequency:
+  - ONE_TIME: amount
+  - WEEKLY: amount * number_of_weeks_between(dateFrom, dateTo or today)
+  - MONTHLY: amount * number_of_months_between(dateFrom, dateTo or today)
+  - PER_TRIP: amount * tripCount (allow user to input trips or store trips separately)
+Provide a simple method:
+- If dateTo missing, calculate up to transferDate.
+
+5) Outstanding fees:
+- membershipOutstanding = max(0, membershipFeeRequired - membershipFeePaid)
+- developmentOutstanding = max(0, developmentFeeRequired - developmentFeePaid)
+
+6) Total Due:
+totalDue = nvfFee + releaseFee + itemsValue + transportValue + membershipOutstanding + developmentOutstanding
+
+API ENDPOINTS
+
+Contracts:
+- POST /contracts/:id/items
+- GET  /contracts/:id/items
+- PUT  /contracts/items/:itemId
+- DELETE /contracts/items/:itemId
+
+- POST /contracts/:id/transport
+- GET  /contracts/:id/transport
+- PUT  /contracts/transport/:benefitId
+- DELETE /contracts/transport/:benefitId
+
+Fees:
+- PUT /contracts/:id/fees
+  Body: { membershipFeeRequired, membershipFeePaid, developmentFeeRequired, developmentFeePaid }
+
+NVF Fee Config (Admin only):
+- POST /nvf/fees
+- GET  /nvf/fees?year=2026
+- PUT  /nvf/fees/:id
+- DELETE /nvf/fees/:id
+
+Transfer Calculator:
+- POST /transfers/calculate
+  Body: { playerId, fromClub, toClub, transferDate, nvfYear, contractId? }
+  Server:
+    compute breakdown + totalDue + return it (do not save unless confirmed)
+
+- POST /transfers
+  Body: same + { confirm: true }
+  Saves PlayerTransferCase with breakdownJson + totals
+
+RBAC
+- Admin/Manager: full access
+- Coach: read-only view of contract items/fees/transfer breakdown
+- Player: read-only view of their own contract benefits and fees (no editing)
+
+CLIENT UI
+
+Player Profile -> Contracts tab -> select contract -> sub-tabs:
+1) Contract Summary
+2) Fees (Membership + Development)
+3) Items Issued
+   - Add item modal: itemName, qty, unitValue, dateIssued, notes
+   - Table: date, item, qty, unit, total, notes
+4) Transport
+   - Add benefit modal: type, frequency, amount, dateFrom, dateTo, notes
+   - Show computed transportValue
+5) Transfer Calculator
+   Inputs:
+   - NVF year
+   - fromClub / toClub
+   - transferDate
+   Button: “Calculate Transfer Due”
+   Output:
+   - NVF fee
+   - Release fee (show capped if contract value > 3000)
+   - Items total
+   - Transport total
+   - Membership outstanding
+   - Development outstanding
+   - TOTAL DUE
+   Button: “Create Transfer Case”
+
+REPORTING
+- Add a printable “Contract Investment Summary” PDF:
+  shows all items + transport + fees paid/outstanding + totals
+- Add a “Transfer Fee Breakdown” PDF for PlayerTransferCase
+
+DELIVERABLE
+Implement schema + endpoints + UI + computations.
+Ensure tenant scoping on all queries and no cross-tenant leakage.

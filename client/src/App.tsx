@@ -21,6 +21,8 @@ import Contracts from "@/pages/Contracts";
 import Documents from "@/pages/Documents";
 import Reports from "@/pages/Reports";
 import PlayerDashboard from "@/pages/PlayerDashboard";
+import Register from "@/pages/Register";
+import ProfileSetup from "@/pages/ProfileSetup";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, loading } = useAuth();
@@ -33,7 +35,9 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Login}/>
+      <Route path="/register" component={Register}/>
       <Route path="/dashboard">{() => <ProtectedRoute component={Dashboard} />}</Route>
+      <Route path="/profile-setup">{() => <ProtectedRoute component={ProfileSetup} />}</Route>
       <Route path="/teams">{() => <ProtectedRoute component={Teams} />}</Route>
       <Route path="/players">{() => <ProtectedRoute component={Players} />}</Route>
       <Route path="/matches">{() => <ProtectedRoute component={Matches} />}</Route>

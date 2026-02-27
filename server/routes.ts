@@ -4,6 +4,11 @@ import { storage } from "./storage";
 import { hashPassword, comparePassword, signToken, requireAuth, requireRole } from "./auth";
 import { z } from "zod";
 
+function esc(str: string | null | undefined): string {
+  if (!str) return "—";
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 function computeStars(winRate: number): number {
   if (winRate >= 0.75) return 5;
   if (winRate >= 0.60) return 4;
@@ -67,15 +72,34 @@ export async function registerRoutes(
       if (existing) return res.status(400).json({ message: "Email already registered" });
 
       const passwordHash = await hashPassword(body.password);
-      const user = await storage.createUser({
-        fullName: body.fullName,
+      const nameParts = body.fullName.trim().split(/\s+/);
+      const firstName = nameParts[0] || body.fullName;
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      const player = await storage.createPlayer({
+        firstName,
+        lastName,
         email: body.email,
-        passwordHash,
-        role: "PLAYER",
+        status: "ACTIVE",
+        eligibilityStatus: "PENDING",
       });
 
+      let user;
+      try {
+        user = await storage.createUser({
+          fullName: body.fullName,
+          email: body.email,
+          passwordHash,
+          role: "PLAYER",
+          playerId: player.id,
+        });
+      } catch (err) {
+        await storage.deletePlayer(player.id);
+        throw err;
+      }
+
       const token = signToken({ userId: user.id, email: user.email, role: user.role });
-      return res.status(201).json({ token, user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role } });
+      return res.status(201).json({ token, user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: player.id } });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
@@ -147,6 +171,16 @@ export async function registerRoutes(
     try { res.json(await storage.getPlayersByTeam(req.params.teamId)); } catch (e) { next(e); }
   });
 
+  app.get("/api/players/me", requireAuth, async (req, res, next) => {
+    try {
+      const user = await storage.getUser(req.user!.userId);
+      if (!user?.playerId) return res.status(404).json({ message: "No player profile linked" });
+      const player = await storage.getPlayer(user.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      res.json(player);
+    } catch (e) { next(e); }
+  });
+
   app.get("/api/players/:id", requireAuth, async (req, res, next) => {
     try {
       const player = await storage.getPlayer(req.params.id);
@@ -158,12 +192,46 @@ export async function registerRoutes(
   app.post("/api/players", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
     try {
       const body = z.object({
-        teamId: z.string(), firstName: z.string(), lastName: z.string(),
-        gender: z.string(), jerseyNo: z.number(), position: z.string(),
-        dob: z.string().optional(), phone: z.string().optional(),
+        teamId: z.string().optional(), firstName: z.string(), lastName: z.string(),
+        gender: z.string().optional(), jerseyNo: z.number().optional(), position: z.string().optional(),
+        dob: z.string().optional(), phone: z.string().optional(), email: z.string().optional(),
+        homeAddress: z.string().optional(), town: z.string().optional(), region: z.string().optional(),
+        nationality: z.string().optional(), idNumber: z.string().optional(),
+        nextOfKinName: z.string().optional(), nextOfKinRelation: z.string().optional(),
+        nextOfKinPhone: z.string().optional(), nextOfKinAddress: z.string().optional(),
+        emergencyContactName: z.string().optional(), emergencyContactPhone: z.string().optional(),
+        medicalNotes: z.string().optional(), allergies: z.string().optional(), bloodGroup: z.string().optional(),
+        photoUrl: z.string().optional(),
         status: z.enum(["ACTIVE","SUSPENDED","INJURED","SUSPENDED_CONTRACT"]).optional(),
       }).parse(req.body);
       res.status(201).json(await storage.createPlayer(body));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/players/me", requireAuth, async (req, res, next) => {
+    try {
+      const user = await storage.getUser(req.user!.userId);
+      if (!user?.playerId) return res.status(404).json({ message: "No player profile linked" });
+
+      const allowedFields = z.object({
+        firstName: z.string().optional(), lastName: z.string().optional(),
+        gender: z.string().optional(), dob: z.string().optional(),
+        phone: z.string().optional(), email: z.string().optional(),
+        homeAddress: z.string().optional(), town: z.string().optional(),
+        region: z.string().optional(), nationality: z.string().optional(),
+        idNumber: z.string().optional(),
+        nextOfKinName: z.string().optional(), nextOfKinRelation: z.string().optional(),
+        nextOfKinPhone: z.string().optional(), nextOfKinAddress: z.string().optional(),
+        emergencyContactName: z.string().optional(), emergencyContactPhone: z.string().optional(),
+        medicalNotes: z.string().optional(), allergies: z.string().optional(),
+        bloodGroup: z.string().optional(), photoUrl: z.string().optional(),
+      }).parse(req.body);
+
+      const updated = await storage.updatePlayer(user.playerId, allowedFields);
+      res.json(updated);
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
@@ -180,6 +248,148 @@ export async function registerRoutes(
 
   app.delete("/api/players/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
     try { await storage.deletePlayer(req.params.id); res.status(204).send(); } catch (e) { next(e); }
+  });
+
+  app.post("/api/players/:id/photo", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.params.id;
+      const userRole = req.user!.role;
+      if (userRole === "PLAYER") {
+        const u = await storage.getUser(req.user!.userId);
+        if (u?.playerId !== playerId) return res.status(403).json({ message: "Access denied" });
+      } else if (!["ADMIN","MANAGER","COACH"].includes(userRole)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const { photoUrl } = z.object({ photoUrl: z.string() }).parse(req.body);
+      const updated = await storage.updatePlayer(playerId, { photoUrl });
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
+  });
+
+  app.post("/api/players/:id/profile/pdf", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.params.id;
+      const userRole = req.user!.role;
+      if (userRole === "PLAYER") {
+        const u = await storage.getUser(req.user!.userId);
+        if (u?.playerId !== playerId) return res.status(403).json({ message: "Access denied" });
+      } else if (!["ADMIN","MANAGER","COACH"].includes(userRole)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const player = await storage.getPlayer(playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      let teamName = "Unassigned";
+      let teamCategory = "";
+      let teamSeason = "";
+      if (player.teamId) {
+        const team = await storage.getTeam(player.teamId);
+        if (team) { teamName = team.name; teamCategory = team.category; teamSeason = team.season; }
+      }
+
+      const htmlContent = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Player Profile - ${player.firstName} ${player.lastName}</title>
+<style>
+body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:30px;color:#1a1a1a}
+.header{text-align:center;margin-bottom:30px;border-bottom:3px solid #006d5b;padding-bottom:20px}
+.header h1{color:#006d5b;font-size:24px;margin:5px 0}
+.header .motto{color:#d4a017;font-size:12px;letter-spacing:2px;text-transform:uppercase}
+.photo-section{text-align:center;margin:20px 0}
+.photo-section img{width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid #006d5b}
+.photo-placeholder{width:120px;height:120px;border-radius:50%;background:#e0e0e0;display:inline-flex;align-items:center;justify-content:center;font-size:36px;color:#888;border:3px solid #006d5b}
+.jersey{background:#006d5b;color:white;display:inline-block;padding:4px 12px;border-radius:12px;font-weight:bold;font-size:14px;margin-top:8px}
+.section{margin:20px 0}
+.section h2{color:#006d5b;font-size:16px;border-bottom:1px solid #ddd;padding-bottom:5px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{margin-bottom:4px}
+.field label{font-weight:600;color:#555;font-size:11px;text-transform:uppercase}
+.field span{display:block;font-size:13px;padding:2px 0}
+.status-badge{display:inline-block;padding:3px 10px;border-radius:8px;font-size:11px;font-weight:bold}
+.status-ACTIVE{background:#d4edda;color:#155724}
+.status-INJURED{background:#f8d7da;color:#721c24}
+.status-SUSPENDED{background:#fff3cd;color:#856404}
+.signatures{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
+.sig-line{border-top:1px solid #333;padding-top:5px;text-align:center;font-size:11px;margin-top:60px}
+@media print{body{padding:15px} .header h1{font-size:20px}}
+</style></head><body>
+<div class="header">
+<h1>AFROCAT VOLLEYBALL CLUB</h1>
+<div class="motto">One Team One Dream — Passion Discipline Victory</div>
+<h2 style="margin-top:15px;font-size:18px;color:#333">Player Profile</h2>
+</div>
+<div class="photo-section">
+${player.photoUrl ? `<img src="${esc(player.photoUrl)}" alt="Photo" />` : `<div class="photo-placeholder">${(player.firstName[0] || '').toUpperCase()}${(player.lastName[0] || '').toUpperCase()}</div>`}
+${player.jerseyNo ? `<br/><span class="jersey">#${player.jerseyNo}</span>` : ''}
+<h3 style="margin:10px 0 0">${esc(player.firstName)} ${esc(player.lastName)}</h3>
+${player.position ? `<div style="color:#666;font-size:13px">${esc(player.position)}</div>` : ''}
+<span class="status-badge status-${player.status}">${player.status}</span>
+</div>
+<div class="section"><h2>Personal Information</h2><div class="grid">
+<div class="field"><label>Date of Birth</label><span>${esc(player.dob)}</span></div>
+<div class="field"><label>Gender</label><span>${esc(player.gender)}</span></div>
+<div class="field"><label>Nationality</label><span>${esc(player.nationality)}</span></div>
+<div class="field"><label>ID/Passport</label><span>${esc(player.idNumber)}</span></div>
+<div class="field"><label>Blood Group</label><span>${esc(player.bloodGroup)}</span></div>
+</div></div>
+<div class="section"><h2>Contact Details</h2><div class="grid">
+<div class="field"><label>Phone</label><span>${esc(player.phone)}</span></div>
+<div class="field"><label>Email</label><span>${esc(player.email)}</span></div>
+<div class="field"><label>Address</label><span>${esc(player.homeAddress)}</span></div>
+<div class="field"><label>Town</label><span>${esc(player.town)}</span></div>
+<div class="field"><label>Region</label><span>${esc(player.region)}</span></div>
+</div></div>
+<div class="section"><h2>Next of Kin</h2><div class="grid">
+<div class="field"><label>Name</label><span>${esc(player.nextOfKinName)}</span></div>
+<div class="field"><label>Relation</label><span>${esc(player.nextOfKinRelation)}</span></div>
+<div class="field"><label>Phone</label><span>${esc(player.nextOfKinPhone)}</span></div>
+<div class="field"><label>Address</label><span>${esc(player.nextOfKinAddress)}</span></div>
+</div></div>
+<div class="section"><h2>Emergency Contact</h2><div class="grid">
+<div class="field"><label>Name</label><span>${esc(player.emergencyContactName)}</span></div>
+<div class="field"><label>Phone</label><span>${esc(player.emergencyContactPhone)}</span></div>
+</div></div>
+<div class="section"><h2>Medical</h2><div class="grid">
+<div class="field"><label>Medical Notes</label><span>${esc(player.medicalNotes)}</span></div>
+<div class="field"><label>Allergies</label><span>${esc(player.allergies)}</span></div>
+</div></div>
+<div class="section"><h2>Team Information</h2><div class="grid">
+<div class="field"><label>Team</label><span>${esc(teamName)}</span></div>
+<div class="field"><label>Category</label><span>${teamCategory || '—'}</span></div>
+<div class="field"><label>Season</label><span>${teamSeason || '—'}</span></div>
+</div></div>
+<div class="signatures">
+<div><div class="sig-line">Player Signature / Date</div></div>
+<div><div class="sig-line">Club Official Signature / Date</div></div>
+</div>
+</body></html>`;
+
+      const doc = await storage.createPlayerDocument({
+        playerId,
+        documentType: "PLAYER_PROFILE",
+        fileUrl: `/player-profile-${playerId}-${Date.now()}.html`,
+        metadata: { html: htmlContent, generatedAt: new Date().toISOString() },
+      });
+
+      res.json({ documentId: doc.id, html: htmlContent });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/player-documents/:playerId", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.params.playerId;
+      const userRole = req.user!.role;
+      if (userRole === "PLAYER") {
+        const u = await storage.getUser(req.user!.userId);
+        if (u?.playerId !== playerId) return res.status(403).json({ message: "Access denied" });
+      } else if (!["ADMIN","MANAGER","COACH"].includes(userRole)) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      res.json(await storage.getPlayerDocuments(playerId));
+    } catch (e) { next(e); }
   });
 
   // ─── MATCHES ─────────────────────────────────────

@@ -120,4 +120,12 @@ export const api = {
     apiFetch<any>("/squad", { method: "POST", body: JSON.stringify(data) }),
   deleteMatchSquad: (matchId: string, teamId: string) =>
     apiFetch<void>(`/squad/${matchId}/${teamId}`, { method: "DELETE" }),
+
+  getMyProfile: () => apiFetch<any>("/players/me"),
+  updateMyProfile: (data: any) => apiFetch<any>("/players/me", { method: "PUT", body: JSON.stringify(data) }),
+  uploadPlayerPhoto: (playerId: string, photoUrl: string) =>
+    apiFetch<any>(`/players/${playerId}/photo`, { method: "POST", body: JSON.stringify({ photoUrl }) }),
+  generatePlayerProfilePdf: (playerId: string) =>
+    apiFetch<any>(`/players/${playerId}/profile/pdf`, { method: "POST" }),
+  getPlayerDocuments: (playerId: string) => apiFetch<any[]>(`/player-documents/${playerId}`),
 };

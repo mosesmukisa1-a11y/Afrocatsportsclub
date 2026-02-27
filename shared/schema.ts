@@ -39,20 +39,46 @@ export const teams = pgTable("teams", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const playerDocumentTypeEnum = pgEnum("player_document_type", ["PLAYER_PROFILE", "CONTRACT", "MEDICAL_CLEARANCE"]);
+
 export const players = pgTable("players", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-  teamId: varchar("team_id", { length: 36 }).notNull(),
+  teamId: varchar("team_id", { length: 36 }),
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
-  gender: text("gender").notNull(),
+  gender: text("gender"),
   dob: text("dob"),
-  jerseyNo: integer("jersey_no").notNull(),
+  jerseyNo: integer("jersey_no"),
   phone: text("phone"),
-  position: text("position").notNull(),
+  email: text("player_email"),
+  homeAddress: text("home_address"),
+  town: text("town"),
+  region: text("region"),
+  nationality: text("nationality"),
+  idNumber: text("id_number"),
+  nextOfKinName: text("next_of_kin_name"),
+  nextOfKinRelation: text("next_of_kin_relation"),
+  nextOfKinPhone: text("next_of_kin_phone"),
+  nextOfKinAddress: text("next_of_kin_address"),
+  emergencyContactName: text("emergency_contact_name"),
+  emergencyContactPhone: text("emergency_contact_phone"),
+  medicalNotes: text("medical_notes"),
+  allergies: text("allergies"),
+  bloodGroup: text("blood_group"),
+  position: text("position"),
   status: playerStatusEnum("status").notNull().default("ACTIVE"),
   eligibilityStatus: eligibilityStatusEnum("eligibility_status").notNull().default("ELIGIBLE"),
   eligibilityNotes: text("eligibility_notes"),
   photoUrl: text("photo_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const playerDocuments = pgTable("player_documents", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  documentType: playerDocumentTypeEnum("document_type").notNull(),
+  fileUrl: text("file_url").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -262,6 +288,7 @@ export const insertMatchDocumentSchema = createInsertSchema(matchDocuments).omit
 export const insertMatchSquadSchema = createInsertSchema(matchSquads).omit({ id: true, createdAt: true });
 export const insertMatchSquadEntrySchema = createInsertSchema(matchSquadEntries).omit({ id: true, createdAt: true });
 export const insertPlayerReportSchema = createInsertSchema(playerReports).omit({ id: true });
+export const insertPlayerDocumentSchema = createInsertSchema(playerDocuments).omit({ id: true, createdAt: true });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -305,3 +332,5 @@ export type InsertMatchSquadEntry = z.infer<typeof insertMatchSquadEntrySchema>;
 export type MatchSquadEntry = typeof matchSquadEntries.$inferSelect;
 export type InsertPlayerReport = z.infer<typeof insertPlayerReportSchema>;
 export type PlayerReport = typeof playerReports.$inferSelect;
+export type InsertPlayerDocument = z.infer<typeof insertPlayerDocumentSchema>;
+export type PlayerDocument = typeof playerDocuments.$inferSelect;

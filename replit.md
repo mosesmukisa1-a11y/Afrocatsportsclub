@@ -33,15 +33,15 @@ A full-stack management portal for the Afrocat Volleyball Club. Manages match st
 ```
 
 ## Key Entities
-Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports
+Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments
 
 ## RBAC Roles
-- **Admin/Manager**: Full access to all modules
+- **Admin/Manager**: Full access to all modules, add/edit players, generate profile PDFs
 - **Coach**: Teams, players, matches, attendance, stats, awards, contracts (read), documents
 - **Statistician**: Matches, stats entry, reports
 - **Finance**: Finance module only + read-only lists
 - **Medical**: Injury module only + read-only lists
-- **Player**: Own data only (future /me endpoints)
+- **Player**: Self-registration, own profile (GET/PUT /api/players/me), own player dashboard, profile PDF for self
 
 ## Demo Credentials (all use password: Passw0rd!)
 - admin@afrocat.test (Admin)
@@ -71,6 +71,10 @@ Users, Teams, Players, Matches, PlayerMatchStats, SmartFocus, AttendanceSessions
 - **Coach Dashboard Sync**: GET /api/dashboard/coach/summary?teamId= returns last 5 matches, team totals for latest match, top 5 performers, error leaders, SmartFocus highlights. Dashboard page shows Performance Insights section with team selector.
 - **Player Dashboard**: GET /api/players/:playerId/dashboard returns last 10 match stats with match context, performance trend, SmartFocus history, attendance summary, injury status, active contract. RBAC: coach+ can view any player, player can view only self.
 - **Match Report PDF**: POST /api/reports/match/:matchId/pdf generates branded HTML match report (club header, match info, result, team totals, top performers, error leaders, SmartFocus summary, full player stats table). Stored as MatchDocument with MATCH_REPORT type. Creates PlayerReport per player. Reports page has generate + view/print functionality.
+- **Player Self-Registration**: POST /api/auth/register creates User(PLAYER) + Player record linked via user.playerId. Registration page at /register. On register, redirected to /profile-setup for onboarding wizard.
+- **Player Bio Data**: Extended player schema with: email, homeAddress, town, region, nationality, idNumber, nextOfKinName/Relation/Phone/Address, emergencyContactName/Phone, medicalNotes, allergies, bloodGroup. Player form (admin) uses tabbed UI (Identity/Contact/Kin/Medical). Player self-edit via PUT /api/players/me (restricted fields, no team/status/jersey).
+- **Player Profile PDF**: POST /api/players/:id/profile/pdf generates branded HTML profile document with personal info, contacts, next of kin, emergency, medical, team info, signature lines. Stored as PlayerDocument. RBAC: admin/manager/coach can generate for any, player can generate for self only.
+- **Player Documents**: playerDocuments table (PLAYER_PROFILE, CONTRACT, MEDICAL_CLEARANCE types). GET /api/player-documents/:playerId.
 
 ## Brand
 - Primary: teal (174 100% 29%), Accent: gold (45 100% 51%)

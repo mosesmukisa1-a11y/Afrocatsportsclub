@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -16,10 +16,9 @@ export default function Login() {
   const [password, setPassword] = useState("Passw0rd!");
   const [loading, setLoading] = useState(false);
 
-  if (user) {
-    setLocation("/dashboard");
-    return null;
-  }
+  useEffect(() => {
+    if (user) setLocation("/dashboard");
+  }, [user, setLocation]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +67,12 @@ export default function Login() {
             </form>
           </CardContent>
           <CardFooter className="flex flex-col border-t px-6 py-4 bg-muted/50 rounded-b-xl">
+            <p className="text-sm text-center text-muted-foreground mb-3">
+              New player?{" "}
+              <button onClick={() => setLocation("/register")} className="text-primary font-semibold hover:underline cursor-pointer" data-testid="link-register">
+                Register here
+              </button>
+            </p>
             <div className="text-sm text-center text-muted-foreground mb-3">Quick login as:</div>
             <div className="flex flex-wrap gap-2 justify-center">
               {[

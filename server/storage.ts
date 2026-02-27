@@ -11,13 +11,15 @@ import type {
   CoachPerformanceSnapshot, InsertCoachPerformanceSnapshot,
   PlayerContract, InsertPlayerContract, TeamOfficial, InsertTeamOfficial,
   MatchDocument, InsertMatchDocument, MatchSquad, InsertMatchSquad,
-  MatchSquadEntry, InsertMatchSquadEntry, PlayerReport, InsertPlayerReport
+  MatchSquadEntry, InsertMatchSquadEntry, PlayerReport, InsertPlayerReport,
+  PlayerDocument, InsertPlayerDocument
 } from "@shared/schema";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   getTeams(): Promise<Team[]>;
   getTeam(id: string): Promise<Team | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
@@ -86,6 +88,8 @@ export interface IStorage {
   deleteMatchSquadEntries(squadId: string): Promise<void>;
   getPlayerReports(playerId: string): Promise<PlayerReport[]>;
   createPlayerReport(report: InsertPlayerReport): Promise<PlayerReport>;
+  getPlayerDocuments(playerId: string): Promise<PlayerDocument[]>;
+  createPlayerDocument(doc: InsertPlayerDocument): Promise<PlayerDocument>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -100,6 +104,10 @@ export class DatabaseStorage implements IStorage {
   async createUser(user: InsertUser) {
     const [created] = await db.insert(schema.users).values(user).returning();
     return created;
+  }
+  async updateUser(id: string, data: Partial<InsertUser>) {
+    const [updated] = await db.update(schema.users).set(data).where(eq(schema.users.id, id)).returning();
+    return updated;
   }
 
   async getTeams() { return db.select().from(schema.teams).orderBy(schema.teams.name); }
@@ -380,6 +388,14 @@ export class DatabaseStorage implements IStorage {
   }
   async createPlayerReport(report: InsertPlayerReport) {
     const [created] = await db.insert(schema.playerReports).values(report).returning();
+    return created;
+  }
+
+  async getPlayerDocuments(playerId: string) {
+    return db.select().from(schema.playerDocuments).where(eq(schema.playerDocuments.playerId, playerId)).orderBy(desc(schema.playerDocuments.createdAt));
+  }
+  async createPlayerDocument(doc: InsertPlayerDocument) {
+    const [created] = await db.insert(schema.playerDocuments).values(doc).returning();
     return created;
   }
 }

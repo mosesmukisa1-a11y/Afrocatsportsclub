@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Users, Trophy, ClipboardList, 
   CalendarCheck, DollarSign, Activity, FileText, 
   LogOut, ShieldAlert, Award, Menu, X, Star,
-  ScrollText, FolderOpen
+  ScrollText, FolderOpen, UserCircle
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import logo from "@assets/afrocate_logo_1772226294597.png";
@@ -25,6 +25,7 @@ const allNavItems = [
   { icon: FolderOpen, label: "Documents", href: "/documents", roles: ["ADMIN","MANAGER","COACH"] },
   { icon: FileText, label: "Reports", href: "/reports", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: Users, label: "Player Stats", href: "/player-dashboard", roles: ["ADMIN","MANAGER","COACH","PLAYER"] },
+  { icon: UserCircle, label: "My Profile", href: "/profile-setup", roles: ["PLAYER"] },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
