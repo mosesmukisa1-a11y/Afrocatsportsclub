@@ -1,0 +1,183 @@
+FINAL DEEP QA + PERFECTION PASS + GITHUB PUBLISH
+
+You are Replit AI Agent acting as Senior Full-Stack Engineer + QA Lead + DevOps.
+
+MISSION
+Do a deep audit of the entire Afrocat Club Portal codebase in this workspace.
+Fix every missing piece, broken flow, security issue, RBAC issue, or incomplete UI.
+Add any missing “must-have” features to make the platform professional and production-ready.
+Then publish the finished monorepo to GitHub: mosesmukisa1-a11y (owner: mosesmukisa1-a11y).
+
+IMPORTANT: Work without asking questions unless a required secret is missing.
+If something is missing, make the best safe default and document it in README.
+
+SOURCES / EXPECTATIONS (must match)
+- The portal scope includes match performance, smart focus, attendance/discipline, finance, injury/wellness, awards/scouting, role-based access, self-service. (Afrocat Portal Overview)
+- O-2bis must match the official form structure and be downloadable per team/match.
+- Player photos + report folders must follow configured folder logic.
+- Enter Stats UI must be a branded player-card panel with photos/jerseys.
+- Vercel frontend + Railway backend readiness.
+
+PHASE 1 — INVENTORY & HEALTH CHECK
+1) Confirm repo structure: /server + /client + root scripts.
+2) Run and fix:
+   - npm install (root)
+   - npm run dev
+   - npm run build
+3) Fix all TypeScript errors, lint errors, runtime errors.
+4) Ensure Prisma:
+   - schema is correct
+   - prisma generate works
+   - migrations work
+   - seed works cleanly
+
+PHASE 2 — SECURITY & DATA ISOLATION (MUST PASS)
+A) Enforce tenant scoping everywhere:
+- Every table must have tenantId
+- Every query/mutation must filter by req.user.tenantId
+- Prevent IDOR: Player can only access own records, own docs, own reports.
+B) RBAC:
+- Admin/Manager full
+- Coach limited
+- Statistician stats + reports
+- Finance module only
+- Medical module only
+- Player self only
+Ensure both server middleware and client routing/menus enforce RBAC.
+Add tests or at minimum a scripted “security checklist” to run.
+
+PHASE 3 — FEATURE COMPLETENESS CHECKLIST (FIX ANY GAPS)
+Verify these are complete and functioning end-to-end. If any part is missing, implement it now.
+
+1) Player Self Registration + Profile Setup
+- /register supports tenantSlug
+- creates user role PLAYER
+- creates linked Player record
+- profile wizard collects: photo, phone, email, address, next of kin, emergency
+- player profile PDF generation + storage + download
+
+2) Players Admin Platform
+- Add/edit player with full biodata
+- Upload photo
+- Printable PDF profile button
+
+3) Enter Stats Platform (Upgraded UI)
+- show Afrocat logo + motto header
+- player cards with photo + jersey + position
+- stat increment/decrement
+- save bulk upsert
+- efficiency pointsTotal computed
+- smart focus generated
+- stats appear on:
+  - player dashboards (own)
+  - coach dashboards (team)
+  - match report pages
+
+4) Match Report PDF (Branded)
+- button on match report page
+- generates PDF: match details, team totals, top performers, errors, focus summary, player table
+- saves using report folder logic (config based)
+- stored as MatchDocument(MATCH_REPORT)
+- visible in player report list when they participated
+
+5) O-2bis System
+- Generate O-2bis PDF per match
+- List/download per team and per match
+- “Pick Starting 12” selector must select exactly 12
+- Eligibility validation blocks generation with reasons
+- Officials auto-fill (CoachAssignment + TeamOfficial)
+- stored as MatchDocument(O2BIS)
+
+6) Coaches
+- Coach profiles, photo, contacts
+- upload qualifications
+- assignments to teams
+- coach stars updated based on match wins, performance snapshot shown in UI
+
+7) Attendance & Discipline
+- session creation
+- marking grid
+- summaries
+- auto DisciplineCase when >=3 absences in last 30 days
+
+8) Injury & Clearance + Wellness
+- injury log
+- clearance workflow
+- selection availability enforced
+- add simple wellness check-in (optional but recommended): mood/stress/sleep flags with weekly coach report export (CSV/PDF)
+
+9) Finance
+- income/expense CRUD
+- monthly report
+- export
+- optional: donor receipt PDF (branded) since portal vision includes receipts/certificates
+
+10) Awards + Scouting
+- awards CRUD
+- scouting report module
+
+11) Contracts + Items + Fees + Transfer Calculator
+- contracts CRUD + approvals + contract PDF
+- issued items ledger (date, value)
+- membership payment + development fees tracking
+- transport benefit ledger and value computation
+- transfer calculator:
+  - NVF yearly fee schedule configurable
+  - contract release fee cap implemented
+  - total includes items + transport + outstanding fees
+  - create TransferCase + printable breakdown PDF
+
+12) Document Center
+- global searchable documents list:
+  O2BIS, Match Reports, Player Profile PDFs, Contracts, Transfer PDFs, Medical clearance, etc.
+- download secure and tenant-scoped
+
+PHASE 4 — DEPLOY READINESS (RAILWAY + VERCEL)
+A) Backend (Railway)
+- reads process.env.PORT
+- uses DATABASE_URL
+- uses prisma migrate deploy
+- CORS controlled by FRONTEND_ORIGIN
+- GET /health
+
+B) Frontend (Vercel)
+- client/vercel.json rewrite for SPA
+- no broken refresh routes
+- uses VITE_API_URL
+- build outputs dist
+
+Update README with exact copy/paste steps:
+- Railway variables: DATABASE_URL, JWT_SECRET, FRONTEND_ORIGIN
+- Railway build/start commands
+- Vercel settings: root directory client, env var VITE_API_URL, build output dist
+
+PHASE 5 — FINAL QA OUTPUT
+Generate a QA report in /QA_REPORT.md containing:
+- checklist status (PASS/FAIL)
+- how to reproduce tests
+- demo accounts
+- known limitations (if any)
+- screenshots list (optional)
+
+PHASE 6 — GITHUB PUBLISH
+Publish the finished monorepo to GitHub repository:
+- owner/repo: mosesmukisa1-a11y/mosesmukisa1-a11y
+
+Steps:
+1) Initialize git if missing
+2) Add .gitignore (node_modules, dist, .env, uploads)
+3) Ensure secrets not committed
+4) Commit with message: "Afrocat Portal v2 – complete system"
+5) Push to GitHub using the user's GitHub connection if available.
+If direct push is not possible from this environment:
+- generate a ZIP export instruction in README
+- and provide the exact git commands the user can run locally to push.
+
+DELIVERABLE
+Do all work now. Do not stop at partial.
+When done, output:
+- DONE summary
+- links/paths of QA_REPORT.md and README
+- exact demo login credentials
+- exact deploy steps
+- GitHub push status (pushed or steps needed)

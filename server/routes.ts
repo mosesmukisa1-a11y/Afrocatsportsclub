@@ -727,6 +727,7 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         signOnFee: z.number().optional().nullable(),
         weeklyTransport: z.number().optional().nullable(),
         salaryAmount: z.number().optional().nullable(),
+        releaseFee: z.number().optional().nullable(),
         obligations: z.string().optional().nullable(),
         status: z.enum(["DRAFT","ACTIVE","EXPIRED","TERMINATED"]).optional(),
       }).parse(req.body);
@@ -763,6 +764,412 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
       const updated = await storage.updatePlayerContract(req.params.id, { status: "TERMINATED" });
       await storage.updatePlayer(contract.playerId, { status: "SUSPENDED_CONTRACT" });
       res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── CONTRACT ISSUED ITEMS ────────────────────────────
+  app.get("/api/contracts/:id/items", requireAuth, async (req, res, next) => {
+    try { res.json(await storage.getContractItems(req.params.id)); } catch (e) { next(e); }
+  });
+
+  app.post("/api/contracts/:id/items", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        itemName: z.string().min(1),
+        quantity: z.number().int().min(1).default(1),
+        unitValue: z.number().min(0).default(0),
+        dateIssued: z.string(),
+        notes: z.string().optional().nullable(),
+      }).parse(req.body);
+      const totalValue = body.quantity * body.unitValue;
+      res.status(201).json(await storage.createContractItem({ contractId: req.params.id, ...body, totalValue }));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/contracts/items/:itemId", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const data = z.object({
+        itemName: z.string().min(1).optional(),
+        quantity: z.number().int().min(1).optional(),
+        unitValue: z.number().min(0).optional(),
+        dateIssued: z.string().optional(),
+        notes: z.string().optional().nullable(),
+      }).parse(req.body);
+      const updateData: any = { ...data };
+      if (data.quantity != null && data.unitValue != null) updateData.totalValue = data.quantity * data.unitValue;
+      const updated = await storage.updateContractItem(req.params.itemId, updateData);
+      if (!updated) return res.status(404).json({ message: "Item not found" });
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.delete("/api/contracts/items/:itemId", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try { await storage.deleteContractItem(req.params.itemId); res.status(204).end(); } catch (e) { next(e); }
+  });
+
+  // ─── CONTRACT TRANSPORT BENEFITS ────────────────────────────
+  app.get("/api/contracts/:id/transport", requireAuth, async (req, res, next) => {
+    try { res.json(await storage.getContractTransportBenefits(req.params.id)); } catch (e) { next(e); }
+  });
+
+  app.post("/api/contracts/:id/transport", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        benefitType: z.enum(["TRAINING_TRANSPORT","MATCH_TRANSPORT","OTHER"]),
+        dateFrom: z.string(),
+        dateTo: z.string().optional().nullable(),
+        amount: z.number().min(0),
+        frequency: z.enum(["ONE_TIME","WEEKLY","MONTHLY","PER_TRIP"]),
+        notes: z.string().optional().nullable(),
+      }).parse(req.body);
+      res.status(201).json(await storage.createContractTransportBenefit({ contractId: req.params.id, ...body }));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/contracts/transport/:benefitId", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const data = z.object({
+        benefitType: z.enum(["TRAINING_TRANSPORT","MATCH_TRANSPORT","OTHER"]).optional(),
+        dateFrom: z.string().optional(),
+        dateTo: z.string().optional().nullable(),
+        amount: z.number().min(0).optional(),
+        frequency: z.enum(["ONE_TIME","WEEKLY","MONTHLY","PER_TRIP"]).optional(),
+        notes: z.string().optional().nullable(),
+      }).parse(req.body);
+      const updated = await storage.updateContractTransportBenefit(req.params.benefitId, data);
+      if (!updated) return res.status(404).json({ message: "Transport benefit not found" });
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.delete("/api/contracts/transport/:benefitId", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try { await storage.deleteContractTransportBenefit(req.params.benefitId); res.status(204).end(); } catch (e) { next(e); }
+  });
+
+  // ─── CONTRACT FEES ────────────────────────────
+  app.put("/api/contracts/:id/fees", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        membershipFeeRequired: z.number().min(0).optional().nullable(),
+        membershipFeePaid: z.number().min(0).optional().nullable(),
+        developmentFeeRequired: z.number().min(0).optional().nullable(),
+        developmentFeePaid: z.number().min(0).optional().nullable(),
+      }).parse(req.body);
+      const updated = await storage.updatePlayerContract(req.params.id, body);
+      if (!updated) return res.status(404).json({ message: "Contract not found" });
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── NVF FEE CONFIG ────────────────────────────
+  app.get("/api/nvf/fees", requireAuth, async (req, res, next) => {
+    try {
+      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      res.json(await storage.getNvfFees(year));
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/nvf/fees", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        year: z.number().int(),
+        feeType: z.enum(["INTER_ASSOCIATION_TRANSFER_FEE","OTHER"]),
+        amount: z.number().min(0),
+        notes: z.string().optional().nullable(),
+      }).parse(req.body);
+      res.status(201).json(await storage.createNvfFee(body));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/nvf/fees/:id", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updateNvfFee(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ message: "NVF fee not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/nvf/fees/:id", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try { await storage.deleteNvfFee(req.params.id); res.status(204).end(); } catch (e) { next(e); }
+  });
+
+  // ─── TRANSFER CALCULATOR ────────────────────────────
+  function computeTransportValue(benefits: any[], transferDate: string): number {
+    let total = 0;
+    for (const b of benefits) {
+      if (!b.dateFrom || !b.amount) continue;
+      const from = new Date(b.dateFrom);
+      if (isNaN(from.getTime())) continue;
+      const to = b.dateTo ? new Date(b.dateTo) : new Date(transferDate);
+      if (isNaN(to.getTime())) continue;
+      const diffMs = to.getTime() - from.getTime();
+      if (diffMs <= 0) continue;
+      switch (b.frequency) {
+        case "ONE_TIME": total += b.amount; break;
+        case "WEEKLY": total += b.amount * Math.ceil(diffMs / (7 * 24 * 60 * 60 * 1000)); break;
+        case "MONTHLY": total += b.amount * Math.ceil(diffMs / (30.44 * 24 * 60 * 60 * 1000)); break;
+        case "PER_TRIP": total += b.amount; break;
+      }
+    }
+    return Math.round(total * 100) / 100;
+  }
+
+  app.post("/api/transfers/calculate", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        playerId: z.string(),
+        fromClub: z.string(),
+        toClub: z.string(),
+        transferDate: z.string(),
+        nvfYear: z.number().int(),
+        contractId: z.string().optional().nullable(),
+      }).parse(req.body);
+
+      const warnings: string[] = [];
+      const nvfSchedule = await storage.getNvfFeeByYearAndType(body.nvfYear, "INTER_ASSOCIATION_TRANSFER_FEE");
+      const nvfFee = nvfSchedule?.amount ?? 0;
+      if (!nvfSchedule) warnings.push(`NVF fee not configured for year ${body.nvfYear}`);
+
+      let releaseFee = 0;
+      let itemsValue = 0;
+      let transportValue = 0;
+      let membershipOutstanding = 0;
+      let developmentOutstanding = 0;
+      let contract: any = null;
+
+      if (body.contractId) {
+        contract = await storage.getPlayerContract(body.contractId);
+        if (contract) {
+          const contractRelease = contract.releaseFee ?? 0;
+          releaseFee = Math.min(contractRelease, 3000);
+
+          const items = await storage.getContractItems(body.contractId);
+          itemsValue = items.reduce((sum: number, it: any) => sum + (it.totalValue || 0), 0);
+
+          const benefits = await storage.getContractTransportBenefits(body.contractId);
+          transportValue = computeTransportValue(benefits, body.transferDate);
+
+          membershipOutstanding = Math.max(0, (contract.membershipFeeRequired || 0) - (contract.membershipFeePaid || 0));
+          developmentOutstanding = Math.max(0, (contract.developmentFeeRequired || 0) - (contract.developmentFeePaid || 0));
+        }
+      }
+
+      const totalDue = nvfFee + releaseFee + itemsValue + transportValue + membershipOutstanding + developmentOutstanding;
+
+      const breakdown = {
+        nvfFee, releaseFee, itemsValue, transportValue,
+        membershipOutstanding, developmentOutstanding, totalDue,
+        releaseFeeCapApplied: contract && (contract.releaseFee ?? 0) > 3000,
+        originalReleaseFee: contract?.releaseFee ?? 0,
+        currency: contract?.currency || "NAD",
+        warnings,
+      };
+
+      res.json(breakdown);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.post("/api/transfers", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        playerId: z.string(),
+        fromClub: z.string(),
+        toClub: z.string(),
+        transferDate: z.string(),
+        nvfYear: z.number().int(),
+        contractId: z.string().optional().nullable(),
+      }).parse(req.body);
+
+      const nvfSchedule = await storage.getNvfFeeByYearAndType(body.nvfYear, "INTER_ASSOCIATION_TRANSFER_FEE");
+      const nvfFee = nvfSchedule?.amount ?? 0;
+
+      let releaseFee = 0, itemsValue = 0, transportValue = 0;
+      let membershipOutstanding = 0, developmentOutstanding = 0;
+
+      if (body.contractId) {
+        const contract = await storage.getPlayerContract(body.contractId);
+        if (contract) {
+          releaseFee = Math.min(contract.releaseFee ?? 0, 3000);
+          const items = await storage.getContractItems(body.contractId);
+          itemsValue = items.reduce((sum: number, it: any) => sum + (it.totalValue || 0), 0);
+          const benefits = await storage.getContractTransportBenefits(body.contractId);
+          transportValue = computeTransportValue(benefits, body.transferDate);
+          membershipOutstanding = Math.max(0, (contract.membershipFeeRequired || 0) - (contract.membershipFeePaid || 0));
+          developmentOutstanding = Math.max(0, (contract.developmentFeeRequired || 0) - (contract.developmentFeePaid || 0));
+        }
+      }
+
+      const totalDue = nvfFee + releaseFee + itemsValue + transportValue + membershipOutstanding + developmentOutstanding;
+      const breakdownJson = JSON.stringify({ nvfFee, releaseFee, itemsValue, transportValue, membershipOutstanding, developmentOutstanding, totalDue });
+
+      const tc = await storage.createPlayerTransferCase({
+        ...body, contractId: body.contractId || null,
+        nvfFee, releaseFee, itemsValue, transportValue,
+        membershipOutstanding, developmentOutstanding,
+        totalDue, breakdownJson, status: "DRAFT",
+      });
+      res.status(201).json(tc);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.get("/api/transfers/player/:playerId", requireAuth, async (req, res, next) => {
+    try { res.json(await storage.getPlayerTransferCases(req.params.playerId)); } catch (e) { next(e); }
+  });
+
+  app.put("/api/transfers/:id/status", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const { status } = z.object({ status: z.enum(["DRAFT","CONFIRMED","PAID","CLOSED"]) }).parse(req.body);
+      const updated = await storage.updatePlayerTransferCase(req.params.id, { status });
+      if (!updated) return res.status(404).json({ message: "Transfer case not found" });
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── CONTRACT INVESTMENT SUMMARY PDF ────────────────────────────
+  app.post("/api/contracts/:id/investment-pdf", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const contract = await storage.getPlayerContract(req.params.id);
+      if (!contract) return res.status(404).json({ message: "Contract not found" });
+      const player = await storage.getPlayer(contract.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      const items = await storage.getContractItems(req.params.id);
+      const benefits = await storage.getContractTransportBenefits(req.params.id);
+      const today = new Date().toISOString().split("T")[0];
+      const transportTotal = computeTransportValue(benefits, today);
+      const itemsTotal = items.reduce((sum: number, it: any) => sum + (it.totalValue || 0), 0);
+      const memReq = contract.membershipFeeRequired || 0;
+      const memPaid = contract.membershipFeePaid || 0;
+      const devReq = contract.developmentFeeRequired || 0;
+      const devPaid = contract.developmentFeePaid || 0;
+      const memOutstanding = Math.max(0, memReq - memPaid);
+      const devOutstanding = Math.max(0, devReq - devPaid);
+      const grandTotal = itemsTotal + transportTotal + memOutstanding + devOutstanding + (contract.signOnFee || 0) + (contract.salaryAmount || 0);
+      const cur = contract.currency || "NAD";
+
+      const itemRows = items.map((it: any) => `<tr><td>${esc(it.dateIssued)}</td><td>${esc(it.itemName)}</td><td>${it.quantity}</td><td>${cur} ${(it.unitValue || 0).toFixed(2)}</td><td>${cur} ${(it.totalValue || 0).toFixed(2)}</td><td>${esc(it.notes)}</td></tr>`).join("");
+      const benefitRows = benefits.map((b: any) => `<tr><td>${esc(b.benefitType)}</td><td>${esc(b.frequency)}</td><td>${cur} ${(b.amount || 0).toFixed(2)}</td><td>${esc(b.dateFrom)}</td><td>${esc(b.dateTo)}</td><td>${esc(b.notes)}</td></tr>`).join("");
+
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Contract Investment Summary</title>
+<style>body{font-family:'Segoe UI',sans-serif;margin:40px;color:#333}
+.header{display:flex;align-items:center;gap:20px;border-bottom:3px solid #0d7377;padding-bottom:16px;margin-bottom:24px}
+.header h1{color:#0d7377;margin:0;font-size:22px}.header h2{margin:4px 0;font-size:14px;color:#666}
+table{width:100%;border-collapse:collapse;margin:16px 0}
+th,td{padding:8px 12px;text-align:left;border-bottom:1px solid #ddd;font-size:13px}
+th{background:#0d7377;color:white}
+.section{margin-top:24px}
+.section h3{color:#0d7377;border-bottom:1px solid #ddd;padding-bottom:6px}
+.total-row{font-weight:bold;background:#f0f9f9}
+.summary-table td{border:none;padding:4px 12px}
+.summary-table .label{color:#666;width:250px}
+.summary-table .value{font-weight:bold;text-align:right}
+.grand-total{font-size:18px;color:#0d7377;font-weight:bold;margin-top:16px;padding:12px;background:#f0f9f9;border:2px solid #0d7377;text-align:right}
+</style></head><body>
+<div class="header"><div><h1>AFROCAT VOLLEYBALL CLUB</h1><h2>Contract Investment Summary</h2><p style="font-size:12px;color:#999;margin:2px 0">Generated: ${new Date().toLocaleDateString()}</p></div></div>
+<div class="section"><h3>Player & Contract</h3>
+<table class="summary-table"><tr><td class="label">Player</td><td class="value">${esc(player.firstName)} ${esc(player.lastName)} (#${player.jerseyNo || '—'})</td></tr>
+<tr><td class="label">Contract Type</td><td class="value">${esc(contract.contractType)}</td></tr>
+<tr><td class="label">Period</td><td class="value">${esc(contract.startDate)} to ${esc(contract.endDate)}</td></tr>
+<tr><td class="label">Status</td><td class="value">${esc(contract.status)}</td></tr>
+<tr><td class="label">Currency</td><td class="value">${esc(cur)}</td></tr>
+</table></div>
+${items.length > 0 ? `<div class="section"><h3>Items Issued (${items.length})</h3>
+<table><thead><tr><th>Date</th><th>Item</th><th>Qty</th><th>Unit</th><th>Total</th><th>Notes</th></tr></thead><tbody>${itemRows}
+<tr class="total-row"><td colspan="4">Items Total</td><td>${cur} ${itemsTotal.toFixed(2)}</td><td></td></tr></tbody></table></div>` : ''}
+${benefits.length > 0 ? `<div class="section"><h3>Transport Benefits (${benefits.length})</h3>
+<table><thead><tr><th>Type</th><th>Frequency</th><th>Amount</th><th>From</th><th>To</th><th>Notes</th></tr></thead><tbody>${benefitRows}
+<tr class="total-row"><td colspan="2">Transport Total</td><td>${cur} ${transportTotal.toFixed(2)}</td><td colspan="3"></td></tr></tbody></table></div>` : ''}
+<div class="section"><h3>Fees</h3>
+<table class="summary-table">
+<tr><td class="label">Membership Fee Required</td><td class="value">${cur} ${memReq.toFixed(2)}</td></tr>
+<tr><td class="label">Membership Fee Paid</td><td class="value">${cur} ${memPaid.toFixed(2)}</td></tr>
+<tr><td class="label">Membership Outstanding</td><td class="value">${cur} ${Math.max(0, memReq - memPaid).toFixed(2)}</td></tr>
+<tr><td class="label">Development Fee Required</td><td class="value">${cur} ${devReq.toFixed(2)}</td></tr>
+<tr><td class="label">Development Fee Paid</td><td class="value">${cur} ${devPaid.toFixed(2)}</td></tr>
+<tr><td class="label">Development Outstanding</td><td class="value">${cur} ${Math.max(0, devReq - devPaid).toFixed(2)}</td></tr>
+${contract.signOnFee ? `<tr><td class="label">Sign-On Fee</td><td class="value">${cur} ${contract.signOnFee.toFixed(2)}</td></tr>` : ''}
+${contract.salaryAmount ? `<tr><td class="label">Salary</td><td class="value">${cur} ${contract.salaryAmount.toFixed(2)}</td></tr>` : ''}
+</table></div>
+<div class="grand-total">Total Club Investment: ${cur} ${grandTotal.toFixed(2)}</div>
+</body></html>`;
+
+      res.json({ html });
+    } catch (e) { next(e); }
+  });
+
+  // ─── TRANSFER FEE BREAKDOWN PDF ────────────────────────────
+  app.post("/api/transfers/:id/pdf", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const tc = await storage.getPlayerTransferCase(req.params.id);
+      if (!tc) return res.status(404).json({ message: "Transfer case not found" });
+      const player = await storage.getPlayer(tc.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      let cur = "NAD";
+      if (tc.contractId) {
+        const contract = await storage.getPlayerContract(tc.contractId);
+        if (contract?.currency) cur = contract.currency;
+      }
+
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Transfer Fee Breakdown</title>
+<style>body{font-family:'Segoe UI',sans-serif;margin:40px;color:#333}
+.header{border-bottom:3px solid #0d7377;padding-bottom:16px;margin-bottom:24px}
+.header h1{color:#0d7377;margin:0;font-size:22px}.header h2{margin:4px 0;font-size:14px;color:#666}
+table{width:100%;border-collapse:collapse;margin:16px 0}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid #ddd;font-size:13px}
+th{background:#0d7377;color:white}
+.total{font-size:20px;color:#0d7377;font-weight:bold;margin-top:20px;padding:14px;background:#f0f9f9;border:2px solid #0d7377;text-align:right}
+.status{display:inline-block;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:bold;background:#eee}
+</style></head><body>
+<div class="header"><h1>AFROCAT VOLLEYBALL CLUB</h1><h2>Transfer Fee Breakdown</h2><p style="font-size:12px;color:#999">Generated: ${new Date().toLocaleDateString()}</p></div>
+<table><tbody>
+<tr><td><strong>Player</strong></td><td>${esc(player.firstName)} ${esc(player.lastName)} (#${player.jerseyNo || '—'})</td></tr>
+<tr><td><strong>From Club</strong></td><td>${esc(tc.fromClub)}</td></tr>
+<tr><td><strong>To Club</strong></td><td>${esc(tc.toClub)}</td></tr>
+<tr><td><strong>Transfer Date</strong></td><td>${esc(tc.transferDate)}</td></tr>
+<tr><td><strong>NVF Year</strong></td><td>${tc.nvfYear}</td></tr>
+<tr><td><strong>Status</strong></td><td><span class="status">${esc(tc.status)}</span></td></tr>
+</tbody></table>
+<h3 style="color:#0d7377;margin-top:24px">Fee Breakdown</h3>
+<table><thead><tr><th>Component</th><th style="text-align:right">Amount</th></tr></thead><tbody>
+<tr><td>NVF Inter-Association Transfer Fee</td><td style="text-align:right">${cur} ${(tc.nvfFee || 0).toFixed(2)}</td></tr>
+<tr><td>Contract Release Fee (capped at ${cur} 3,000)</td><td style="text-align:right">${cur} ${(tc.releaseFee || 0).toFixed(2)}</td></tr>
+<tr><td>Items Issued Value</td><td style="text-align:right">${cur} ${(tc.itemsValue || 0).toFixed(2)}</td></tr>
+<tr><td>Transport Benefits Value</td><td style="text-align:right">${cur} ${(tc.transportValue || 0).toFixed(2)}</td></tr>
+<tr><td>Membership Fee Outstanding</td><td style="text-align:right">${cur} ${(tc.membershipOutstanding || 0).toFixed(2)}</td></tr>
+<tr><td>Development Fee Outstanding</td><td style="text-align:right">${cur} ${(tc.developmentOutstanding || 0).toFixed(2)}</td></tr>
+</tbody></table>
+<div class="total">TOTAL TRANSFER AMOUNT DUE: ${cur} ${(tc.totalDue || 0).toFixed(2)}</div>
+<p style="margin-top:30px;font-size:11px;color:#999">Per NVF regulations, the contract release fee may not exceed N$3,000 for transfer to any club/team.</p>
+</body></html>`;
+
+      res.json({ html });
     } catch (e) { next(e); }
   });
 

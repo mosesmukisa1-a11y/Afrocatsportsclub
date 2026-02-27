@@ -98,6 +98,31 @@ export const api = {
   approveContract: (id: string) => apiFetch<any>(`/contracts/${id}/approve`, { method: "POST" }),
   terminateContract: (id: string) => apiFetch<any>(`/contracts/${id}/terminate`, { method: "POST" }),
 
+  getContractItems: (contractId: string) => apiFetch<any[]>(`/contracts/${contractId}/items`),
+  createContractItem: (contractId: string, data: any) => apiFetch<any>(`/contracts/${contractId}/items`, { method: "POST", body: JSON.stringify(data) }),
+  updateContractItem: (itemId: string, data: any) => apiFetch<any>(`/contracts/items/${itemId}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteContractItem: (itemId: string) => apiFetch<void>(`/contracts/items/${itemId}`, { method: "DELETE" }),
+
+  getContractTransport: (contractId: string) => apiFetch<any[]>(`/contracts/${contractId}/transport`),
+  createContractTransport: (contractId: string, data: any) => apiFetch<any>(`/contracts/${contractId}/transport`, { method: "POST", body: JSON.stringify(data) }),
+  updateContractTransport: (benefitId: string, data: any) => apiFetch<any>(`/contracts/transport/${benefitId}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteContractTransport: (benefitId: string) => apiFetch<void>(`/contracts/transport/${benefitId}`, { method: "DELETE" }),
+
+  updateContractFees: (contractId: string, data: any) => apiFetch<any>(`/contracts/${contractId}/fees`, { method: "PUT", body: JSON.stringify(data) }),
+
+  getNvfFees: (year?: number) => apiFetch<any[]>(`/nvf/fees${year ? `?year=${year}` : ""}`),
+  createNvfFee: (data: any) => apiFetch<any>("/nvf/fees", { method: "POST", body: JSON.stringify(data) }),
+  updateNvfFee: (id: string, data: any) => apiFetch<any>(`/nvf/fees/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteNvfFee: (id: string) => apiFetch<void>(`/nvf/fees/${id}`, { method: "DELETE" }),
+
+  calculateTransfer: (data: any) => apiFetch<any>("/transfers/calculate", { method: "POST", body: JSON.stringify(data) }),
+  createTransferCase: (data: any) => apiFetch<any>("/transfers", { method: "POST", body: JSON.stringify(data) }),
+  getPlayerTransferCases: (playerId: string) => apiFetch<any[]>(`/transfers/player/${playerId}`),
+  updateTransferCaseStatus: (id: string, status: string) => apiFetch<any>(`/transfers/${id}/status`, { method: "PUT", body: JSON.stringify({ status }) }),
+
+  generateContractInvestmentPdf: (contractId: string) => apiFetch<any>(`/contracts/${contractId}/investment-pdf`, { method: "POST" }),
+  generateTransferPdf: (transferId: string) => apiFetch<any>(`/transfers/${transferId}/pdf`, { method: "POST" }),
+
   getTeamOfficials: (teamId: string) => apiFetch<any[]>(`/team-officials/${teamId}`),
   createTeamOfficial: (data: any) => apiFetch<any>("/team-officials", { method: "POST", body: JSON.stringify(data) }),
   deleteTeamOfficial: (id: string) => apiFetch<void>(`/team-officials/${id}`, { method: "DELETE" }),

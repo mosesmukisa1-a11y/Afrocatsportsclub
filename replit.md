@@ -33,7 +33,7 @@ A full-stack management portal for the Afrocat Volleyball Club. Manages match st
 ```
 
 ## Key Entities
-Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments
+Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, ContractIssuedItems, ContractTransportBenefits, NvfTransferFeeSchedules, PlayerTransferCases, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments
 
 ## RBAC Roles
 - **Admin/Manager**: Full access to all modules, add/edit players, generate profile PDFs
@@ -63,7 +63,13 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Injury Workflow**: Logging injury sets player status to INJURED; clearance resets to ACTIVE
 - **Efficiency Score**: Computed from stats on submit (kills, aces, blocks, digs, assists minus errors)
 - **Coach Performance & Stars**: Auto-computed from match results for assigned HEAD_COACHes. Stars: 1 (<30%), 2 (30-44%), 3 (45-59%), 4 (60-74%), 5 (>=75%). Provisional badge if <5 matches.
-- **Player Contracts**: Full lifecycle — DRAFT → ACTIVE (via approve) → EXPIRED/TERMINATED. Contract termination sets player status to SUSPENDED_CONTRACT. Renewal warning when ≤60 days to expiry.
+- **Player Contracts**: Full lifecycle — DRAFT → ACTIVE (via approve) → EXPIRED/TERMINATED. Contract termination sets player status to SUSPENDED_CONTRACT. Renewal warning when ≤60 days to expiry. Extended with: releaseFee, membershipFee (required/paid), developmentFee (required/paid), currency (default NAD).
+- **Contract Items Issued**: Track items given to players (item name, qty, unit value, auto-computed total). CRUD endpoints: GET/POST /contracts/:id/items, PUT/DELETE /contracts/items/:itemId.
+- **Contract Transport Benefits**: Track transport benefits (type: TRAINING/MATCH/OTHER, frequency: ONE_TIME/WEEKLY/MONTHLY/PER_TRIP, amount, date range). Value auto-computed based on frequency and date range.
+- **NVF Transfer Fee Schedule**: Yearly configurable NVF fees (Admin only). INTER_ASSOCIATION_TRANSFER_FEE or OTHER type. Used by transfer calculator.
+- **Transfer Calculator**: POST /api/transfers/calculate computes total transfer amount due: nvfFee + releaseFee (capped at N$3,000 per NVF rule) + itemsValue + transportValue + membershipOutstanding + developmentOutstanding. POST /api/transfers creates a saved PlayerTransferCase (status: DRAFT→CONFIRMED→PAID→CLOSED).
+- **Contract Investment Summary PDF**: POST /api/contracts/:id/investment-pdf generates branded HTML showing all items, transport, fees, and grand total.
+- **Transfer Fee Breakdown PDF**: POST /api/transfers/:id/pdf generates branded HTML breakdown of transfer components.
 - **O-2bis Form Generation**: Server generates official team composition forms with club header, player roster, officials table, and approval signatures. Stored as MatchDocuments with metadata.
 - **Starting 12 Squad Selector**: Per-match squad selection with eligibility validation. Checks: ACTIVE status, no open injuries, valid active contract, eligibilityStatus field. Server-side enforcement on save. Max 12 players. UI integrated into Matches page with ineligibility badges.
 - **Coach Assignment Trigger**: Creating/updating matches with results auto-recomputes performance for the HEAD_COACH assigned to that team.

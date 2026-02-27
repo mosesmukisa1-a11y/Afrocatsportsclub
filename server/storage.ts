@@ -12,7 +12,11 @@ import type {
   PlayerContract, InsertPlayerContract, TeamOfficial, InsertTeamOfficial,
   MatchDocument, InsertMatchDocument, MatchSquad, InsertMatchSquad,
   MatchSquadEntry, InsertMatchSquadEntry, PlayerReport, InsertPlayerReport,
-  PlayerDocument, InsertPlayerDocument
+  PlayerDocument, InsertPlayerDocument,
+  ContractIssuedItem, InsertContractIssuedItem,
+  ContractTransportBenefit, InsertContractTransportBenefit,
+  NvfTransferFeeSchedule, InsertNvfTransferFeeSchedule,
+  PlayerTransferCase, InsertPlayerTransferCase
 } from "@shared/schema";
 
 export interface IStorage {
@@ -90,6 +94,26 @@ export interface IStorage {
   createPlayerReport(report: InsertPlayerReport): Promise<PlayerReport>;
   getPlayerDocuments(playerId: string): Promise<PlayerDocument[]>;
   createPlayerDocument(doc: InsertPlayerDocument): Promise<PlayerDocument>;
+  getContractItems(contractId: string): Promise<ContractIssuedItem[]>;
+  getContractItem(id: string): Promise<ContractIssuedItem | undefined>;
+  createContractItem(item: InsertContractIssuedItem): Promise<ContractIssuedItem>;
+  updateContractItem(id: string, data: Partial<InsertContractIssuedItem>): Promise<ContractIssuedItem | undefined>;
+  deleteContractItem(id: string): Promise<void>;
+  getContractTransportBenefits(contractId: string): Promise<ContractTransportBenefit[]>;
+  getContractTransportBenefit(id: string): Promise<ContractTransportBenefit | undefined>;
+  createContractTransportBenefit(benefit: InsertContractTransportBenefit): Promise<ContractTransportBenefit>;
+  updateContractTransportBenefit(id: string, data: Partial<InsertContractTransportBenefit>): Promise<ContractTransportBenefit | undefined>;
+  deleteContractTransportBenefit(id: string): Promise<void>;
+  getNvfFees(year?: number): Promise<NvfTransferFeeSchedule[]>;
+  getNvfFee(id: string): Promise<NvfTransferFeeSchedule | undefined>;
+  getNvfFeeByYearAndType(year: number, feeType: string): Promise<NvfTransferFeeSchedule | undefined>;
+  createNvfFee(fee: InsertNvfTransferFeeSchedule): Promise<NvfTransferFeeSchedule>;
+  updateNvfFee(id: string, data: Partial<InsertNvfTransferFeeSchedule>): Promise<NvfTransferFeeSchedule | undefined>;
+  deleteNvfFee(id: string): Promise<void>;
+  getPlayerTransferCases(playerId?: string): Promise<PlayerTransferCase[]>;
+  getPlayerTransferCase(id: string): Promise<PlayerTransferCase | undefined>;
+  createPlayerTransferCase(tc: InsertPlayerTransferCase): Promise<PlayerTransferCase>;
+  updatePlayerTransferCase(id: string, data: Partial<InsertPlayerTransferCase>): Promise<PlayerTransferCase | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -397,6 +421,86 @@ export class DatabaseStorage implements IStorage {
   async createPlayerDocument(doc: InsertPlayerDocument) {
     const [created] = await db.insert(schema.playerDocuments).values(doc).returning();
     return created;
+  }
+
+  async getContractItems(contractId: string) {
+    return db.select().from(schema.contractIssuedItems).where(eq(schema.contractIssuedItems.contractId, contractId)).orderBy(desc(schema.contractIssuedItems.dateIssued));
+  }
+  async getContractItem(id: string) {
+    const [item] = await db.select().from(schema.contractIssuedItems).where(eq(schema.contractIssuedItems.id, id));
+    return item;
+  }
+  async createContractItem(item: InsertContractIssuedItem) {
+    const [created] = await db.insert(schema.contractIssuedItems).values(item).returning();
+    return created;
+  }
+  async updateContractItem(id: string, data: Partial<InsertContractIssuedItem>) {
+    const [updated] = await db.update(schema.contractIssuedItems).set(data).where(eq(schema.contractIssuedItems.id, id)).returning();
+    return updated;
+  }
+  async deleteContractItem(id: string) {
+    await db.delete(schema.contractIssuedItems).where(eq(schema.contractIssuedItems.id, id));
+  }
+
+  async getContractTransportBenefits(contractId: string) {
+    return db.select().from(schema.contractTransportBenefits).where(eq(schema.contractTransportBenefits.contractId, contractId)).orderBy(desc(schema.contractTransportBenefits.dateFrom));
+  }
+  async getContractTransportBenefit(id: string) {
+    const [benefit] = await db.select().from(schema.contractTransportBenefits).where(eq(schema.contractTransportBenefits.id, id));
+    return benefit;
+  }
+  async createContractTransportBenefit(benefit: InsertContractTransportBenefit) {
+    const [created] = await db.insert(schema.contractTransportBenefits).values(benefit).returning();
+    return created;
+  }
+  async updateContractTransportBenefit(id: string, data: Partial<InsertContractTransportBenefit>) {
+    const [updated] = await db.update(schema.contractTransportBenefits).set(data).where(eq(schema.contractTransportBenefits.id, id)).returning();
+    return updated;
+  }
+  async deleteContractTransportBenefit(id: string) {
+    await db.delete(schema.contractTransportBenefits).where(eq(schema.contractTransportBenefits.id, id));
+  }
+
+  async getNvfFees(year?: number) {
+    if (year) return db.select().from(schema.nvfTransferFeeSchedules).where(eq(schema.nvfTransferFeeSchedules.year, year)).orderBy(desc(schema.nvfTransferFeeSchedules.year));
+    return db.select().from(schema.nvfTransferFeeSchedules).orderBy(desc(schema.nvfTransferFeeSchedules.year));
+  }
+  async getNvfFee(id: string) {
+    const [fee] = await db.select().from(schema.nvfTransferFeeSchedules).where(eq(schema.nvfTransferFeeSchedules.id, id));
+    return fee;
+  }
+  async getNvfFeeByYearAndType(year: number, feeType: string) {
+    const [fee] = await db.select().from(schema.nvfTransferFeeSchedules)
+      .where(and(eq(schema.nvfTransferFeeSchedules.year, year), eq(schema.nvfTransferFeeSchedules.feeType, feeType as any)));
+    return fee;
+  }
+  async createNvfFee(fee: InsertNvfTransferFeeSchedule) {
+    const [created] = await db.insert(schema.nvfTransferFeeSchedules).values(fee).returning();
+    return created;
+  }
+  async updateNvfFee(id: string, data: Partial<InsertNvfTransferFeeSchedule>) {
+    const [updated] = await db.update(schema.nvfTransferFeeSchedules).set(data).where(eq(schema.nvfTransferFeeSchedules.id, id)).returning();
+    return updated;
+  }
+  async deleteNvfFee(id: string) {
+    await db.delete(schema.nvfTransferFeeSchedules).where(eq(schema.nvfTransferFeeSchedules.id, id));
+  }
+
+  async getPlayerTransferCases(playerId?: string) {
+    if (playerId) return db.select().from(schema.playerTransferCases).where(eq(schema.playerTransferCases.playerId, playerId)).orderBy(desc(schema.playerTransferCases.createdAt));
+    return db.select().from(schema.playerTransferCases).orderBy(desc(schema.playerTransferCases.createdAt));
+  }
+  async getPlayerTransferCase(id: string) {
+    const [tc] = await db.select().from(schema.playerTransferCases).where(eq(schema.playerTransferCases.id, id));
+    return tc;
+  }
+  async createPlayerTransferCase(tc: InsertPlayerTransferCase) {
+    const [created] = await db.insert(schema.playerTransferCases).values(tc).returning();
+    return created;
+  }
+  async updatePlayerTransferCase(id: string, data: Partial<InsertPlayerTransferCase>) {
+    const [updated] = await db.update(schema.playerTransferCases).set(data).where(eq(schema.playerTransferCases.id, id)).returning();
+    return updated;
   }
 }
 

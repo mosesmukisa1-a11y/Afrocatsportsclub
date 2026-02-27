@@ -19,6 +19,10 @@ export const coachAssignmentRoleEnum = pgEnum("coach_assignment_role", ["HEAD_CO
 export const teamOfficialRoleEnum = pgEnum("team_official_role", ["HEAD_COACH", "ASSISTANT_COACH", "TRAINER", "TEAM_MANAGER", "PHYSIOTHERAPIST", "MEDIC"]);
 export const matchDocumentTypeEnum = pgEnum("match_document_type", ["O2BIS", "MATCH_REPORT", "REFEREE_FORM", "SCOUTING_FORM"]);
 export const eligibilityStatusEnum = pgEnum("eligibility_status", ["ELIGIBLE", "NOT_ELIGIBLE", "PENDING"]);
+export const transportBenefitTypeEnum = pgEnum("transport_benefit_type", ["TRAINING_TRANSPORT", "MATCH_TRANSPORT", "OTHER"]);
+export const transportFrequencyEnum = pgEnum("transport_frequency", ["ONE_TIME", "WEEKLY", "MONTHLY", "PER_TRIP"]);
+export const nvfFeeTypeEnum = pgEnum("nvf_fee_type", ["INTER_ASSOCIATION_TRANSFER_FEE", "OTHER"]);
+export const transferCaseStatusEnum = pgEnum("transfer_case_status", ["DRAFT", "CONFIRMED", "PAID", "CLOSED"]);
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
@@ -217,11 +221,70 @@ export const playerContracts = pgTable("player_contracts", {
   signOnFee: real("sign_on_fee"),
   weeklyTransport: real("weekly_transport"),
   salaryAmount: real("salary_amount"),
+  releaseFee: real("release_fee"),
+  membershipFeeRequired: real("membership_fee_required"),
+  membershipFeePaid: real("membership_fee_paid"),
+  developmentFeeRequired: real("development_fee_required"),
+  developmentFeePaid: real("development_fee_paid"),
+  currency: text("currency").default("NAD"),
   obligations: text("obligations"),
   contractFileUrl: text("contract_file_url"),
   status: contractStatusEnum("status").notNull().default("DRAFT"),
   approvedByUserId: varchar("approved_by_user_id", { length: 36 }),
   createdByUserId: varchar("created_by_user_id", { length: 36 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const contractIssuedItems = pgTable("contract_issued_items", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id", { length: 36 }).notNull(),
+  itemName: text("item_name").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  unitValue: real("unit_value").notNull().default(0),
+  totalValue: real("total_value").notNull().default(0),
+  dateIssued: text("date_issued").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const contractTransportBenefits = pgTable("contract_transport_benefits", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id", { length: 36 }).notNull(),
+  benefitType: transportBenefitTypeEnum("benefit_type").notNull(),
+  dateFrom: text("date_from").notNull(),
+  dateTo: text("date_to"),
+  amount: real("amount").notNull(),
+  frequency: transportFrequencyEnum("frequency").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const nvfTransferFeeSchedules = pgTable("nvf_transfer_fee_schedules", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  year: integer("year").notNull(),
+  feeType: nvfFeeTypeEnum("fee_type").notNull(),
+  amount: real("amount").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const playerTransferCases = pgTable("player_transfer_cases", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  fromClub: text("from_club").notNull(),
+  toClub: text("to_club").notNull(),
+  transferDate: text("transfer_date").notNull(),
+  nvfYear: integer("nvf_year").notNull(),
+  contractId: varchar("contract_id", { length: 36 }),
+  nvfFee: real("nvf_fee").notNull().default(0),
+  releaseFee: real("release_fee").notNull().default(0),
+  itemsValue: real("items_value").notNull().default(0),
+  transportValue: real("transport_value").notNull().default(0),
+  membershipOutstanding: real("membership_outstanding").notNull().default(0),
+  developmentOutstanding: real("development_outstanding").notNull().default(0),
+  totalDue: real("total_due").notNull().default(0),
+  breakdownJson: text("breakdown_json").notNull(),
+  status: transferCaseStatusEnum("status").notNull().default("DRAFT"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -283,6 +346,10 @@ export const insertAwardSchema = createInsertSchema(awards).omit({ id: true });
 export const insertCoachAssignmentSchema = createInsertSchema(coachAssignments).omit({ id: true });
 export const insertCoachPerformanceSnapshotSchema = createInsertSchema(coachPerformanceSnapshots).omit({ id: true, updatedAt: true });
 export const insertPlayerContractSchema = createInsertSchema(playerContracts).omit({ id: true, createdAt: true });
+export const insertContractIssuedItemSchema = createInsertSchema(contractIssuedItems).omit({ id: true, createdAt: true });
+export const insertContractTransportBenefitSchema = createInsertSchema(contractTransportBenefits).omit({ id: true, createdAt: true });
+export const insertNvfTransferFeeScheduleSchema = createInsertSchema(nvfTransferFeeSchedules).omit({ id: true, createdAt: true });
+export const insertPlayerTransferCaseSchema = createInsertSchema(playerTransferCases).omit({ id: true, createdAt: true });
 export const insertTeamOfficialSchema = createInsertSchema(teamOfficials).omit({ id: true, createdAt: true });
 export const insertMatchDocumentSchema = createInsertSchema(matchDocuments).omit({ id: true, createdAt: true });
 export const insertMatchSquadSchema = createInsertSchema(matchSquads).omit({ id: true, createdAt: true });
@@ -322,6 +389,14 @@ export type InsertCoachPerformanceSnapshot = z.infer<typeof insertCoachPerforman
 export type CoachPerformanceSnapshot = typeof coachPerformanceSnapshots.$inferSelect;
 export type InsertPlayerContract = z.infer<typeof insertPlayerContractSchema>;
 export type PlayerContract = typeof playerContracts.$inferSelect;
+export type InsertContractIssuedItem = z.infer<typeof insertContractIssuedItemSchema>;
+export type ContractIssuedItem = typeof contractIssuedItems.$inferSelect;
+export type InsertContractTransportBenefit = z.infer<typeof insertContractTransportBenefitSchema>;
+export type ContractTransportBenefit = typeof contractTransportBenefits.$inferSelect;
+export type InsertNvfTransferFeeSchedule = z.infer<typeof insertNvfTransferFeeScheduleSchema>;
+export type NvfTransferFeeSchedule = typeof nvfTransferFeeSchedules.$inferSelect;
+export type InsertPlayerTransferCase = z.infer<typeof insertPlayerTransferCaseSchema>;
+export type PlayerTransferCase = typeof playerTransferCases.$inferSelect;
 export type InsertTeamOfficial = z.infer<typeof insertTeamOfficialSchema>;
 export type TeamOfficial = typeof teamOfficials.$inferSelect;
 export type InsertMatchDocument = z.infer<typeof insertMatchDocumentSchema>;
