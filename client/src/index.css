@@ -135,3 +135,23 @@
     @apply font-display tracking-tight;
   }
 }
+
+.afrocat-dark {
+  --ac-bg: #0B0F14;
+  --ac-card: #111827;
+  --ac-card2: #0F172A;
+  --ac-border: rgba(255,255,255,0.08);
+  --ac-text: #E5E7EB;
+  --ac-text-muted: rgba(229,231,235,0.70);
+  --ac-primary: #0F8B7D;
+  --ac-primary-dark: #0B6F66;
+  --ac-primary-soft: rgba(15,139,125,0.18);
+  --ac-accent: #F2B705;
+  --ac-accent-dark: #D9A300;
+  --ac-accent-soft: rgba(242,183,5,0.18);
+  background: var(--ac-bg);
+  background-image:
+    radial-gradient(ellipse 60% 40% at 20% 30%, var(--ac-primary-soft), transparent),
+    radial-gradient(ellipse 50% 50% at 80% 70%, var(--ac-accent-soft), transparent);
+  color: var(--ac-text);
+}

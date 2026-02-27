@@ -1899,6 +1899,10 @@ th{background:#0d7377;color:white}
       const player = await storage.getPlayer(playerId);
       if (!player) return res.status(404).json({ message: "Player not found" });
 
+      const teams = await storage.getTeams();
+      const teamMap = new Map(teams.map(t => [t.id, t]));
+      const playerTeam = teamMap.get(player.teamId);
+
       const allStats = await storage.getStatsByPlayer(playerId);
       const matches = await storage.getMatches();
       const matchMap = new Map(matches.map(m => [m.id, m]));
@@ -1913,6 +1917,7 @@ th{background:#0d7377;color:white}
             result: m?.result,
             venue: m?.venue,
             competition: m?.competition,
+            isHome: m?.venue === "Home",
           };
         })
         .sort((a, b) => (b.matchDate || "").localeCompare(a.matchDate || ""))
@@ -1926,7 +1931,24 @@ th{background:#0d7377;color:white}
           matchDate: s.matchDate,
           opponent: s.opponent,
           pointsTotal: s.pointsTotal ?? 0,
+          result: s.result,
+          isHome: s.isHome,
         }));
+
+      const totals = {
+        matches: allStats.length,
+        pointsTotal: allStats.reduce((s, st) => s + (st.pointsTotal ?? 0), 0),
+        kills: allStats.reduce((s, st) => s + (st.spikesKill ?? 0), 0),
+        aces: allStats.reduce((s, st) => s + (st.servesAce ?? 0), 0),
+        blocks: allStats.reduce((s, st) => s + (st.blocksSolo ?? 0) + (st.blocksAssist ?? 0), 0),
+        digs: allStats.reduce((s, st) => s + (st.digs ?? 0), 0),
+        settingAssist: allStats.reduce((s, st) => s + (st.settingAssist ?? 0), 0),
+        spikesError: allStats.reduce((s, st) => s + (st.spikesError ?? 0), 0),
+        servesError: allStats.reduce((s, st) => s + (st.servesError ?? 0), 0),
+        receiveError: allStats.reduce((s, st) => s + (st.receiveError ?? 0), 0),
+        settingError: allStats.reduce((s, st) => s + (st.settingError ?? 0), 0),
+        minutesPlayed: allStats.reduce((s, st) => s + (st.minutesPlayed ?? 0), 0),
+      };
 
       const smartFocusHistory = await storage.getSmartFocusByPlayer(playerId);
 
@@ -1945,6 +1967,21 @@ th{background:#0d7377;color:white}
       const contracts = await storage.getPlayerContracts(playerId);
       const activeContract = contracts.find((c: any) => c.status === "ACTIVE");
 
+      const today = new Date().toISOString().split("T")[0];
+      const teamMatches = player.teamId ? await storage.getMatchesByTeam(player.teamId) : [];
+      const upcomingFixture = teamMatches
+        .filter(m => m.matchDate >= today && !m.result)
+        .sort((a, b) => a.matchDate.localeCompare(b.matchDate))[0] || null;
+
+      let upcomingCoachName: string | null = null;
+      if (upcomingFixture && player.teamId) {
+        const headCoach = await storage.getActiveHeadCoachForTeam(player.teamId, upcomingFixture.matchDate);
+        if (headCoach) {
+          const coachUser = await storage.getUser(headCoach.coachUserId);
+          upcomingCoachName = coachUser?.fullName || null;
+        }
+      }
+
       res.json({
         player: {
           id: player.id,
@@ -1955,7 +1992,9 @@ th{background:#0d7377;color:white}
           status: player.status,
           photoUrl: player.photoUrl,
           teamId: player.teamId,
+          teamName: playerTeam?.name || null,
         },
+        totals,
         recentStats: statsWithMatch,
         performanceTrend,
         smartFocusHistory: smartFocusHistory.map(f => ({
@@ -1978,6 +2017,16 @@ th{background:#0d7377;color:white}
           startDate: activeContract.startDate,
           endDate: activeContract.endDate,
           status: activeContract.status,
+        } : null,
+        upcomingFixture: upcomingFixture ? {
+          matchId: upcomingFixture.id,
+          date: upcomingFixture.matchDate,
+          venue: upcomingFixture.venue,
+          competition: upcomingFixture.competition,
+          opponent: upcomingFixture.opponent,
+          teamName: playerTeam?.name || null,
+          isHome: upcomingFixture.venue === "Home",
+          coachName: upcomingCoachName,
         } : null,
       });
     } catch (e) { next(e); }
