@@ -4,7 +4,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Users, Trophy, DollarSign, Activity, ArrowUpRight, ArrowDownRight,
   Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
-  User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle
+  User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
+  FileText, Bell, ChevronRight
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -230,6 +231,47 @@ export default function Dashboard() {
               </div>
             )}
           </>
+        )}
+
+        {isCoachView && matches.length > 0 && (
+          <div className="afrocat-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="flex items-center gap-2 text-base font-bold text-afrocat-text">
+                <Bell className="h-4 w-4 text-afrocat-gold" /> Timely Reports
+              </h3>
+              <a href="/reports" className="flex items-center gap-1 text-xs text-afrocat-teal hover:underline cursor-pointer" data-testid="link-all-reports">
+                View All Reports <ChevronRight className="h-3 w-3" />
+              </a>
+            </div>
+            <div className="space-y-3">
+              {matches.slice(0, 5).map((match: any) => {
+                const team = teams.find((t: any) => t.id === match.teamId);
+                const daysAgo = Math.floor((Date.now() - new Date(match.matchDate).getTime()) / (1000 * 60 * 60 * 24));
+                const isRecent = daysAgo <= 7;
+                return (
+                  <div key={match.id} className="flex items-center justify-between border-b border-afrocat-border last:border-0 pb-3 last:pb-0" data-testid={`row-report-${match.id}`}>
+                    <div className="flex items-center gap-3">
+                      <FileText className={`h-4 w-4 shrink-0 ${isRecent ? 'text-afrocat-gold' : 'text-afrocat-muted'}`} />
+                      <div>
+                        <p className="font-medium text-sm text-afrocat-text">{team?.name || "Team"} vs {match.opponent}</p>
+                        <p className="text-xs text-afrocat-muted">{match.matchDate} &bull; {match.competition}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {match.result && (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${match.result === 'W' ? 'bg-afrocat-green-soft text-afrocat-green' : 'bg-afrocat-red-soft text-afrocat-red'}`}>
+                          {match.result}
+                        </span>
+                      )}
+                      {isRecent && (
+                        <Badge className="bg-afrocat-gold-soft text-afrocat-gold border-0 text-[10px]">New</Badge>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
 
         {isPlayerView && playerDash && (

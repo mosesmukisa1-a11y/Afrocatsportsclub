@@ -67,6 +67,7 @@ export async function registerRoutes(
         fullName: z.string().min(1),
         email: z.string().email(),
         password: z.string().min(6),
+        role: z.enum(["PLAYER", "COACH", "STATISTICIAN", "MEDICAL", "FINANCE"]).optional().default("PLAYER"),
         requestedTeamId: z.string().optional(),
         requestedPosition: z.enum(["SETTER", "LIBERO", "MIDDLE", "OUTSIDE", "OPPOSITE"]).optional(),
         requestedJerseyNo: z.number().int().min(1).max(99).optional(),
@@ -90,20 +91,24 @@ export async function registerRoutes(
       const firstName = nameParts[0] || body.fullName;
       const lastName = nameParts.slice(1).join(" ") || "";
 
-      const player = await storage.createPlayer({
-        firstName,
-        lastName,
-        email: body.email,
-        status: "ACTIVE",
-        eligibilityStatus: "PENDING",
-        requestedTeamId: body.requestedTeamId || null,
-        teamApprovalStatus: "PENDING",
-        requestedPosition: body.requestedPosition || null,
-        positionApprovalStatus: body.requestedPosition ? "PENDING" : "PENDING",
-        requestedJerseyNo: body.requestedJerseyNo || null,
-        jerseyApprovalStatus: body.requestedJerseyNo ? "PENDING" : "PENDING",
-        registrationStatus: "PENDING_APPROVAL",
-      });
+      let playerId: string | null = null;
+      if (body.role === "PLAYER") {
+        const player = await storage.createPlayer({
+          firstName,
+          lastName,
+          email: body.email,
+          status: "ACTIVE",
+          eligibilityStatus: "PENDING",
+          requestedTeamId: body.requestedTeamId || null,
+          teamApprovalStatus: "PENDING",
+          requestedPosition: body.requestedPosition || null,
+          positionApprovalStatus: body.requestedPosition ? "PENDING" : "PENDING",
+          requestedJerseyNo: body.requestedJerseyNo || null,
+          jerseyApprovalStatus: body.requestedJerseyNo ? "PENDING" : "PENDING",
+          registrationStatus: "PENDING_APPROVAL",
+        });
+        playerId = player.id;
+      }
 
       const verificationToken = crypto.randomBytes(32).toString("hex");
       const tokenHash = crypto.createHash("sha256").update(verificationToken).digest("hex");
@@ -115,15 +120,15 @@ export async function registerRoutes(
           fullName: body.fullName,
           email: body.email,
           passwordHash,
-          role: "PLAYER",
-          playerId: player.id,
+          role: body.role,
+          playerId,
           emailVerified: false,
           verificationToken: tokenHash,
           verificationTokenExp: tokenExp,
           accountStatus: "PENDING_APPROVAL",
         });
       } catch (err) {
-        await storage.deletePlayer(player.id);
+        if (playerId) await storage.deletePlayer(playerId);
         throw err;
       }
 

@@ -16,8 +16,18 @@ export default function Login() {
   const [password, setPassword] = useState("Passw0rd!");
   const [loading, setLoading] = useState(false);
 
+  const getRoleDashboard = (role: string) => {
+    switch (role) {
+      case "PLAYER": return "/player-dashboard";
+      case "STATISTICIAN": return "/stats";
+      case "FINANCE": return "/finance";
+      case "MEDICAL": return "/injuries";
+      default: return "/dashboard";
+    }
+  };
+
   useEffect(() => {
-    if (user) setLocation("/dashboard");
+    if (user) setLocation(getRoleDashboard(user.role));
   }, [user, setLocation]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -27,8 +37,6 @@ export default function Login() {
       const result = await login(email, password);
       if (result?.mustChangePassword) {
         setLocation("/change-password");
-      } else {
-        setLocation("/dashboard");
       }
     } catch (err: any) {
       toast({ title: "Login Failed", description: err.message, variant: "destructive" });
@@ -75,7 +83,7 @@ export default function Login() {
           </div>
           <div className="flex flex-col border-t border-afrocat-border px-6 py-4 bg-afrocat-white-3 rounded-b-[18px]">
             <p className="text-sm text-center text-afrocat-muted mb-3">
-              New player?{" "}
+              New to Afrocat?{" "}
               <button onClick={() => setLocation("/register")} className="text-afrocat-gold font-semibold hover:underline cursor-pointer" data-testid="link-register">
                 Register here
               </button>

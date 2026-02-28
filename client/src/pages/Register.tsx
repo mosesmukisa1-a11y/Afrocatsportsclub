@@ -12,6 +12,13 @@ import { CheckCircle, Mail, Clock } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
 const POSITIONS = ["SETTER", "LIBERO", "MIDDLE", "OUTSIDE", "OPPOSITE"];
+const ROLES = [
+  { value: "PLAYER", label: "Player", desc: "Join as a club player" },
+  { value: "COACH", label: "Coach", desc: "Register as a coach" },
+  { value: "STATISTICIAN", label: "Statistician", desc: "Enter match stats & reports" },
+  { value: "MEDICAL", label: "Medical Staff", desc: "Manage injuries & wellness" },
+  { value: "FINANCE", label: "Finance", desc: "Manage club finances" },
+];
 
 export default function Register() {
   const [, setLocation] = useLocation();
@@ -21,6 +28,7 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [selectedRole, setSelectedRole] = useState("PLAYER");
   const [requestedTeamId, setRequestedTeamId] = useState("");
   const [requestedPosition, setRequestedPosition] = useState("");
   const [requestedJerseyNo, setRequestedJerseyNo] = useState("");
@@ -34,7 +42,10 @@ export default function Register() {
   });
 
   useEffect(() => {
-    if (user) setLocation("/dashboard");
+    if (user) {
+      const dest = user.role === "PLAYER" ? "/player-dashboard" : user.role === "STATISTICIAN" ? "/stats" : user.role === "FINANCE" ? "/finance" : user.role === "MEDICAL" ? "/injuries" : "/dashboard";
+      setLocation(dest);
+    }
   }, [user, setLocation]);
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -49,10 +60,12 @@ export default function Register() {
     }
     setLoading(true);
     try {
-      const extra: any = {};
-      if (requestedTeamId) extra.requestedTeamId = requestedTeamId;
-      if (requestedPosition) extra.requestedPosition = requestedPosition;
-      if (requestedJerseyNo) extra.requestedJerseyNo = parseInt(requestedJerseyNo);
+      const extra: any = { role: selectedRole };
+      if (selectedRole === "PLAYER") {
+        if (requestedTeamId) extra.requestedTeamId = requestedTeamId;
+        if (requestedPosition) extra.requestedPosition = requestedPosition;
+        if (requestedJerseyNo) extra.requestedJerseyNo = parseInt(requestedJerseyNo);
+      }
 
       const result = await register(fullName, email, password, extra);
       setRegistered(true);
@@ -116,11 +129,26 @@ export default function Register() {
 
         <div className="afrocat-card overflow-hidden">
           <div className="space-y-1 text-center pt-6 pb-4 px-6">
-            <h3 className="text-2xl font-display font-bold tracking-tight text-afrocat-text">Player Registration</h3>
+            <h3 className="text-2xl font-display font-bold tracking-tight text-afrocat-text">Join Afrocat</h3>
             <p className="text-sm text-afrocat-muted">Create your account to join the club</p>
           </div>
           <div className="px-6 pb-6">
             <form onSubmit={handleRegister} className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-afrocat-muted text-sm">I want to join as</Label>
+                <div className="grid grid-cols-2 gap-2" data-testid="select-role">
+                  {ROLES.map(r => (
+                    <button key={r.value} type="button" onClick={() => setSelectedRole(r.value)}
+                      className={`text-left px-3 py-2 rounded-lg border transition-all cursor-pointer ${selectedRole === r.value
+                        ? "border-afrocat-teal bg-afrocat-teal/15 text-afrocat-teal"
+                        : "border-afrocat-border bg-afrocat-white-5 text-afrocat-muted hover:border-afrocat-teal/30"}`}
+                      data-testid={`role-option-${r.value.toLowerCase()}`}>
+                      <div className="text-sm font-medium">{r.label}</div>
+                      <div className="text-[10px] opacity-70">{r.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="fullName" className="text-afrocat-muted text-sm">Full Name</Label>
                 <Input id="fullName" value={fullName} onChange={e => setFullName(e.target.value)} required placeholder="e.g. John Doe" data-testid="input-fullname"
@@ -144,47 +172,49 @@ export default function Register() {
                 </div>
               </div>
 
-              <div className="border-t border-afrocat-border pt-4 mt-2">
-                <p className="text-xs text-afrocat-muted mb-3">Team & position preferences (final approval by Admin/Coach)</p>
-                <div className="space-y-3">
-                  <div className="space-y-2">
-                    <Label className="text-afrocat-muted text-sm">Preferred Team</Label>
-                    <Select value={requestedTeamId} onValueChange={setRequestedTeamId}>
-                      <SelectTrigger data-testid="select-team" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
-                        <SelectValue placeholder="Select team" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {teams.map((t: any) => (
-                          <SelectItem key={t.id} value={t.id}>{t.name} ({t.category})</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
+              {selectedRole === "PLAYER" && (
+                <div className="border-t border-afrocat-border pt-4 mt-2">
+                  <p className="text-xs text-afrocat-muted mb-3">Team & position preferences (final approval by Admin/Coach)</p>
+                  <div className="space-y-3">
                     <div className="space-y-2">
-                      <Label className="text-afrocat-muted text-sm">Position</Label>
-                      <Select value={requestedPosition} onValueChange={setRequestedPosition}>
-                        <SelectTrigger data-testid="select-position" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
-                          <SelectValue placeholder="Position" />
+                      <Label className="text-afrocat-muted text-sm">Preferred Team</Label>
+                      <Select value={requestedTeamId} onValueChange={setRequestedTeamId}>
+                        <SelectTrigger data-testid="select-team" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
+                          <SelectValue placeholder="Select team" />
                         </SelectTrigger>
                         <SelectContent>
-                          {POSITIONS.map(p => (
-                            <SelectItem key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</SelectItem>
+                          {teams.map((t: any) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name} ({t.category})</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2">
-                      <Label className="text-afrocat-muted text-sm">Jersey #</Label>
-                      <Input type="number" min={1} max={99} value={requestedJerseyNo} onChange={e => setRequestedJerseyNo(e.target.value)} placeholder="1-99" data-testid="input-jersey"
-                        className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-afrocat-muted text-sm">Position</Label>
+                        <Select value={requestedPosition} onValueChange={setRequestedPosition}>
+                          <SelectTrigger data-testid="select-position" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
+                            <SelectValue placeholder="Position" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {POSITIONS.map(p => (
+                              <SelectItem key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-afrocat-muted text-sm">Jersey #</Label>
+                        <Input type="number" min={1} max={99} value={requestedJerseyNo} onChange={e => setRequestedJerseyNo(e.target.value)} placeholder="1-99" data-testid="input-jersey"
+                          className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               <Button type="submit" className="w-full mt-4 bg-afrocat-teal hover:bg-afrocat-teal-dark text-white font-semibold" disabled={loading} data-testid="button-register">
-                {loading ? "Creating account..." : "Register as Player"}
+                {loading ? "Creating account..." : `Register as ${ROLES.find(r => r.value === selectedRole)?.label || "Player"}`}
               </Button>
             </form>
           </div>
