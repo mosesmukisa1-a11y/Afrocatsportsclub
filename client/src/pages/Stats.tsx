@@ -16,9 +16,9 @@ const statCategories = [
   {
     label: "Attack",
     icon: Zap,
-    color: "text-orange-500",
-    bgColor: "bg-orange-50",
-    borderColor: "border-orange-200",
+    color: "text-ac-gold",
+    bgColor: "bg-ac-gold-soft",
+    borderColor: "border-ac-gold/20",
     fields: [
       { key: "spikesKill" as StatKey, label: "Kills" },
       { key: "spikesError" as StatKey, label: "Errors" },
@@ -27,9 +27,9 @@ const statCategories = [
   {
     label: "Serve",
     icon: Target,
-    color: "text-blue-500",
-    bgColor: "bg-blue-50",
-    borderColor: "border-blue-200",
+    color: "text-ac-teal",
+    bgColor: "bg-ac-teal-soft",
+    borderColor: "border-ac-teal/20",
     fields: [
       { key: "servesAce" as StatKey, label: "Aces" },
       { key: "servesError" as StatKey, label: "Errors" },
@@ -38,9 +38,9 @@ const statCategories = [
   {
     label: "Block",
     icon: Shield,
-    color: "text-purple-500",
-    bgColor: "bg-purple-50",
-    borderColor: "border-purple-200",
+    color: "text-ac-gold",
+    bgColor: "bg-ac-gold-soft",
+    borderColor: "border-ac-gold/20",
     fields: [
       { key: "blocksSolo" as StatKey, label: "Solo" },
       { key: "blocksAssist" as StatKey, label: "Assist" },
@@ -49,9 +49,9 @@ const statCategories = [
   {
     label: "Receive",
     icon: Hand,
-    color: "text-green-500",
-    bgColor: "bg-green-50",
-    borderColor: "border-green-200",
+    color: "text-ac-green",
+    bgColor: "bg-ac-green-soft",
+    borderColor: "border-ac-green/20",
     fields: [
       { key: "receivePerfect" as StatKey, label: "Perfect" },
       { key: "receiveError" as StatKey, label: "Errors" },
@@ -60,9 +60,9 @@ const statCategories = [
   {
     label: "Defense",
     icon: Shield,
-    color: "text-teal-500",
-    bgColor: "bg-teal-50",
-    borderColor: "border-teal-200",
+    color: "text-ac-teal",
+    bgColor: "bg-ac-teal-soft",
+    borderColor: "border-ac-teal/20",
     fields: [
       { key: "digs" as StatKey, label: "Digs" },
     ],
@@ -70,9 +70,9 @@ const statCategories = [
   {
     label: "Setting",
     icon: ArrowUpCircle,
-    color: "text-indigo-500",
-    bgColor: "bg-indigo-50",
-    borderColor: "border-indigo-200",
+    color: "text-ac-gold",
+    bgColor: "bg-ac-gold-soft",
+    borderColor: "border-ac-gold/20",
     fields: [
       { key: "settingAssist" as StatKey, label: "Assists" },
       { key: "settingError" as StatKey, label: "Errors" },
@@ -162,7 +162,7 @@ function PlayerStatCard({
             {points} pts
           </div>
           {errors > 0 && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold bg-red-50 text-red-600" data-testid={`text-errors-${player.id}`}>
+            <div className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold bg-ac-red-soft text-ac-red" data-testid={`text-errors-${player.id}`}>
               <AlertTriangle className="w-3 h-3" />
               {errors} err
             </div>
@@ -179,7 +179,7 @@ function PlayerStatCard({
             </div>
             <div className="flex flex-wrap gap-1.5">
               {cat.fields.map((f) => (
-                <div key={f.key} className="flex items-center gap-1 bg-white/80 rounded-md px-1.5 py-0.5">
+                <div key={f.key} className="flex items-center gap-1 bg-ac-white-10 rounded-md px-1.5 py-0.5">
                   <button
                     onClick={() => onDecrement(f.key)}
                     className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
@@ -458,7 +458,7 @@ export default function Stats() {
                   Team: {teamTotals.pointsTotal} pts
                 </div>
                 {teamTotals.errorsTotal > 0 && (
-                  <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-50 font-bold text-red-600" data-testid="text-team-errors-total">
+                  <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-ac-red-soft font-bold text-ac-red" data-testid="text-team-errors-total">
                     <AlertTriangle className="w-4 h-4" />
                     {teamTotals.errorsTotal} errors
                   </div>
@@ -510,40 +510,40 @@ export default function Stats() {
         )}
 
         {showSummary && summaryData && (
-          <Card className="border-2 border-green-200 bg-green-50/30" data-testid="card-summary">
-            <CardHeader className="bg-green-100/50 border-b border-green-200">
+          <Card className="border border-ac-green/30 bg-ac-green-soft" data-testid="card-summary">
+            <CardHeader className="bg-ac-green-soft border-b border-ac-green/20">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-                <CardTitle className="text-green-800">Match Stats Summary</CardTitle>
+                <CheckCircle2 className="w-5 h-5 text-ac-green" />
+                <CardTitle className="text-ac-green">Match Stats Summary</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
               <div>
-                <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Team Totals</h4>
+                <h4 className="text-sm font-bold uppercase tracking-wider text-ac-muted mb-3">Team Totals</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                  <div className="bg-white rounded-lg p-3 border text-center">
-                    <div className="text-2xl font-bold text-primary" data-testid="text-summary-points">{summaryData.teamTotals.pointsTotal}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase">Points</div>
+                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
+                    <div className="text-2xl font-bold text-ac-teal" data-testid="text-summary-points">{summaryData.teamTotals.pointsTotal}</div>
+                    <div className="text-[10px] text-ac-muted uppercase">Points</div>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border text-center">
-                    <div className="text-2xl font-bold text-orange-500" data-testid="text-summary-kills">{summaryData.teamTotals.spikesKill}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase">Kills</div>
+                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
+                    <div className="text-2xl font-bold text-ac-gold" data-testid="text-summary-kills">{summaryData.teamTotals.spikesKill}</div>
+                    <div className="text-[10px] text-ac-muted uppercase">Kills</div>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border text-center">
-                    <div className="text-2xl font-bold text-blue-500" data-testid="text-summary-aces">{summaryData.teamTotals.servesAce}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase">Aces</div>
+                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
+                    <div className="text-2xl font-bold text-ac-teal" data-testid="text-summary-aces">{summaryData.teamTotals.servesAce}</div>
+                    <div className="text-[10px] text-ac-muted uppercase">Aces</div>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border text-center">
-                    <div className="text-2xl font-bold text-purple-500" data-testid="text-summary-blocks">{(summaryData.teamTotals.blocksSolo || 0) + (summaryData.teamTotals.blocksAssist || 0)}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase">Blocks</div>
+                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
+                    <div className="text-2xl font-bold text-ac-gold" data-testid="text-summary-blocks">{(summaryData.teamTotals.blocksSolo || 0) + (summaryData.teamTotals.blocksAssist || 0)}</div>
+                    <div className="text-[10px] text-ac-muted uppercase">Blocks</div>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border text-center">
-                    <div className="text-2xl font-bold text-teal-500" data-testid="text-summary-digs">{summaryData.teamTotals.digs}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase">Digs</div>
+                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
+                    <div className="text-2xl font-bold text-ac-teal" data-testid="text-summary-digs">{summaryData.teamTotals.digs}</div>
+                    <div className="text-[10px] text-ac-muted uppercase">Digs</div>
                   </div>
-                  <div className="bg-white rounded-lg p-3 border text-center">
-                    <div className="text-2xl font-bold text-red-500" data-testid="text-summary-errors">{summaryData.teamTotals.errorsTotal}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase">Errors</div>
+                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
+                    <div className="text-2xl font-bold text-ac-red" data-testid="text-summary-errors">{summaryData.teamTotals.errorsTotal}</div>
+                    <div className="text-[10px] text-ac-muted uppercase">Errors</div>
                   </div>
                 </div>
               </div>
@@ -552,8 +552,8 @@ export default function Stats() {
                 <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Top Performers</h4>
                 <div className="space-y-2">
                   {summaryData.topPerformers.map((p: any, i: number) => (
-                    <div key={p.id} className="flex items-center gap-3 bg-white rounded-lg p-3 border" data-testid={`text-top-performer-${i}`}>
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                    <div key={p.id} className="flex items-center gap-3 bg-ac-white-5 rounded-lg p-3 border border-ac-border" data-testid={`text-top-performer-${i}`}>
+                      <div className="w-8 h-8 rounded-full bg-ac-teal-soft flex items-center justify-center text-sm font-bold text-ac-teal">
                         {i + 1}
                       </div>
                       <div className="flex-1">

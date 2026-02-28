@@ -91,7 +91,9 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Last push**: Afrocat Portal Production Version
 - **GitHub Integration**: Uses Replit GitHub connector (server/github.ts)
 
-## Brand
-- Primary: teal (174 100% 29%), Accent: gold (45 100% 51%)
+## Brand & Theme
+- Primary: teal `#0F8B7D` (174 80% 30%), Accent: gold `#F2B705` (45 100% 49%)
 - Logo: `@assets/afrocate_logo_1772226294597.png`
 - Club: AFROCAT VOLLEYBALL CLUB — One Team One Dream — Passion Discipline Victory
+- **Global Dark Theme**: Entire app uses Afrocat dark palette. Tailwind v4 `@theme inline` block defines `ac-*` tokens (ac-teal, ac-gold, ac-bg, ac-card, ac-text, ac-muted, ac-border, ac-green, ac-red, etc.). `:root` HSL variables set to dark values for shadcn components. CSS utilities: `.afrocat-page` (radial gradient glows), `.afrocat-card` / `.ac-card` (gradient card). Global html/body bg: `#0B0F14`. Gold selection highlight, gold scrollbar thumb. Layout sidebar uses dark card bg.
+- **Note**: Some secondary pages (Finance, Injuries, Contracts, Coaches, Matches, Reports, Players, Documents, AdminUsers) still use generic Tailwind color classes (bg-green-100, etc.) — these should be migrated to `ac-*` tokens for full consistency.

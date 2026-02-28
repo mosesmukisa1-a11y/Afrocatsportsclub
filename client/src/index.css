@@ -68,46 +68,55 @@
 }
 
 :root {
-  --background: 210 20% 98%; 
-  --foreground: 222.2 84% 4.9%;
+  --afrocat-bg: #0B0F14;
+  --afrocat-card: #111827;
+  --afrocat-card2: #0F172A;
+  --afrocat-border: rgba(255,255,255,0.08);
+  --afrocat-teal: #0F8B7D;
+  --afrocat-teal-dark: #0B6F66;
+  --afrocat-gold: #F2B705;
+  --afrocat-gold-dark: #D9A300;
+  --afrocat-text: #E5E7EB;
+  --afrocat-muted: rgba(229,231,235,0.70);
+
+  --background: 220 26% 6%;
+  --foreground: 220 13% 91%;
   
-  --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  --card: 222 47% 11%;
+  --card-foreground: 220 13% 91%;
   
-  --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
+  --popover: 222 47% 11%;
+  --popover-foreground: 220 13% 91%;
   
-  /* Brand Teal/Green from logo */
-  --primary: 174 100% 29%; 
+  --primary: 174 80% 30%;
   --primary-foreground: 210 40% 98%;
   
-  /* Brand Yellow/Gold from logo */
-  --secondary: 45 100% 51%;
-  --secondary-foreground: 174 100% 15%;
+  --secondary: 45 100% 49%;
+  --secondary-foreground: 220 26% 6%;
   
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 217 33% 17%;
+  --muted-foreground: 218 11% 65%;
   
-  --accent: 45 100% 95%;
-  --accent-foreground: 174 100% 15%;
+  --accent: 174 80% 15%;
+  --accent-foreground: 210 40% 98%;
   
-  --destructive: 0 84.2% 60.2%;
+  --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 174 100% 29%;
+  --border: 215 20% 17%;
+  --input: 215 20% 17%;
+  --ring: 174 80% 30%;
   
   --radius: 0.5rem;
 
-  --sidebar: 0 0% 100%;
-  --sidebar-foreground: 222.2 84% 4.9%;
-  --sidebar-primary: 174 100% 29%;
+  --sidebar: 222 47% 11%;
+  --sidebar-foreground: 220 13% 91%;
+  --sidebar-primary: 174 80% 30%;
   --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 174 100% 95%;
-  --sidebar-accent-foreground: 174 100% 15%;
-  --sidebar-border: 214.3 31.8% 91.4%;
-  --sidebar-ring: 174 100% 29%;
+  --sidebar-accent: 174 80% 15%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 215 20% 17%;
+  --sidebar-ring: 174 80% 30%;
 }
 
 .dark {
@@ -149,16 +158,44 @@
   --sidebar-ring: 174 100% 35%;
 }
 
+html, body {
+  height: 100%;
+  background: var(--afrocat-bg);
+  color: var(--afrocat-text);
+}
+
+::selection {
+  background: rgba(242,183,5,0.25);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(242,183,5,0.35) rgba(255,255,255,0.06);
+}
+*::-webkit-scrollbar { height: 10px; width: 10px; }
+*::-webkit-scrollbar-track { background: rgba(255,255,255,0.06); }
+*::-webkit-scrollbar-thumb {
+  background: rgba(242,183,5,0.35);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(242,183,5,0.50);
+}
+
 @layer base {
   * {
     @apply border-border;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight;
   }
+}
+
+.afrocat-page {
+  background-image:
+    radial-gradient(900px circle at 20% 15%, rgba(15,139,125,0.18), transparent 55%),
+    radial-gradient(800px circle at 80% 10%, rgba(242,183,5,0.14), transparent 52%),
+    radial-gradient(900px circle at 70% 90%, rgba(15,139,125,0.10), transparent 55%);
 }
 
 .afrocat-dark {
@@ -168,6 +205,13 @@
     radial-gradient(800px circle at 80% 10%, var(--color-ac-gold-soft), transparent 52%),
     radial-gradient(900px circle at 70% 90%, var(--color-ac-teal-soft), transparent 55%);
   color: var(--color-ac-text);
+}
+
+.afrocat-card {
+  background: linear-gradient(180deg, rgba(17,24,39,1) 0%, rgba(15,23,42,1) 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
 }
 
 .ac-card {

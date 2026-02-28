@@ -43,41 +43,44 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
+    <div className="min-h-screen flex items-center justify-center afrocat-page p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <img src={logo} alt="Afrocat Logo" className="w-32 h-32 object-contain mb-4 animate-in zoom-in-50 duration-500" />
-          <h2 className="text-2xl font-display font-bold text-primary tracking-tight">Afrocat Sports Club</h2>
+          <h2 className="text-2xl font-display font-bold text-ac-teal tracking-tight">Afrocat Sports Club</h2>
+          <p className="text-xs text-ac-muted mt-1">One Team One Dream — Passion Discipline Victory</p>
         </div>
         
-        <Card className="border-none shadow-xl">
-          <CardHeader className="space-y-1 text-center pb-8">
-            <CardTitle className="text-3xl font-display font-bold tracking-tight">Welcome Back</CardTitle>
-            <CardDescription>Sign in to the Afrocat Club Portal</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <div className="afrocat-card p-0 overflow-hidden">
+          <div className="space-y-1 text-center pt-8 pb-6 px-6">
+            <h3 className="text-3xl font-display font-bold tracking-tight text-ac-text">Welcome Back</h3>
+            <p className="text-sm text-ac-muted">Sign in to the Afrocat Club Portal</p>
+          </div>
+          <div className="px-6 pb-6">
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required data-testid="input-email" />
+                <Label htmlFor="email" className="text-ac-muted text-sm">Email</Label>
+                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required data-testid="input-email"
+                  className="bg-ac-white-5 border-ac-border text-ac-text placeholder:text-ac-muted" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required data-testid="input-password" />
+                <Label htmlFor="password" className="text-ac-muted text-sm">Password</Label>
+                <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required data-testid="input-password"
+                  className="bg-ac-white-5 border-ac-border text-ac-text placeholder:text-ac-muted" />
               </div>
-              <Button type="submit" className="w-full mt-6" disabled={loading} data-testid="button-login">
+              <Button type="submit" className="w-full mt-6 bg-ac-teal hover:bg-ac-teal-dark text-white font-semibold" disabled={loading} data-testid="button-login">
                 {loading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
-          </CardContent>
-          <CardFooter className="flex flex-col border-t px-6 py-4 bg-muted/50 rounded-b-xl">
-            <p className="text-sm text-center text-muted-foreground mb-3">
+          </div>
+          <div className="flex flex-col border-t border-ac-border px-6 py-4 bg-ac-white-3 rounded-b-[18px]">
+            <p className="text-sm text-center text-ac-muted mb-3">
               New player?{" "}
-              <button onClick={() => setLocation("/register")} className="text-primary font-semibold hover:underline cursor-pointer" data-testid="link-register">
+              <button onClick={() => setLocation("/register")} className="text-ac-gold font-semibold hover:underline cursor-pointer" data-testid="link-register">
                 Register here
               </button>
             </p>
-            <div className="text-sm text-center text-muted-foreground mb-3">Quick login as:</div>
+            <div className="text-sm text-center text-ac-muted mb-3">Quick login as:</div>
             <div className="flex flex-wrap gap-2 justify-center">
               {[
                 { label: "Admin", email: "admin@afrocat.test" },
@@ -88,14 +91,14 @@ export default function Login() {
                 { label: "Player", email: "player1@afrocat.test" },
               ].map(r => (
                 <button key={r.email} onClick={() => quickLogin(r.email)}
-                  className="text-xs px-2 py-1 bg-background border rounded-md hover:bg-primary/5 hover:border-primary/30 transition-colors cursor-pointer"
+                  className="text-xs px-2 py-1 bg-ac-white-5 border border-ac-border rounded-md hover:bg-ac-teal/15 hover:border-ac-teal/30 hover:text-ac-teal transition-colors cursor-pointer text-ac-muted"
                   data-testid={`button-quick-login-${r.label.toLowerCase()}`}>
                   {r.label}
                 </button>
               ))}
             </div>
-          </CardFooter>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
