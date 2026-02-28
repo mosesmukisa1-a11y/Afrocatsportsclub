@@ -2,6 +2,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { db } from "./db";
+import * as schema from "@shared/schema";
+import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
 
 const app = express();
 const httpServer = createServer(app);
@@ -60,6 +64,23 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const adminEmail = process.env.ADMIN_EMAIL || "mosesmukisa1@gmail.com";
+  const adminPass = process.env.ADMIN_PASSWORD;
+  if (adminPass) {
+    try {
+      const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, adminEmail));
+      const passwordHash = await bcrypt.hash(adminPass, 10);
+      if (existing) {
+        await db.update(schema.users).set({ passwordHash, role: "ADMIN", accountStatus: "ACTIVE", emailVerified: true, mustChangePassword: false }).where(eq(schema.users.id, existing.id));
+      } else {
+        await db.insert(schema.users).values({ fullName: "System Admin", email: adminEmail, passwordHash, role: "ADMIN", accountStatus: "ACTIVE", emailVerified: true, mustChangePassword: false });
+      }
+      log(`Admin provisioned: ${adminEmail}`);
+    } catch (e: any) {
+      log(`Admin provision warning: ${e.message}`);
+    }
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

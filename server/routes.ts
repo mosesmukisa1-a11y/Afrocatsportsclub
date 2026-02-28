@@ -198,7 +198,7 @@ export async function registerRoutes(
 
       const settings = await storage.getSecuritySettings();
 
-      if (settings?.requireEmailVerification !== false && !user.emailVerified) {
+      if (settings?.requireEmailVerification !== false && !user.emailVerified && user.role !== "ADMIN") {
         return res.status(403).json({ message: "Please verify your email before logging in.", code: "EMAIL_NOT_VERIFIED" });
       }
 
