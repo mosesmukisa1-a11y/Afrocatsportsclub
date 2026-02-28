@@ -1,5 +1,4 @@
 import { Layout } from "@/components/Layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -190,14 +189,14 @@ export default function Reports() {
     <Layout>
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div>
-          <h1 className="text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-reports-title">Reports</h1>
-          <p className="text-muted-foreground mt-1">Match reports and performance analysis</p>
+          <h1 className="text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-reports-title">Reports</h1>
+          <p className="text-afrocat-muted mt-1">Match reports and performance analysis</p>
         </div>
 
-        <Card>
-          <CardHeader className="bg-muted/30 border-b">
+        <div className="afrocat-card">
+          <div className="bg-afrocat-white-5 border-b border-afrocat-border px-6 py-4 rounded-t-[18px]">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" /> Match Report</CardTitle>
+              <h3 className="text-lg font-display font-semibold text-afrocat-text flex items-center gap-2"><FileText className="h-5 w-5" /> Match Report</h3>
               <Select value={selectedMatchId} onValueChange={setSelectedMatchId}>
                 <SelectTrigger className="w-full md:w-[350px]" data-testid="select-report-match">
                   <SelectValue placeholder="Select a match" />
@@ -210,16 +209,16 @@ export default function Reports() {
                 </SelectContent>
               </Select>
             </div>
-          </CardHeader>
+          </div>
 
           {selectedMatchId && selectedMatch && (
-            <CardContent className="p-6 space-y-6">
+            <div className="p-6 space-y-6">
               <div className="flex justify-between items-start flex-wrap gap-4">
                 <div>
-                  <h2 className="text-2xl font-display font-bold" data-testid="text-match-heading">{matchTeam?.name} vs {selectedMatch.opponent}</h2>
-                  <p className="text-muted-foreground">{selectedMatch.matchDate} • {selectedMatch.venue} • {selectedMatch.competition}</p>
+                  <h2 className="text-2xl font-display font-bold text-afrocat-text" data-testid="text-match-heading">{matchTeam?.name} vs {selectedMatch.opponent}</h2>
+                  <p className="text-afrocat-muted">{selectedMatch.matchDate} • {selectedMatch.venue} • {selectedMatch.competition}</p>
                   {selectedMatch.result && (
-                    <span className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-bold ${selectedMatch.result === 'W' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`} data-testid="text-match-result">
+                    <span className={`inline-block mt-2 px-3 py-1 rounded-full text-sm font-bold ${selectedMatch.result === 'W' ? 'bg-afrocat-green-soft text-afrocat-green' : 'bg-afrocat-red-soft text-afrocat-red'}`} data-testid="text-match-result">
                       {selectedMatch.result === 'W' ? 'Victory' : 'Defeat'} ({selectedMatch.setsFor} - {selectedMatch.setsAgainst})
                     </span>
                   )}
@@ -244,7 +243,7 @@ export default function Reports() {
               </div>
 
               {matchStats.length === 0 && (
-                <div className="flex items-center gap-2 text-amber-600 bg-amber-50 p-3 rounded-lg" data-testid="text-no-stats-warning">
+                <div className="flex items-center gap-2 text-afrocat-gold bg-afrocat-gold-soft p-3 rounded-lg" data-testid="text-no-stats-warning">
                   <AlertTriangle className="h-4 w-4" />
                   <span className="text-sm">No stats recorded for this match. Enter stats first to generate a report.</span>
                 </div>
@@ -253,7 +252,7 @@ export default function Reports() {
               {matchStats.length > 0 && (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="text-xs text-muted-foreground uppercase bg-muted/30 border-b">
+                    <thead className="text-xs text-afrocat-muted uppercase bg-afrocat-white-5 border-b border-afrocat-border">
                       <tr>
                         <th className="px-4 py-3 text-left">Player</th>
                         <th className="px-3 py-3 text-center">K</th>
@@ -268,14 +267,14 @@ export default function Reports() {
                       {matchStats.sort((a: any, b: any) => (b.pointsTotal || 0) - (a.pointsTotal || 0)).map((s: any) => {
                         const player = players.find((p: any) => p.id === s.playerId);
                         return (
-                          <tr key={s.id} className="border-b hover:bg-muted/10" data-testid={`row-stat-${s.id}`}>
-                            <td className="px-4 py-3 font-medium">{player?.firstName} {player?.lastName}</td>
-                            <td className="px-3 py-3 text-center">{s.spikesKill}</td>
-                            <td className="px-3 py-3 text-center">{s.servesAce}</td>
-                            <td className="px-3 py-3 text-center">{(s.blocksSolo || 0) + (s.blocksAssist || 0)}</td>
-                            <td className="px-3 py-3 text-center">{s.digs}</td>
-                            <td className="px-3 py-3 text-center">{s.settingAssist}</td>
-                            <td className="px-3 py-3 text-center font-bold">{s.pointsTotal}</td>
+                          <tr key={s.id} className="border-b border-afrocat-border hover:bg-afrocat-white-3" data-testid={`row-stat-${s.id}`}>
+                            <td className="px-4 py-3 font-medium text-afrocat-text">{player?.firstName} {player?.lastName}</td>
+                            <td className="px-3 py-3 text-center text-afrocat-text">{s.spikesKill}</td>
+                            <td className="px-3 py-3 text-center text-afrocat-text">{s.servesAce}</td>
+                            <td className="px-3 py-3 text-center text-afrocat-text">{(s.blocksSolo || 0) + (s.blocksAssist || 0)}</td>
+                            <td className="px-3 py-3 text-center text-afrocat-text">{s.digs}</td>
+                            <td className="px-3 py-3 text-center text-afrocat-text">{s.settingAssist}</td>
+                            <td className="px-3 py-3 text-center font-bold text-afrocat-teal">{s.pointsTotal}</td>
                           </tr>
                         );
                       })}
@@ -283,36 +282,36 @@ export default function Reports() {
                   </table>
                 </div>
               )}
-            </CardContent>
+            </div>
           )}
 
           {!selectedMatchId && (
-            <CardContent className="py-10 text-center text-muted-foreground" data-testid="text-select-match-prompt">Select a match to view the report.</CardContent>
+            <div className="py-10 text-center text-afrocat-muted" data-testid="text-select-match-prompt">Select a match to view the report.</div>
           )}
-        </Card>
+        </div>
 
         {matchReportDocs.length > 0 && (
-          <Card>
-            <CardHeader className="bg-muted/30 border-b">
-              <CardTitle className="flex items-center gap-2"><CheckCircle className="h-5 w-5 text-green-600" /> Previously Generated Match Reports</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 space-y-3">
+          <div className="afrocat-card">
+            <div className="bg-afrocat-white-5 border-b border-afrocat-border px-6 py-4 rounded-t-[18px]">
+              <h3 className="text-lg font-display font-semibold text-afrocat-text flex items-center gap-2"><CheckCircle className="h-5 w-5 text-afrocat-green" /> Previously Generated Match Reports</h3>
+            </div>
+            <div className="p-4 space-y-3">
               {matchReportDocs.map((doc: any) => {
                 const meta = doc.metadata as any;
                 const team = teams.find((t: any) => t.id === doc.teamId);
                 const match = matches.find((m: any) => m.id === doc.matchId);
 
                 return (
-                  <div key={doc.id} className="flex items-center justify-between p-4 bg-muted/20 rounded-lg border hover:shadow-sm transition-shadow" data-testid={`card-report-${doc.id}`}>
+                  <div key={doc.id} className="flex items-center justify-between p-4 bg-afrocat-white-3 rounded-lg border border-afrocat-border hover:bg-afrocat-white-5 transition-colors" data-testid={`card-report-${doc.id}`}>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
-                        <FileText size={20} className="text-primary" />
+                      <div className="w-10 h-10 bg-afrocat-teal-soft rounded-lg flex items-center justify-center">
+                        <FileText size={20} className="text-afrocat-teal" />
                       </div>
                       <div>
-                        <h4 className="font-semibold text-sm" data-testid={`text-report-title-${doc.id}`}>
+                        <h4 className="font-semibold text-sm text-afrocat-text" data-testid={`text-report-title-${doc.id}`}>
                           {meta?.teamName || team?.name || "Unknown"} vs {meta?.opponent || match?.opponent || "Unknown"}
                         </h4>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-afrocat-muted">
                           {meta?.matchDate || match?.matchDate || ""} • {meta?.competition || ""}
                           {doc.createdAt && ` • Generated ${new Date(doc.createdAt).toLocaleDateString()}`}
                         </p>
@@ -339,8 +338,8 @@ export default function Reports() {
                   </div>
                 );
               })}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </Layout>

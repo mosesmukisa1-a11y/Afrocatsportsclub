@@ -1,6 +1,5 @@
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -124,31 +123,31 @@ function PlayerStatCard({
   const errors = computeErrors(stats);
 
   return (
-    <Card className="overflow-hidden border-2 hover:border-primary/30 transition-all duration-200" data-testid={`card-player-${player.id}`}>
-      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-4">
+    <div className="afrocat-card overflow-hidden hover:border-afrocat-teal/30 transition-all duration-200" data-testid={`card-player-${player.id}`}>
+      <div className="bg-afrocat-white-3 p-4">
         <div className="flex items-center gap-3">
           <div className="relative">
             {player.photoUrl ? (
               <img
                 src={player.photoUrl}
                 alt={`${player.firstName} ${player.lastName}`}
-                className="w-14 h-14 rounded-full object-cover border-2 border-primary/20"
+                className="w-14 h-14 rounded-full object-cover border-2 border-afrocat-teal/20"
                 data-testid={`img-player-photo-${player.id}`}
               />
             ) : (
               <div
-                className="w-14 h-14 rounded-full bg-muted flex items-center justify-center border-2 border-primary/20 text-lg font-bold text-muted-foreground"
+                className="w-14 h-14 rounded-full bg-afrocat-white-5 flex items-center justify-center border-2 border-afrocat-teal/20 text-lg font-bold text-afrocat-muted"
                 data-testid={`img-player-avatar-${player.id}`}
               >
                 {getInitials(player.firstName, player.lastName)}
               </div>
             )}
-            <div className="absolute -bottom-1 -right-1 bg-primary text-primary-foreground text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-background">
+            <div className="absolute -bottom-1 -right-1 bg-afrocat-teal text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-afrocat-card">
               {player.jerseyNo}
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-display font-bold text-sm truncate" data-testid={`text-player-name-${player.id}`}>
+            <h3 className="font-display font-bold text-sm truncate text-afrocat-text" data-testid={`text-player-name-${player.id}`}>
               {player.firstName} {player.lastName}
             </h3>
             <Badge variant="secondary" className="text-[10px] mt-0.5" data-testid={`badge-position-${player.id}`}>
@@ -157,7 +156,7 @@ function PlayerStatCard({
           </div>
         </div>
         <div className="flex items-center gap-3 mt-3">
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold ${points >= 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`} data-testid={`text-points-${player.id}`}>
+          <div className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold ${points >= 0 ? 'bg-afrocat-green-soft text-afrocat-green' : 'bg-afrocat-red-soft text-afrocat-red'}`} data-testid={`text-points-${player.id}`}>
             <Trophy className="w-3 h-3" />
             {points} pts
           </div>
@@ -170,7 +169,7 @@ function PlayerStatCard({
         </div>
       </div>
 
-      <CardContent className="p-3 space-y-2">
+      <div className="p-3 space-y-2">
         {statCategories.map((cat) => (
           <div key={cat.label} className={`rounded-lg p-2 ${cat.bgColor} border ${cat.borderColor}`}>
             <div className={`flex items-center gap-1 mb-1.5 ${cat.color}`}>
@@ -182,18 +181,18 @@ function PlayerStatCard({
                 <div key={f.key} className="flex items-center gap-1 bg-afrocat-white-10 rounded-md px-1.5 py-0.5">
                   <button
                     onClick={() => onDecrement(f.key)}
-                    className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
+                    className="w-5 h-5 rounded flex items-center justify-center text-afrocat-muted hover:bg-afrocat-white-10 transition-colors"
                     data-testid={`button-dec-${f.key}-${player.id}`}
                   >
                     <Minus className="w-3 h-3" />
                   </button>
                   <div className="text-center min-w-[28px]">
                     <span className="text-xs font-bold" data-testid={`text-stat-${f.key}-${player.id}`}>{stats[f.key] || 0}</span>
-                    <div className="text-[8px] text-muted-foreground leading-none">{f.label}</div>
+                    <div className="text-[8px] text-afrocat-muted leading-none">{f.label}</div>
                   </div>
                   <button
                     onClick={() => onIncrement(f.key)}
-                    className="w-5 h-5 rounded flex items-center justify-center text-primary hover:bg-primary/10 transition-colors"
+                    className="w-5 h-5 rounded flex items-center justify-center text-afrocat-teal hover:bg-afrocat-teal-soft transition-colors"
                     data-testid={`button-inc-${f.key}-${player.id}`}
                   >
                     <Plus className="w-3 h-3" />
@@ -203,8 +202,8 @@ function PlayerStatCard({
             </div>
           </div>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -353,31 +352,31 @@ export default function Stats() {
   return (
     <Layout>
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="bg-gradient-to-r from-primary/15 via-primary/5 to-transparent rounded-2xl p-6 border border-primary/10">
+        <div className="afrocat-card p-6">
           <div className="flex items-center gap-4">
             <img src={logo} alt="Afrocat Logo" className="w-16 h-16 object-contain" data-testid="img-afrocat-logo" />
             <div>
-              <h1 className="text-2xl md:text-3xl font-display font-bold text-foreground tracking-tight" data-testid="text-club-name">
+              <h1 className="text-2xl md:text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-club-name">
                 AFROCAT VOLLEYBALL CLUB
               </h1>
-              <p className="text-sm text-muted-foreground italic mt-0.5" data-testid="text-motto">
+              <p className="text-sm text-afrocat-muted italic mt-0.5" data-testid="text-motto">
                 One Team One Dream — Passion Discipline Victory
               </p>
-              <p className="text-lg font-display font-semibold text-primary mt-1" data-testid="text-page-title">
+              <p className="text-lg font-display font-semibold text-afrocat-teal mt-1" data-testid="text-page-title">
                 Enter Match Statistics
               </p>
             </div>
           </div>
         </div>
 
-        <Card>
-          <CardHeader className="bg-muted/30 border-b">
-            <CardTitle className="text-base">Match Selection</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
+        <div className="afrocat-card">
+          <div className="bg-afrocat-white-5 border-b border-afrocat-border p-4 rounded-t-[18px]">
+            <h3 className="text-base font-display font-bold text-afrocat-text">Match Selection</h3>
+          </div>
+          <div className="p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Match</label>
+                <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Match</label>
                 <Select value={selectedMatchId} onValueChange={(v) => { setSelectedMatchId(v); setShowSummary(false); setSummaryData(null); }}>
                   <SelectTrigger data-testid="select-match">
                     <SelectValue placeholder="Select a match" />
@@ -398,39 +397,39 @@ export default function Stats() {
               {selectedMatch && (
                 <>
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Team</label>
-                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-team-name">
+                    <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Team</label>
+                    <div className="px-3 py-2 bg-afrocat-white-5 rounded-md text-sm font-medium" data-testid="text-team-name">
                       {selectedTeam?.name || "—"}
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Opponent</label>
-                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-opponent">
+                    <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Opponent</label>
+                    <div className="px-3 py-2 bg-afrocat-white-5 rounded-md text-sm font-medium" data-testid="text-opponent">
                       {selectedMatch.opponent}
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Competition</label>
-                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-competition">
+                    <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Competition</label>
+                    <div className="px-3 py-2 bg-afrocat-white-5 rounded-md text-sm font-medium" data-testid="text-competition">
                       {selectedMatch.competition}
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Venue</label>
-                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-venue">
+                    <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Venue</label>
+                    <div className="px-3 py-2 bg-afrocat-white-5 rounded-md text-sm font-medium" data-testid="text-venue">
                       {selectedMatch.venue}
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Date</label>
-                    <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-match-date">
+                    <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Date</label>
+                    <div className="px-3 py-2 bg-afrocat-white-5 rounded-md text-sm font-medium" data-testid="text-match-date">
                       {selectedMatch.matchDate}
                     </div>
                   </div>
                   {coachName && (
                     <div>
-                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 block">Coach</label>
-                      <div className="px-3 py-2 bg-muted/30 rounded-md text-sm font-medium" data-testid="text-coach-name">
+                      <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Coach</label>
+                      <div className="px-3 py-2 bg-afrocat-white-5 rounded-md text-sm font-medium" data-testid="text-coach-name">
                         {coachName}
                       </div>
                     </div>
@@ -438,8 +437,8 @@ export default function Stats() {
                 </>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {selectedMatchId && matchPlayers.length > 0 && (
           <>
@@ -448,12 +447,12 @@ export default function Stats() {
                 <h2 className="text-lg font-display font-bold" data-testid="text-player-count">
                   Player Stats ({matchPlayers.length} Players)
                 </h2>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-afrocat-muted">
                   Use +/- buttons to record each stat. Points update live.
                 </p>
               </div>
               <div className="flex items-center gap-3 text-sm">
-                <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary/10 font-bold text-primary" data-testid="text-team-points-total">
+                <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-afrocat-teal-soft font-bold text-afrocat-teal" data-testid="text-team-points-total">
                   <Trophy className="w-4 h-4" />
                   Team: {teamTotals.pointsTotal} pts
                 </div>
@@ -478,7 +477,7 @@ export default function Stats() {
               ))}
             </div>
 
-            <div className="flex items-center justify-between p-4 bg-muted/20 rounded-xl border sticky bottom-4">
+            <div className="flex items-center justify-between p-4 bg-afrocat-card rounded-xl border border-afrocat-border sticky bottom-4">
               <Button
                 variant="outline"
                 onClick={handleReset}
@@ -502,22 +501,22 @@ export default function Stats() {
         )}
 
         {selectedMatchId && matchPlayers.length === 0 && (
-          <Card>
-            <CardContent className="py-10 text-center text-muted-foreground" data-testid="text-no-players">
+          <div className="afrocat-card">
+            <div className="py-10 text-center text-afrocat-muted" data-testid="text-no-players">
               No players found for this team. Add players first.
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
         {showSummary && summaryData && (
-          <Card className="border border-afrocat-green/30 bg-afrocat-green-soft" data-testid="card-summary">
-            <CardHeader className="bg-afrocat-green-soft border-b border-afrocat-green/20">
+          <div className="afrocat-card border border-afrocat-green/30 bg-afrocat-green-soft" data-testid="card-summary">
+            <div className="bg-afrocat-green-soft border-b border-afrocat-green/20 p-4 rounded-t-[18px]">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-afrocat-green" />
-                <CardTitle className="text-afrocat-green">Match Stats Summary</CardTitle>
+                <h3 className="text-afrocat-green font-display font-bold">Match Stats Summary</h3>
               </div>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
+            </div>
+            <div className="p-6 space-y-6">
               <div>
                 <h4 className="text-sm font-bold uppercase tracking-wider text-afrocat-muted mb-3">Team Totals</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
@@ -549,7 +548,7 @@ export default function Stats() {
               </div>
 
               <div>
-                <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Top Performers</h4>
+                <h4 className="text-sm font-bold uppercase tracking-wider text-afrocat-muted mb-3">Top Performers</h4>
                 <div className="space-y-2">
                   {summaryData.topPerformers.map((p: any, i: number) => (
                     <div key={p.id} className="flex items-center gap-3 bg-afrocat-white-5 rounded-lg p-3 border border-afrocat-border" data-testid={`text-top-performer-${i}`}>
@@ -558,7 +557,7 @@ export default function Stats() {
                       </div>
                       <div className="flex-1">
                         <span className="font-semibold text-sm">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
-                        <span className="text-xs text-muted-foreground ml-2">{p.position}</span>
+                        <span className="text-xs text-afrocat-muted ml-2">{p.position}</span>
                       </div>
                       <Badge variant={p.points >= 0 ? "default" : "destructive"} data-testid={`text-performer-points-${i}`}>
                         {p.points} pts
@@ -568,12 +567,12 @@ export default function Stats() {
                 </div>
               </div>
 
-              <div className="text-sm text-green-700 flex items-center gap-2" data-testid="text-smartfocus-count">
+              <div className="text-sm text-afrocat-green flex items-center gap-2" data-testid="text-smartfocus-count">
                 <CheckCircle2 className="w-4 h-4" />
                 SmartFocus recommendations generated for {summaryData.smartFocusCount} players
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </Layout>

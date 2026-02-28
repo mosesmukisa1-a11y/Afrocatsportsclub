@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Users, Trophy, DollarSign, Activity, ArrowUpRight, ArrowDownRight,
-  Target, AlertTriangle, Zap, TrendingUp, Calendar, Award
+  Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
+  User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -28,6 +29,13 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/coach/summary", teamIdForCoach],
     queryFn: () => api.getCoachDashboard(teamIdForCoach),
     enabled: isCoachView && !!teamIdForCoach,
+  });
+
+  const playerDashId = user?.playerId || "";
+  const { data: playerDash } = useQuery({
+    queryKey: ["/api/players/dashboard", playerDashId],
+    queryFn: () => api.getPlayerDashboard(playerDashId),
+    enabled: isPlayerView && !!playerDashId,
   });
 
   const totalIncome = financeTxns.filter((f: any) => f.type === "INCOME").reduce((acc: number, curr: any) => acc + curr.amount, 0);
@@ -224,7 +232,156 @@ export default function Dashboard() {
           </>
         )}
 
-        {isPlayerView && (
+        {isPlayerView && playerDash && (
+          <>
+            <div className="afrocat-card p-5">
+              <div className="flex items-center gap-4" data-testid="player-profile-header">
+                <div className="w-16 h-16 rounded-full bg-afrocat-teal-soft flex items-center justify-center">
+                  {playerDash.player?.photoUrl ? (
+                    <img src={playerDash.player.photoUrl} alt={playerDash.player.fullName} className="w-16 h-16 rounded-full object-cover" />
+                  ) : (
+                    <User className="h-8 w-8 text-afrocat-teal" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h2 className="text-xl font-display font-bold text-afrocat-text">{playerDash.player?.fullName}</h2>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {playerDash.player?.jerseyNo && (
+                      <Badge className="bg-afrocat-gold-soft text-afrocat-gold border-0 font-bold" data-testid="badge-jersey">#{playerDash.player.jerseyNo}</Badge>
+                    )}
+                    {playerDash.player?.position && (
+                      <Badge className="bg-afrocat-teal-soft text-afrocat-teal border-0" data-testid="badge-position">{playerDash.player.position}</Badge>
+                    )}
+                    {playerDash.player?.teamName && (
+                      <Badge className="bg-afrocat-white-10 text-afrocat-text border-0" data-testid="badge-team">{playerDash.player.teamName}</Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {playerDash.totals && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: "Total Points", value: playerDash.totals.pointsTotal || 0, icon: Trophy, cls: "text-afrocat-gold" },
+                  { label: "Kills", value: playerDash.totals.spikesKill || 0, icon: Zap, cls: "text-afrocat-teal" },
+                  { label: "Aces", value: playerDash.totals.servesAce || 0, icon: Target, cls: "text-afrocat-teal" },
+                  { label: "Digs", value: playerDash.totals.digs || 0, icon: Shield, cls: "text-afrocat-gold" },
+                ].map((item) => (
+                  <div key={item.label} className="afrocat-card p-4 text-center" data-testid={`stat-player-${item.label.toLowerCase().replace(/\s/g, '-')}`}>
+                    <item.icon className={`h-5 w-5 mx-auto mb-1 ${item.cls}`} />
+                    <div className={`text-2xl font-bold font-display ${item.cls}`}>{item.value}</div>
+                    <div className="text-xs text-afrocat-muted">{item.label}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {(playerDash.recentStats || []).length > 0 && (
+              <div className="afrocat-card p-5">
+                <h3 className="flex items-center gap-2 text-base font-bold text-afrocat-text mb-4">
+                  <TrendingUp className="h-4 w-4 text-afrocat-teal" /> Recent Match Stats
+                </h3>
+                <div className="space-y-3">
+                  {playerDash.recentStats.slice(0, 5).map((stat: any, i: number) => (
+                    <div key={stat.id || i} className="flex items-center justify-between border-b border-afrocat-border last:border-0 pb-3 last:pb-0" data-testid={`row-player-stat-${i}`}>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm text-afrocat-text">{stat.opponent || stat.matchDate || "Match"}</p>
+                        <p className="text-xs text-afrocat-muted">{stat.matchDate}</p>
+                      </div>
+                      {stat.result && (
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-bold mr-3 ${stat.result === 'W' ? 'bg-afrocat-green-soft text-afrocat-green' : 'bg-afrocat-red-soft text-afrocat-red'}`}>
+                          {stat.result}
+                        </span>
+                      )}
+                      <div className="flex gap-3 text-xs text-afrocat-muted">
+                        <span className="text-afrocat-gold font-bold">{stat.pointsTotal || 0} pts</span>
+                        <span>K:{stat.spikesKill || 0}</span>
+                        <span>A:{stat.servesAce || 0}</span>
+                        <span>B:{(stat.blocksSolo || 0) + (stat.blocksAssist || 0)}</span>
+                        <span>D:{stat.digs || 0}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(playerDash.smartFocusHistory || []).length > 0 && (
+              <div className="afrocat-card p-5">
+                <h3 className="flex items-center gap-2 text-base font-bold text-afrocat-text mb-4">
+                  <Target className="h-4 w-4 text-afrocat-teal" /> SmartFocus Recommendations
+                </h3>
+                <div className="space-y-3">
+                  {playerDash.smartFocusHistory.slice(0, 5).map((focus: any, i: number) => (
+                    <div key={focus.id || i} className="flex items-start gap-3 border-b border-afrocat-border last:border-0 pb-3 last:pb-0" data-testid={`row-smart-focus-${i}`}>
+                      <Zap className="h-4 w-4 text-afrocat-teal mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium text-sm text-afrocat-text">{focus.focusArea || focus.area}</p>
+                        {focus.recommendation && <p className="text-xs text-afrocat-muted mt-0.5">{focus.recommendation}</p>}
+                        {focus.matchDate && <p className="text-xs text-afrocat-muted mt-0.5">{focus.matchDate}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {playerDash.attendanceSummary && (
+                <div className="afrocat-card p-5" data-testid="player-attendance-summary">
+                  <h3 className="flex items-center gap-2 text-base font-bold text-afrocat-text mb-4">
+                    <Calendar className="h-4 w-4 text-afrocat-teal" /> Attendance Summary
+                  </h3>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: "Present", value: playerDash.attendanceSummary.present || 0, icon: CheckCircle, cls: "text-afrocat-green", bg: "bg-afrocat-green-soft" },
+                      { label: "Late", value: playerDash.attendanceSummary.late || 0, icon: Clock, cls: "text-afrocat-gold", bg: "bg-afrocat-gold-soft" },
+                      { label: "Absent", value: playerDash.attendanceSummary.absent || 0, icon: XCircle, cls: "text-afrocat-red", bg: "bg-afrocat-red-soft" },
+                      { label: "Excused", value: playerDash.attendanceSummary.excused || 0, icon: AlertCircle, cls: "text-afrocat-muted", bg: "bg-afrocat-white-5" },
+                    ].map((item) => (
+                      <div key={item.label} className={`flex items-center gap-2 p-3 rounded-xl ${item.bg}`} data-testid={`attendance-${item.label.toLowerCase()}`}>
+                        <item.icon className={`h-4 w-4 ${item.cls}`} />
+                        <div>
+                          <div className={`text-lg font-bold font-display ${item.cls}`}>{item.value}</div>
+                          <div className="text-xs text-afrocat-muted">{item.label}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {playerDash.injuryStatus && (
+                <div className="afrocat-card p-5" data-testid="player-injury-status">
+                  <h3 className="flex items-center gap-2 text-base font-bold text-afrocat-text mb-4">
+                    <Heart className={`h-4 w-4 ${playerDash.injuryStatus.hasOpenInjury ? 'text-afrocat-red' : 'text-afrocat-green'}`} /> Injury Status
+                  </h3>
+                  {playerDash.injuryStatus.hasOpenInjury ? (
+                    <div className="p-3 rounded-xl bg-afrocat-red-soft">
+                      <p className="font-medium text-sm text-afrocat-red">Active Injury</p>
+                      {playerDash.injuryStatus.currentInjury && (
+                        <>
+                          <p className="text-xs text-afrocat-muted mt-1">{playerDash.injuryStatus.currentInjury.type}: {playerDash.injuryStatus.currentInjury.description}</p>
+                          <p className="text-xs text-afrocat-muted mt-0.5">Since: {playerDash.injuryStatus.currentInjury.injuryDate}</p>
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-xl bg-afrocat-green-soft">
+                      <p className="font-medium text-sm text-afrocat-green flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" /> Fully Fit
+                      </p>
+                      <p className="text-xs text-afrocat-muted mt-1">No current injuries reported</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {isPlayerView && !playerDash && !playerDashId && (
           <div className="afrocat-card p-5">
             <h3 className="flex items-center gap-2 font-bold text-afrocat-text mb-2">
               <Calendar className="h-5 w-5 text-afrocat-teal" /> Your Portal

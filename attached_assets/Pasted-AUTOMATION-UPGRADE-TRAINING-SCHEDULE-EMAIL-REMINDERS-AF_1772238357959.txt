@@ -1,0 +1,269 @@
+AUTOMATION UPGRADE: TRAINING SCHEDULE + EMAIL REMINDERS + AFTER-MATCH REPORT EMAILS + DASHBOARD MAIL + INJURY ALERTS
+
+REFERENCE NEEDS
+- Portal must support match performance reports, smart focus training recommendations, attendance, injury/wellness, and self-service communications. :contentReference[oaicite:0]{index=0}
+
+GOAL
+1) Add Training Schedule module with a Coach/Admin UI button to create sessions.
+2) Apply DEFAULT weekly standards automatically, but allow overrides:
+   - Monday: Female training
+   - Wednesday: Female training
+   - Friday: BOTH genders (combined)
+   - Tuesday: male training 
+   - Thursday: male training 
+   - Weekends: usually matches, but Coach can schedule training
+3) Automated email reminders:
+   - Daily reminder (e.g., 07:00) for sessions happening that day to relevant players + assigned coaches
+   - Optional 2-hour reminder before session start
+4) After each match:
+   - Email each player their match stats + Smart Focus areas
+   - Email coach a team summary + player focus list (who needs what)
+   - Ensure same info appears on dashboards (player dashboard and coach dashboard)
+5) Communication:
+   - Add dashboard messaging/mail center: club ↔ team ↔ player
+   - Messages can be stored in-app and optionally emailed.
+6) Injury handling:
+   - If player injury status is OPEN: update injury section and selection availability
+   - Optional email notification to coach + player when injury is logged/cleared
+
+TECH REQUIREMENTS
+- Node/Express backend + Prisma
+- Client React dashboard
+- Email via nodemailer SMTP (Railway-ready)
+- Job scheduling via node-cron (simple) OR a lightweight queue (BullMQ optional)
+- Multi-tenant safe: all jobs and emails scoped by tenantId
+
+DATABASE (Prisma)
+
+A) Training schedule models:
+TrainingSession {
+  id         String @id @default(cuid())
+  tenantId   String
+  teamId     String?
+  genderRule TrainingGenderRule @default(BOTH)
+  title      String
+  sessionType TrainingSessionType @default(TRAINING)
+  sessionDate DateTime        // date of session
+  startTime  String           // "18:00"
+  endTime    String?          // "20:00"
+  venue      String?
+  notes      String?
+  createdByUserId String
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([teamId])
+  @@index([sessionDate])
+}
+
+enum TrainingGenderRule { FEMALE MALE BOTH }
+enum TrainingSessionType { TRAINING MATCH OPTIONAL_TRAINING GYM }
+
+TrainingInvite {
+  id        String @id @default(cuid())
+  tenantId  String
+  sessionId String
+  userId    String
+  role      InviteRole @default(PLAYER)
+  emailSent Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+enum InviteRole { PLAYER COACH MANAGER }
+
+B) System settings for schedule defaults + reminders:
+TrainingSettings {
+  id String @id @default("training")
+  tenantId String
+
+  enableDailyReminder Boolean @default(true)
+  dailyReminderTime   String  @default("07:00")  // local time
+  enablePreReminder   Boolean @default(false)
+  preReminderMinutes  Int     @default(120)
+
+  // weekly defaults
+  defaultMon TrainingGenderRule @default(FEMALE)
+  defaultTue TrainingGenderRule @default(BOTH)
+  defaultWed TrainingGenderRule @default(FEMALE)
+  defaultThu TrainingGenderRule @default(BOTH)
+  defaultFri TrainingGenderRule @default(BOTH)
+  defaultSat TrainingGenderRule @default(BOTH)   // weekend optional
+  defaultSun TrainingGenderRule @default(BOTH)
+
+  @@unique([tenantId])
+}
+
+C) In-app messaging center:
+MessageThread {
+  id        String @id @default(cuid())
+  tenantId  String
+  threadType ThreadType
+  teamId    String?
+  playerId  String?
+  subject   String
+  createdByUserId String
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([teamId])
+  @@index([playerId])
+}
+
+enum ThreadType { TEAM_BROADCAST PLAYER_DIRECT CLUB_ANNOUNCEMENT }
+
+Message {
+  id        String @id @default(cuid())
+  tenantId  String
+  threadId  String
+  senderUserId String
+  body      String
+  sendEmail Boolean @default(false)
+  emailStatus EmailStatus @default(NOT_SENT)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([threadId])
+}
+
+enum EmailStatus { NOT_SENT SENT FAILED }
+
+D) Email log (auditing):
+EmailLog {
+  id        String @id @default(cuid())
+  tenantId  String
+  toEmail   String
+  subject   String
+  type      EmailType
+  status    EmailStatus
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+enum EmailType { TRAINING_REMINDER MATCH_REPORT PLAYER_FOCUS COACH_SUMMARY MESSAGE_NOTIFICATION INJURY_ALERT }
+
+BACKEND API
+
+1) Training scheduling
+POST /training/sessions
+Body: { title, sessionDate, startTime, endTime, venue, notes, genderRule, teamId? }
+- Admin/Manager/Coach can create
+- If genderRule omitted, default based on weekday settings (Mon/Wed female, Tue/Thu/Fri both, weekend optional)
+- Auto-create TrainingInvite rows for:
+  - All players matching gender rule (and optional teamId filter)
+  - Assigned coaches for team(s) (CoachAssignment)
+
+GET /training/sessions?from=&to=&teamId=
+- list sessions
+
+POST /training/sessions/:id/send-reminder
+- immediately send reminders to invited players/coaches
+
+2) Match report emails (after match)
+POST /matches/:matchId/send-reports
+- Only Admin/Manager/Coach/Statistician
+Server:
+- For each player in PlayerMatchStat for match:
+  send email with:
+   - stats summary
+   - pointsTotal
+   - SmartFocus focusAreas
+- To coach(es) of the team:
+  send email with:
+   - match summary
+   - top performers
+   - errors list
+   - focus per player (top 1-2)
+- Log in EmailLog
+
+Also implement automatic trigger:
+- when stats are submitted/finalized for a match (e.g., POST /stats/match/:matchId with "finalize=true"),
+  automatically call send reports.
+
+3) Messaging center
+POST /messages/threads
+POST /messages/threads/:id/messages
+- Admin/Manager can broadcast to a team
+- Coach can message their team
+- Player can message coach/admin (thread direct or team)
+If sendEmail=true:
+- email each recipient a notification with message excerpt + link to dashboard
+
+GET /messages/inbox (role-based)
+- Players see their direct threads + team threads
+- Coaches see their teams threads + direct
+- Admin sees all threads in tenant
+
+4) Injury email alerts (optional)
+When Injury created or cleared:
+- If enabled, email:
+  - Player
+  - Team coach
+Subject: "Injury Update – <Player Name>"
+Include status and notes.
+
+EMAIL SENDING (Nodemailer)
+Env vars:
+SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+FRONTEND_URL
+If SMTP not set:
+- keep in-app notifications only
+- show “Email not configured” warning in Admin Settings
+
+SCHEDULER (node-cron)
+Add cron jobs per tenant:
+A) Daily Reminder Job
+- runs every day at TrainingSettings.dailyReminderTime
+- finds sessions today
+- sends reminders to invites if not sent
+
+B) Pre-Reminder Job (optional)
+- runs every 15 minutes
+- finds sessions starting within preReminderMinutes
+- sends reminders
+
+CLIENT UI
+
+A) Coach/Admin: Training Scheduler
+- Add sidebar item: Training
+- Calendar/list view weekly
+- Button “Add Training Session”
+- Prefill genderRule based on weekday standard
+- Allow override (weekend training)
+- Button “Send Reminder Now”
+
+B) Player dashboard
+- Show upcoming training sessions + match fixtures
+- Show “My Focus After Last Match” (SmartFocus)
+- Show inbox / messages
+- Injury section updates and shows “Unavailable” if open injury
+
+C) Coach dashboard
+- Show upcoming sessions
+- Show team focus summary after last match
+- Show player focus list
+- Inbox / team messages
+
+D) Communication Mail Center
+- Inbox style UI + compose
+- Team broadcast (coach/admin)
+- Direct message (player→coach/admin)
+
+QUALITY / SAFETY
+- Tenant scope every query/job/email
+- Rate limit messaging/email endpoints
+- Ensure only team coaches can message that team
+- Ensure players only message their own team/club staff
+
+DELIVERABLE
+Implement:
+- schema + migrations
+- API routes + cron jobs
+- nodemailer + email log
+- UI pages (Training scheduler, Inbox/Mail, dashboard widgets)
+- README setup for SMTP and cron behavior
