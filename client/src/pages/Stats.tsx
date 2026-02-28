@@ -16,9 +16,9 @@ const statCategories = [
   {
     label: "Attack",
     icon: Zap,
-    color: "text-ac-gold",
-    bgColor: "bg-ac-gold-soft",
-    borderColor: "border-ac-gold/20",
+    color: "text-afrocat-gold",
+    bgColor: "bg-afrocat-gold-soft",
+    borderColor: "border-afrocat-gold/20",
     fields: [
       { key: "spikesKill" as StatKey, label: "Kills" },
       { key: "spikesError" as StatKey, label: "Errors" },
@@ -27,9 +27,9 @@ const statCategories = [
   {
     label: "Serve",
     icon: Target,
-    color: "text-ac-teal",
-    bgColor: "bg-ac-teal-soft",
-    borderColor: "border-ac-teal/20",
+    color: "text-afrocat-teal",
+    bgColor: "bg-afrocat-teal-soft",
+    borderColor: "border-afrocat-teal/20",
     fields: [
       { key: "servesAce" as StatKey, label: "Aces" },
       { key: "servesError" as StatKey, label: "Errors" },
@@ -38,9 +38,9 @@ const statCategories = [
   {
     label: "Block",
     icon: Shield,
-    color: "text-ac-gold",
-    bgColor: "bg-ac-gold-soft",
-    borderColor: "border-ac-gold/20",
+    color: "text-afrocat-gold",
+    bgColor: "bg-afrocat-gold-soft",
+    borderColor: "border-afrocat-gold/20",
     fields: [
       { key: "blocksSolo" as StatKey, label: "Solo" },
       { key: "blocksAssist" as StatKey, label: "Assist" },
@@ -49,9 +49,9 @@ const statCategories = [
   {
     label: "Receive",
     icon: Hand,
-    color: "text-ac-green",
-    bgColor: "bg-ac-green-soft",
-    borderColor: "border-ac-green/20",
+    color: "text-afrocat-green",
+    bgColor: "bg-afrocat-green-soft",
+    borderColor: "border-afrocat-green/20",
     fields: [
       { key: "receivePerfect" as StatKey, label: "Perfect" },
       { key: "receiveError" as StatKey, label: "Errors" },
@@ -60,9 +60,9 @@ const statCategories = [
   {
     label: "Defense",
     icon: Shield,
-    color: "text-ac-teal",
-    bgColor: "bg-ac-teal-soft",
-    borderColor: "border-ac-teal/20",
+    color: "text-afrocat-teal",
+    bgColor: "bg-afrocat-teal-soft",
+    borderColor: "border-afrocat-teal/20",
     fields: [
       { key: "digs" as StatKey, label: "Digs" },
     ],
@@ -70,9 +70,9 @@ const statCategories = [
   {
     label: "Setting",
     icon: ArrowUpCircle,
-    color: "text-ac-gold",
-    bgColor: "bg-ac-gold-soft",
-    borderColor: "border-ac-gold/20",
+    color: "text-afrocat-gold",
+    bgColor: "bg-afrocat-gold-soft",
+    borderColor: "border-afrocat-gold/20",
     fields: [
       { key: "settingAssist" as StatKey, label: "Assists" },
       { key: "settingError" as StatKey, label: "Errors" },
@@ -162,7 +162,7 @@ function PlayerStatCard({
             {points} pts
           </div>
           {errors > 0 && (
-            <div className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold bg-ac-red-soft text-ac-red" data-testid={`text-errors-${player.id}`}>
+            <div className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold bg-afrocat-red-soft text-afrocat-red" data-testid={`text-errors-${player.id}`}>
               <AlertTriangle className="w-3 h-3" />
               {errors} err
             </div>
@@ -179,7 +179,7 @@ function PlayerStatCard({
             </div>
             <div className="flex flex-wrap gap-1.5">
               {cat.fields.map((f) => (
-                <div key={f.key} className="flex items-center gap-1 bg-ac-white-10 rounded-md px-1.5 py-0.5">
+                <div key={f.key} className="flex items-center gap-1 bg-afrocat-white-10 rounded-md px-1.5 py-0.5">
                   <button
                     onClick={() => onDecrement(f.key)}
                     className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:bg-muted/60 transition-colors"
@@ -458,7 +458,7 @@ export default function Stats() {
                   Team: {teamTotals.pointsTotal} pts
                 </div>
                 {teamTotals.errorsTotal > 0 && (
-                  <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-ac-red-soft font-bold text-ac-red" data-testid="text-team-errors-total">
+                  <div className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-afrocat-red-soft font-bold text-afrocat-red" data-testid="text-team-errors-total">
                     <AlertTriangle className="w-4 h-4" />
                     {teamTotals.errorsTotal} errors
                   </div>
@@ -510,40 +510,40 @@ export default function Stats() {
         )}
 
         {showSummary && summaryData && (
-          <Card className="border border-ac-green/30 bg-ac-green-soft" data-testid="card-summary">
-            <CardHeader className="bg-ac-green-soft border-b border-ac-green/20">
+          <Card className="border border-afrocat-green/30 bg-afrocat-green-soft" data-testid="card-summary">
+            <CardHeader className="bg-afrocat-green-soft border-b border-afrocat-green/20">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-ac-green" />
-                <CardTitle className="text-ac-green">Match Stats Summary</CardTitle>
+                <CheckCircle2 className="w-5 h-5 text-afrocat-green" />
+                <CardTitle className="text-afrocat-green">Match Stats Summary</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
               <div>
-                <h4 className="text-sm font-bold uppercase tracking-wider text-ac-muted mb-3">Team Totals</h4>
+                <h4 className="text-sm font-bold uppercase tracking-wider text-afrocat-muted mb-3">Team Totals</h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
-                    <div className="text-2xl font-bold text-ac-teal" data-testid="text-summary-points">{summaryData.teamTotals.pointsTotal}</div>
-                    <div className="text-[10px] text-ac-muted uppercase">Points</div>
+                  <div className="bg-afrocat-white-5 rounded-lg p-3 border border-afrocat-border text-center">
+                    <div className="text-2xl font-bold text-afrocat-teal" data-testid="text-summary-points">{summaryData.teamTotals.pointsTotal}</div>
+                    <div className="text-[10px] text-afrocat-muted uppercase">Points</div>
                   </div>
-                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
-                    <div className="text-2xl font-bold text-ac-gold" data-testid="text-summary-kills">{summaryData.teamTotals.spikesKill}</div>
-                    <div className="text-[10px] text-ac-muted uppercase">Kills</div>
+                  <div className="bg-afrocat-white-5 rounded-lg p-3 border border-afrocat-border text-center">
+                    <div className="text-2xl font-bold text-afrocat-gold" data-testid="text-summary-kills">{summaryData.teamTotals.spikesKill}</div>
+                    <div className="text-[10px] text-afrocat-muted uppercase">Kills</div>
                   </div>
-                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
-                    <div className="text-2xl font-bold text-ac-teal" data-testid="text-summary-aces">{summaryData.teamTotals.servesAce}</div>
-                    <div className="text-[10px] text-ac-muted uppercase">Aces</div>
+                  <div className="bg-afrocat-white-5 rounded-lg p-3 border border-afrocat-border text-center">
+                    <div className="text-2xl font-bold text-afrocat-teal" data-testid="text-summary-aces">{summaryData.teamTotals.servesAce}</div>
+                    <div className="text-[10px] text-afrocat-muted uppercase">Aces</div>
                   </div>
-                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
-                    <div className="text-2xl font-bold text-ac-gold" data-testid="text-summary-blocks">{(summaryData.teamTotals.blocksSolo || 0) + (summaryData.teamTotals.blocksAssist || 0)}</div>
-                    <div className="text-[10px] text-ac-muted uppercase">Blocks</div>
+                  <div className="bg-afrocat-white-5 rounded-lg p-3 border border-afrocat-border text-center">
+                    <div className="text-2xl font-bold text-afrocat-gold" data-testid="text-summary-blocks">{(summaryData.teamTotals.blocksSolo || 0) + (summaryData.teamTotals.blocksAssist || 0)}</div>
+                    <div className="text-[10px] text-afrocat-muted uppercase">Blocks</div>
                   </div>
-                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
-                    <div className="text-2xl font-bold text-ac-teal" data-testid="text-summary-digs">{summaryData.teamTotals.digs}</div>
-                    <div className="text-[10px] text-ac-muted uppercase">Digs</div>
+                  <div className="bg-afrocat-white-5 rounded-lg p-3 border border-afrocat-border text-center">
+                    <div className="text-2xl font-bold text-afrocat-teal" data-testid="text-summary-digs">{summaryData.teamTotals.digs}</div>
+                    <div className="text-[10px] text-afrocat-muted uppercase">Digs</div>
                   </div>
-                  <div className="bg-ac-white-5 rounded-lg p-3 border border-ac-border text-center">
-                    <div className="text-2xl font-bold text-ac-red" data-testid="text-summary-errors">{summaryData.teamTotals.errorsTotal}</div>
-                    <div className="text-[10px] text-ac-muted uppercase">Errors</div>
+                  <div className="bg-afrocat-white-5 rounded-lg p-3 border border-afrocat-border text-center">
+                    <div className="text-2xl font-bold text-afrocat-red" data-testid="text-summary-errors">{summaryData.teamTotals.errorsTotal}</div>
+                    <div className="text-[10px] text-afrocat-muted uppercase">Errors</div>
                   </div>
                 </div>
               </div>
@@ -552,8 +552,8 @@ export default function Stats() {
                 <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-3">Top Performers</h4>
                 <div className="space-y-2">
                   {summaryData.topPerformers.map((p: any, i: number) => (
-                    <div key={p.id} className="flex items-center gap-3 bg-ac-white-5 rounded-lg p-3 border border-ac-border" data-testid={`text-top-performer-${i}`}>
-                      <div className="w-8 h-8 rounded-full bg-ac-teal-soft flex items-center justify-center text-sm font-bold text-ac-teal">
+                    <div key={p.id} className="flex items-center gap-3 bg-afrocat-white-5 rounded-lg p-3 border border-afrocat-border" data-testid={`text-top-performer-${i}`}>
+                      <div className="w-8 h-8 rounded-full bg-afrocat-teal-soft flex items-center justify-center text-sm font-bold text-afrocat-teal">
                         {i + 1}
                       </div>
                       <div className="flex-1">

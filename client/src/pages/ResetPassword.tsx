@@ -46,15 +46,15 @@ export default function ResetPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center afrocat-page p-4">
+      <div className="min-h-screen flex items-center justify-center bg-afrocat-glow p-4">
         <div className="afrocat-card w-full max-w-md overflow-hidden">
           <div className="py-12 px-6 text-center">
-            <div className="mx-auto w-16 h-16 bg-ac-green-soft rounded-full flex items-center justify-center mb-4">
-              <CheckCircle2 className="w-8 h-8 text-ac-green" />
+            <div className="mx-auto w-16 h-16 bg-afrocat-green-soft rounded-full flex items-center justify-center mb-4">
+              <CheckCircle2 className="w-8 h-8 text-afrocat-green" />
             </div>
-            <h2 className="text-2xl font-display font-bold mb-2 text-ac-text">Password Reset Complete</h2>
-            <p className="text-ac-muted mb-6">Your password has been updated. You can now sign in.</p>
-            <Button onClick={() => setLocation("/")} className="bg-ac-teal hover:bg-ac-teal-dark text-white" data-testid="button-go-login">Go to Login</Button>
+            <h2 className="text-2xl font-display font-bold mb-2 text-afrocat-text">Password Reset Complete</h2>
+            <p className="text-afrocat-muted mb-6">Your password has been updated. You can now sign in.</p>
+            <Button onClick={() => setLocation("/")} className="bg-afrocat-teal hover:bg-afrocat-teal-dark text-white" data-testid="button-go-login">Go to Login</Button>
           </div>
         </div>
       </div>
@@ -62,61 +62,61 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center afrocat-page p-4">
+    <div className="min-h-screen flex items-center justify-center bg-afrocat-glow p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <img src={logo} alt="Afrocat Logo" className="w-24 h-24 object-contain mb-4" />
-          <h2 className="text-xl font-display font-bold text-ac-teal tracking-tight">Afrocat Sports Club</h2>
+          <h2 className="text-xl font-display font-bold text-afrocat-teal tracking-tight">Afrocat Sports Club</h2>
         </div>
 
         <div className="afrocat-card overflow-hidden">
           <div className="text-center pt-8 pb-6 px-6">
-            <div className="mx-auto w-12 h-12 bg-ac-teal-soft rounded-full flex items-center justify-center mb-3">
-              <KeyRound className="w-6 h-6 text-ac-teal" />
+            <div className="mx-auto w-12 h-12 bg-afrocat-teal-soft rounded-full flex items-center justify-center mb-3">
+              <KeyRound className="w-6 h-6 text-afrocat-teal" />
             </div>
-            <h3 className="text-2xl font-display font-bold text-ac-text">Reset Password</h3>
-            <p className="text-sm text-ac-muted mt-1">Set a new password for your account.</p>
+            <h3 className="text-2xl font-display font-bold text-afrocat-text">Reset Password</h3>
+            <p className="text-sm text-afrocat-muted mt-1">Set a new password for your account.</p>
           </div>
           <div className="px-6 pb-8">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-ac-muted text-sm">Email</Label>
+                <Label htmlFor="email" className="text-afrocat-muted text-sm">Email</Label>
                 <Input
                   id="email" type="email" value={email}
                   onChange={e => setEmail(e.target.value)} required
                   data-testid="input-reset-email"
-                  className="bg-ac-white-5 border-ac-border text-ac-text"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="token" className="text-ac-muted text-sm">Reset Token</Label>
+                <Label htmlFor="token" className="text-afrocat-muted text-sm">Reset Token</Label>
                 <Input
                   id="token" type="text" value={token}
                   onChange={e => setToken(e.target.value)} required
                   placeholder="Paste reset token here"
                   data-testid="input-reset-token"
-                  className="bg-ac-white-5 border-ac-border text-ac-text placeholder:text-ac-muted"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="newPassword" className="text-ac-muted text-sm">New Password</Label>
+                <Label htmlFor="newPassword" className="text-afrocat-muted text-sm">New Password</Label>
                 <Input
                   id="newPassword" type="password" value={newPassword}
                   onChange={e => setNewPassword(e.target.value)} required
                   data-testid="input-reset-new-password"
-                  className="bg-ac-white-5 border-ac-border text-ac-text"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-ac-muted text-sm">Confirm New Password</Label>
+                <Label htmlFor="confirmPassword" className="text-afrocat-muted text-sm">Confirm New Password</Label>
                 <Input
                   id="confirmPassword" type="password" value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)} required
                   data-testid="input-reset-confirm-password"
-                  className="bg-ac-white-5 border-ac-border text-ac-text"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
                 />
               </div>
-              <Button type="submit" className="w-full mt-4 bg-ac-teal hover:bg-ac-teal-dark text-white font-semibold" disabled={loading} data-testid="button-reset-password">
+              <Button type="submit" className="w-full mt-4 bg-afrocat-teal hover:bg-afrocat-teal-dark text-white font-semibold" disabled={loading} data-testid="button-reset-password">
                 {loading ? "Resetting..." : "Reset Password"}
               </Button>
             </form>

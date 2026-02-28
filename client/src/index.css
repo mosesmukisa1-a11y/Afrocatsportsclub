@@ -12,7 +12,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-xl2: 18px;
-  
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));
@@ -32,7 +32,7 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
-  
+
   --color-sidebar: hsl(var(--sidebar));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
   --color-sidebar-primary: hsl(var(--sidebar-primary));
@@ -42,71 +42,63 @@
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 
-  --color-ac-teal: #0F8B7D;
-  --color-ac-teal-dark: #0B6F66;
-  --color-ac-teal-soft: rgba(15,139,125,0.18);
-  --color-ac-gold: #F2B705;
-  --color-ac-gold-dark: #D9A300;
-  --color-ac-gold-soft: rgba(242,183,5,0.18);
-  --color-ac-bg: #0B0F14;
-  --color-ac-card: #111827;
-  --color-ac-card2: #0F172A;
-  --color-ac-text: #E5E7EB;
-  --color-ac-muted: rgba(229,231,235,0.70);
-  --color-ac-border: rgba(255,255,255,0.08);
-  --color-ac-green: #22c55e;
-  --color-ac-red: #ef4444;
-  --color-ac-green-soft: rgba(34,197,94,0.15);
-  --color-ac-red-soft: rgba(239,68,68,0.15);
-  --color-ac-white-3: rgba(255,255,255,0.03);
-  --color-ac-white-4: rgba(255,255,255,0.04);
-  --color-ac-white-5: rgba(255,255,255,0.05);
-  --color-ac-white-10: rgba(255,255,255,0.1);
+  --color-afrocat-teal: #0F8B7D;
+  --color-afrocat-teal-dark: #0B6F66;
+  --color-afrocat-teal-soft: rgba(15,139,125,0.18);
+  --color-afrocat-gold: #F2B705;
+  --color-afrocat-gold-dark: #D9A300;
+  --color-afrocat-gold-soft: rgba(242,183,5,0.18);
+  --color-afrocat-bg: #0B0F14;
+  --color-afrocat-card: #111827;
+  --color-afrocat-card2: #0F172A;
+  --color-afrocat-text: #E5E7EB;
+  --color-afrocat-muted: rgba(229,231,235,0.70);
+  --color-afrocat-border: rgba(255,255,255,0.08);
+  --color-afrocat-green: #22c55e;
+  --color-afrocat-red: #ef4444;
+  --color-afrocat-green-soft: rgba(34,197,94,0.15);
+  --color-afrocat-red-soft: rgba(239,68,68,0.15);
+  --color-afrocat-white-3: rgba(255,255,255,0.03);
+  --color-afrocat-white-4: rgba(255,255,255,0.04);
+  --color-afrocat-white-5: rgba(255,255,255,0.05);
+  --color-afrocat-white-10: rgba(255,255,255,0.1);
 
-  --shadow-ac-card: 0 12px 30px rgba(0,0,0,0.45);
-  --shadow-ac-soft: 0 8px 22px rgba(0,0,0,0.35);
+  --shadow-afrocat-card: 0 12px 30px rgba(0,0,0,0.45);
+  --shadow-afrocat-soft: 0 8px 22px rgba(0,0,0,0.35);
+
+  --background-image-afrocat-glow: radial-gradient(900px circle at 20% 15%, rgba(15,139,125,0.18), transparent 55%), radial-gradient(800px circle at 80% 10%, rgba(242,183,5,0.14), transparent 52%), radial-gradient(900px circle at 70% 90%, rgba(15,139,125,0.10), transparent 55%);
+  --background-image-afrocat-card: linear-gradient(180deg, rgba(17,24,39,1) 0%, rgba(15,23,42,1) 100%);
 }
 
 :root {
-  --afrocat-bg: #0B0F14;
-  --afrocat-card: #111827;
-  --afrocat-card2: #0F172A;
-  --afrocat-border: rgba(255,255,255,0.08);
-  --afrocat-teal: #0F8B7D;
-  --afrocat-teal-dark: #0B6F66;
-  --afrocat-gold: #F2B705;
-  --afrocat-gold-dark: #D9A300;
-  --afrocat-text: #E5E7EB;
-  --afrocat-muted: rgba(229,231,235,0.70);
-
   --background: 220 26% 6%;
   --foreground: 220 13% 91%;
-  
+
   --card: 222 47% 11%;
   --card-foreground: 220 13% 91%;
-  
+
   --popover: 222 47% 11%;
   --popover-foreground: 220 13% 91%;
-  
+
   --primary: 174 80% 30%;
   --primary-foreground: 210 40% 98%;
-  
+
   --secondary: 45 100% 49%;
   --secondary-foreground: 220 26% 6%;
-  
+
   --muted: 217 33% 17%;
   --muted-foreground: 218 11% 65%;
-  
+
   --accent: 174 80% 15%;
   --accent-foreground: 210 40% 98%;
-  
+
   --destructive: 0 63% 31%;
   --destructive-foreground: 210 40% 98%;
 
   --border: 215 20% 17%;
   --input: 215 20% 17%;
   --ring: 174 80% 30%;
-  
+
   --radius: 0.5rem;
 
   --sidebar: 222 47% 11%;
@@ -122,32 +114,32 @@
 .dark {
   --background: 222.2 84% 4.9%;
   --foreground: 210 40% 98%;
-  
+
   --card: 222.2 84% 4.9%;
   --card-foreground: 210 40% 98%;
-  
+
   --popover: 222.2 84% 4.9%;
   --popover-foreground: 210 40% 98%;
-  
+
   --primary: 174 100% 35%;
   --primary-foreground: 210 40% 98%;
-  
+
   --secondary: 45 100% 51%;
   --secondary-foreground: 222.2 84% 4.9%;
-  
+
   --muted: 174 100% 10%;
   --muted-foreground: 174 20% 65%;
-  
+
   --accent: 174 100% 15%;
   --accent-foreground: 210 40% 98%;
-  
+
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 210 40% 98%;
-  
+
   --border: 174 100% 15%;
   --input: 174 100% 15%;
   --ring: 174 100% 35%;
-  
+
   --sidebar: 222.2 84% 4.9%;
   --sidebar-foreground: 210 40% 98%;
   --sidebar-primary: 174 100% 35%;
@@ -160,8 +152,8 @@
 
 html, body {
   height: 100%;
-  background: var(--afrocat-bg);
-  color: var(--afrocat-text);
+  background: var(--color-afrocat-bg);
+  color: var(--color-afrocat-text);
 }
 
 ::selection {
@@ -191,32 +183,9 @@ html, body {
   }
 }
 
-.afrocat-page {
-  background-image:
-    radial-gradient(900px circle at 20% 15%, rgba(15,139,125,0.18), transparent 55%),
-    radial-gradient(800px circle at 80% 10%, rgba(242,183,5,0.14), transparent 52%),
-    radial-gradient(900px circle at 70% 90%, rgba(15,139,125,0.10), transparent 55%);
-}
-
-.afrocat-dark {
-  background: var(--color-ac-bg);
-  background-image:
-    radial-gradient(900px circle at 20% 15%, var(--color-ac-teal-soft), transparent 55%),
-    radial-gradient(800px circle at 80% 10%, var(--color-ac-gold-soft), transparent 52%),
-    radial-gradient(900px circle at 70% 90%, var(--color-ac-teal-soft), transparent 55%);
-  color: var(--color-ac-text);
-}
-
 .afrocat-card {
   background: linear-gradient(180deg, rgba(17,24,39,1) 0%, rgba(15,23,42,1) 100%);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
-}
-
-.ac-card {
-  background: linear-gradient(180deg, var(--color-ac-card) 0%, var(--color-ac-card2) 100%);
-  border: 1px solid var(--color-ac-border);
   border-radius: 18px;
   box-shadow: 0 12px 30px rgba(0,0,0,0.45);
 }

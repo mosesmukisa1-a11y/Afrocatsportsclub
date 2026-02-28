@@ -38,28 +38,27 @@ export function Layout({ children }: { children: ReactNode }) {
   const navItems = allNavItems.filter(item => user && item.roles.includes(user.role));
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row" style={{ background: "var(--afrocat-bg)", color: "var(--afrocat-text)" }}>
-      <div className="md:hidden flex items-center justify-between p-4 border-b border-ac-border" style={{ background: "var(--afrocat-card)" }}>
+    <div className="min-h-screen bg-afrocat-bg text-afrocat-text flex flex-col md:flex-row">
+      <div className="md:hidden flex items-center justify-between p-4 border-b border-afrocat-border bg-afrocat-card">
         <div className="flex items-center gap-2">
           <img src={logo} alt="Afrocat Logo" className="w-8 h-8 object-contain" />
-          <span className="font-display font-bold text-ac-text">Afrocat Portal</span>
+          <span className="font-display font-bold text-afrocat-text">Afrocat Portal</span>
         </div>
-        <button onClick={() => setMobileOpen(!mobileOpen)} data-testid="button-mobile-menu" className="text-ac-text">
+        <button onClick={() => setMobileOpen(!mobileOpen)} data-testid="button-mobile-menu" className="text-afrocat-text">
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
       </div>
 
       <aside
-        className={`${mobileOpen ? 'block' : 'hidden'} md:block w-full md:w-64 border-r border-ac-border flex flex-col`}
-        style={{ background: "var(--afrocat-card)" }}
+        className={`${mobileOpen ? 'block' : 'hidden'} md:block w-full md:w-64 border-r border-afrocat-border bg-afrocat-card flex flex-col`}
       >
-        <div className="hidden md:flex p-6 items-center gap-3 border-b border-ac-border">
+        <div className="hidden md:flex p-6 items-center gap-3 border-b border-afrocat-border">
           <img src={logo} alt="Afrocat Logo" className="w-12 h-12 object-contain" />
           <div>
-            <h1 className="font-display font-bold text-lg leading-tight tracking-tight text-ac-text">
+            <h1 className="font-display font-bold text-lg leading-tight tracking-tight text-afrocat-text">
               Afrocat Portal
             </h1>
-            <p className="text-xs text-ac-muted font-medium">Club Management</p>
+            <p className="text-xs text-afrocat-muted font-medium">Club Management</p>
           </div>
         </div>
 
@@ -72,31 +71,31 @@ export function Layout({ children }: { children: ReactNode }) {
                   onClick={() => setMobileOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors text-sm font-medium ${
                     isActive 
-                      ? "bg-ac-teal/15 text-ac-teal" 
-                      : "text-ac-muted hover:bg-ac-white-5 hover:text-ac-text"
+                      ? "bg-afrocat-teal/15 text-afrocat-teal" 
+                      : "text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
                   }`}
                 >
-                  <item.icon size={18} className={isActive ? "text-ac-teal" : "text-ac-muted"} />
+                  <item.icon size={18} className={isActive ? "text-afrocat-teal" : "text-afrocat-muted"} />
                   {item.label}
               </Link>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-ac-border">
+        <div className="p-4 border-t border-afrocat-border">
           <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-8 h-8 rounded-full bg-ac-teal-soft flex items-center justify-center border border-ac-teal/20">
-              <ShieldAlert size={16} className="text-ac-teal" />
+            <div className="w-8 h-8 rounded-full bg-afrocat-teal-soft flex items-center justify-center border border-afrocat-teal/20">
+              <ShieldAlert size={16} className="text-afrocat-teal" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-ac-text">{user?.fullName}</p>
-              <p className="text-xs text-ac-muted">{user?.role}</p>
+              <p className="text-sm font-semibold text-afrocat-text">{user?.fullName}</p>
+              <p className="text-xs text-afrocat-muted">{user?.role}</p>
             </div>
           </div>
           <button
             onClick={logout}
             data-testid="nav-link-logout"
-            className="flex items-center gap-3 px-4 py-2 w-full text-sm font-medium text-ac-red hover:bg-ac-red-soft rounded-md transition-colors"
+            className="flex items-center gap-3 px-4 py-2 w-full text-sm font-medium text-afrocat-red hover:bg-afrocat-red-soft rounded-md transition-colors"
           >
             <LogOut size={18} />
             Sign Out
@@ -104,7 +103,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto afrocat-page">
+      <main className="flex-1 overflow-y-auto bg-afrocat-glow">
         <div className="p-6 md:p-10 max-w-7xl mx-auto">
           {children}
         </div>

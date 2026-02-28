@@ -41,53 +41,53 @@ export default function ChangePassword() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center afrocat-page p-4">
+    <div className="min-h-screen flex items-center justify-center bg-afrocat-glow p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <img src={logo} alt="Afrocat Logo" className="w-24 h-24 object-contain mb-4" />
-          <h2 className="text-xl font-display font-bold text-ac-teal tracking-tight">Afrocat Sports Club</h2>
+          <h2 className="text-xl font-display font-bold text-afrocat-teal tracking-tight">Afrocat Sports Club</h2>
         </div>
 
         <div className="afrocat-card overflow-hidden">
           <div className="text-center pt-8 pb-6 px-6">
-            <div className="mx-auto w-12 h-12 bg-ac-gold-soft rounded-full flex items-center justify-center mb-3">
-              <Lock className="w-6 h-6 text-ac-gold" />
+            <div className="mx-auto w-12 h-12 bg-afrocat-gold-soft rounded-full flex items-center justify-center mb-3">
+              <Lock className="w-6 h-6 text-afrocat-gold" />
             </div>
-            <h3 className="text-2xl font-display font-bold text-ac-text">Change Password</h3>
-            <p className="text-sm text-ac-muted mt-1">
+            <h3 className="text-2xl font-display font-bold text-afrocat-text">Change Password</h3>
+            <p className="text-sm text-afrocat-muted mt-1">
               {user ? `You must set a new password before continuing, ${user.fullName}.` : "Set a new password to continue."}
             </p>
           </div>
           <div className="px-6 pb-8">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="oldPassword" className="text-ac-muted text-sm">Current / Temporary Password</Label>
+                <Label htmlFor="oldPassword" className="text-afrocat-muted text-sm">Current / Temporary Password</Label>
                 <Input
                   id="oldPassword" type="password" value={oldPassword}
                   onChange={e => setOldPassword(e.target.value)} required
                   data-testid="input-old-password"
-                  className="bg-ac-white-5 border-ac-border text-ac-text"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="newPassword" className="text-ac-muted text-sm">New Password</Label>
+                <Label htmlFor="newPassword" className="text-afrocat-muted text-sm">New Password</Label>
                 <Input
                   id="newPassword" type="password" value={newPassword}
                   onChange={e => setNewPassword(e.target.value)} required
                   data-testid="input-new-password"
-                  className="bg-ac-white-5 border-ac-border text-ac-text"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-ac-muted text-sm">Confirm New Password</Label>
+                <Label htmlFor="confirmPassword" className="text-afrocat-muted text-sm">Confirm New Password</Label>
                 <Input
                   id="confirmPassword" type="password" value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)} required
                   data-testid="input-confirm-password"
-                  className="bg-ac-white-5 border-ac-border text-ac-text"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
                 />
               </div>
-              <Button type="submit" className="w-full mt-4 bg-ac-teal hover:bg-ac-teal-dark text-white font-semibold" disabled={loading} data-testid="button-change-password">
+              <Button type="submit" className="w-full mt-4 bg-afrocat-teal hover:bg-afrocat-teal-dark text-white font-semibold" disabled={loading} data-testid="button-change-password">
                 <ShieldCheck className="w-4 h-4 mr-2" />
                 {loading ? "Updating..." : "Update Password"}
               </Button>
