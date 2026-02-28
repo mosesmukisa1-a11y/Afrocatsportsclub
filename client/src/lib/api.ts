@@ -180,4 +180,40 @@ export const api = {
   generatePlayerProfilePdf: (playerId: string) =>
     apiFetch<any>(`/players/${playerId}/profile/pdf`, { method: "POST" }),
   getPlayerDocuments: (playerId: string) => apiFetch<any[]>(`/player-documents/${playerId}`),
+
+  getPublicShop: () => fetch("/api/public/shop").then(r => r.json()) as Promise<any[]>,
+  getPublicMedia: () => fetch("/api/public/media").then(r => r.json()) as Promise<any[]>,
+
+  getShopItems: () => apiFetch<any[]>("/shop"),
+  createShopItem: (data: any) => apiFetch<any>("/shop", { method: "POST", body: JSON.stringify(data) }),
+  updateShopItem: (id: string, data: any) => apiFetch<any>(`/shop/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteShopItem: (id: string) => apiFetch<void>(`/shop/${id}`, { method: "DELETE" }),
+
+  getMedia: (status?: string) => apiFetch<any[]>(`/media${status ? `?status=${status}` : ""}`),
+  getPendingMedia: () => apiFetch<any[]>("/media/pending"),
+  createMedia: (data: any) => apiFetch<any>("/media", { method: "POST", body: JSON.stringify(data) }),
+  approveMedia: (id: string) => apiFetch<any>(`/media/${id}/approve`, { method: "POST" }),
+  rejectMedia: (id: string) => apiFetch<any>(`/media/${id}/reject`, { method: "POST" }),
+
+  getMediaTags: (mediaId: string) => apiFetch<any[]>(`/media/${mediaId}/tags`),
+  addMediaTags: (mediaId: string, data: { taggedPlayerIds?: string[]; taggedUserIds?: string[] }) =>
+    apiFetch<any[]>(`/media/${mediaId}/tags`, { method: "POST", body: JSON.stringify(data) }),
+  removeMediaTag: (tagId: string) => apiFetch<void>(`/media/tags/${tagId}`, { method: "DELETE" }),
+  requestMediaTag: (mediaId: string) => apiFetch<any>(`/media/${mediaId}/tag-request`, { method: "POST" }),
+  getMediaTagRequests: () => apiFetch<any[]>("/media/tag-requests"),
+  approveMediaTagRequest: (id: string) => apiFetch<any>(`/media/tag-requests/${id}/approve`, { method: "POST" }),
+  rejectMediaTagRequest: (id: string) => apiFetch<any>(`/media/tag-requests/${id}/reject`, { method: "POST" }),
+
+  getMyMedia: () => apiFetch<any[]>("/players/me/media"),
+  getCoachMedia: () => apiFetch<any[]>("/coaches/me/media"),
+
+  attendanceCheckIn: (sessionId: string) => apiFetch<any>(`/attendance/sessions/${sessionId}/checkin`, { method: "POST" }),
+  confirmAttendance: (recordId: string, data: { status?: string; notes?: string }) =>
+    apiFetch<any>(`/attendance/records/${recordId}/confirm`, { method: "POST", body: JSON.stringify(data) }),
+  getPendingConfirmations: () => apiFetch<any[]>("/attendance/pending-confirmations"),
+
+  adminCreateUser: (data: { fullName: string; email: string; password: string; role: string }) =>
+    apiFetch<any>("/admin/users", { method: "POST", body: JSON.stringify(data) }),
+  adminUpdateRole: (userId: string, role: string) =>
+    apiFetch<any>(`/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ role }) }),
 };

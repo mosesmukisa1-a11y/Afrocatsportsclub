@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Save, RotateCcw, Plus, Minus, Trophy, AlertTriangle, CheckCircle2, Zap, Shield, Target, Hand, ArrowUpCircle, Loader2 } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
-import { Badge } from "@/components/ui/badge";
+
 
 type StatKey = "spikesKill" | "spikesError" | "servesAce" | "servesError" | "blocksSolo" | "blocksAssist" | "receivePerfect" | "receiveError" | "digs" | "settingAssist" | "settingError";
 
@@ -142,7 +142,7 @@ function PlayerStatCard({
                 {getInitials(player.firstName, player.lastName)}
               </div>
             )}
-            <div className="absolute -bottom-1 -right-1 bg-afrocat-teal text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-afrocat-card">
+            <div className="absolute -bottom-1 -right-1 bg-afrocat-teal text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-afrocat-card" data-testid={`badge-jersey-${player.id}`}>
               {player.jerseyNo}
             </div>
           </div>
@@ -150,9 +150,9 @@ function PlayerStatCard({
             <h3 className="font-display font-bold text-sm truncate text-afrocat-text" data-testid={`text-player-name-${player.id}`}>
               {player.firstName} {player.lastName}
             </h3>
-            <Badge variant="secondary" className="text-[10px] mt-0.5" data-testid={`badge-position-${player.id}`}>
+            <span className="inline-block text-[10px] mt-0.5 px-2 py-0.5 rounded-full bg-afrocat-white-10 text-afrocat-muted font-medium" data-testid={`badge-position-${player.id}`}>
               {player.position}
-            </Badge>
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-3 mt-3">
@@ -600,9 +600,9 @@ export default function Stats() {
                         <span className="font-semibold text-sm">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
                         <span className="text-xs text-afrocat-muted ml-2">{p.position}</span>
                       </div>
-                      <Badge variant={p.points >= 0 ? "default" : "destructive"} data-testid={`text-performer-points-${i}`}>
+                      <span className={`inline-block text-xs font-bold px-2.5 py-0.5 rounded-full ${p.points >= 0 ? 'bg-afrocat-green-soft text-afrocat-green' : 'bg-afrocat-red-soft text-afrocat-red'}`} data-testid={`text-performer-points-${i}`}>
                         {p.points} pts
-                      </Badge>
+                      </span>
                     </div>
                   ))}
                 </div>

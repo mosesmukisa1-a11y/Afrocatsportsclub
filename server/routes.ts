@@ -388,6 +388,345 @@ export async function registerRoutes(
     } catch (e) { next(e); }
   });
 
+  // ─── PUBLIC SHOP ────────────────────────────────
+  app.get("/api/public/shop", async (_req, res, next) => {
+    try {
+      const items = await storage.getShopItems(true);
+      res.json(items);
+    } catch (e) { next(e); }
+  });
+
+  // ─── PUBLIC MEDIA ────────────────────────────────
+  app.get("/api/public/media", async (_req, res, next) => {
+    try {
+      const posts = await storage.getMediaPosts({ status: "APPROVED", visibility: "PUBLIC" });
+      res.json(posts);
+    } catch (e) { next(e); }
+  });
+
+  // ─── SHOP (ADMIN) ────────────────────────────────
+  app.get("/api/shop", requireAuth, async (_req, res, next) => {
+    try {
+      res.json(await storage.getShopItems());
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/shop", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        title: z.string().min(1),
+        description: z.string().optional(),
+        price: z.number().optional(),
+        currency: z.string().optional(),
+        imageUrl: z.string().optional(),
+        category: z.string().optional(),
+        isPublic: z.boolean().optional(),
+        isActive: z.boolean().optional(),
+      }).parse(req.body);
+      res.status(201).json(await storage.createShopItem(body));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/shop/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updateShopItem(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ message: "Item not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/shop/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      await storage.deleteShopItem(req.params.id);
+      res.json({ message: "Deleted" });
+    } catch (e) { next(e); }
+  });
+
+  // ─── MEDIA MANAGEMENT ────────────────────────────
+  app.get("/api/media", requireAuth, async (req, res, next) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const posts = await storage.getMediaPosts(status ? { status } : undefined);
+      const postsWithTags = await Promise.all(posts.map(async (p) => {
+        const tags = await storage.getMediaTags(p.id);
+        return { ...p, tags };
+      }));
+      res.json(postsWithTags);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/media/pending", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (_req, res, next) => {
+    try {
+      const posts = await storage.getMediaPosts({ status: "PENDING_REVIEW" });
+      res.json(posts);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/media", requireAuth, async (req, res, next) => {
+    try {
+      const isPrivileged = ["ADMIN","MANAGER","COACH"].includes(req.user!.role);
+      const body = z.object({
+        title: z.string().optional(),
+        caption: z.string().optional(),
+        imageUrl: z.string().min(1),
+        visibility: z.enum(["PUBLIC","TEAM_ONLY","PRIVATE"]).optional(),
+      }).parse(req.body);
+      res.status(201).json(await storage.createMediaPost({
+        ...body,
+        visibility: isPrivileged ? (body.visibility || "PUBLIC") : "TEAM_ONLY",
+        status: isPrivileged ? "APPROVED" : "PENDING_REVIEW",
+        uploadedByUserId: req.user!.userId,
+      }));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.post("/api/media/:id/approve", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updateMediaPost(req.params.id, { status: "APPROVED" } as any);
+      if (!updated) return res.status(404).json({ message: "Media not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/media/:id/reject", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updateMediaPost(req.params.id, { status: "REJECTED" } as any);
+      if (!updated) return res.status(404).json({ message: "Media not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── MEDIA TAGGING ────────────────────────────────
+  app.get("/api/media/:id/tags", requireAuth, async (req, res, next) => {
+    try {
+      res.json(await storage.getMediaTags(req.params.id));
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/media/:id/tags", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        taggedPlayerIds: z.array(z.string()).optional().default([]),
+        taggedUserIds: z.array(z.string()).optional().default([]),
+      }).parse(req.body);
+      const created = [];
+      for (const pid of body.taggedPlayerIds) {
+        created.push(await storage.createMediaTag({
+          mediaId: req.params.id,
+          taggedPlayerId: pid,
+          tagType: "PLAYER",
+          createdByUserId: req.user!.userId,
+        }));
+      }
+      for (const uid of body.taggedUserIds) {
+        created.push(await storage.createMediaTag({
+          mediaId: req.params.id,
+          taggedUserId: uid,
+          tagType: "STAFF",
+          createdByUserId: req.user!.userId,
+        }));
+      }
+      res.status(201).json(created);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.delete("/api/media/tags/:tagId", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      await storage.deleteMediaTag(req.params.tagId);
+      res.json({ message: "Tag removed" });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/media/:id/tag-request", requireAuth, requireRole(["PLAYER"]), async (req, res, next) => {
+    try {
+      if (!req.user!.playerId) return res.status(400).json({ message: "No player profile linked" });
+      res.status(201).json(await storage.createMediaTagRequest({
+        mediaId: req.params.id,
+        playerId: req.user!.playerId,
+      }));
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/media/tag-requests", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (_req, res, next) => {
+    try {
+      res.json(await storage.getMediaTagRequests("PENDING"));
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/media/tag-requests/:id/approve", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const tagReq = await storage.updateMediaTagRequest(req.params.id, { status: "APPROVED" } as any);
+      if (!tagReq) return res.status(404).json({ message: "Request not found" });
+      await storage.createMediaTag({
+        mediaId: tagReq.mediaId,
+        taggedPlayerId: tagReq.playerId,
+        tagType: "PLAYER",
+        createdByUserId: req.user!.userId,
+      });
+      res.json(tagReq);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/media/tag-requests/:id/reject", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updateMediaTagRequest(req.params.id, { status: "REJECTED" } as any);
+      if (!updated) return res.status(404).json({ message: "Request not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── PLAYER/COACH MEDIA (tagged photos) ──────────
+  app.get("/api/players/me/media", requireAuth, async (req, res, next) => {
+    try {
+      if (!req.user!.playerId) return res.json([]);
+      const tags = await storage.getMediaTagsByPlayer(req.user!.playerId);
+      const posts = [];
+      for (const tag of tags) {
+        const post = await storage.getMediaPost(tag.mediaId);
+        if (post && post.status === "APPROVED") posts.push(post);
+      }
+      res.json(posts);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/coaches/me/media", requireAuth, async (req, res, next) => {
+    try {
+      const tags = await storage.getMediaTagsByUser(req.user!.userId);
+      const posts = [];
+      for (const tag of tags) {
+        const post = await storage.getMediaPost(tag.mediaId);
+        if (post && post.status === "APPROVED") posts.push(post);
+      }
+      res.json(posts);
+    } catch (e) { next(e); }
+  });
+
+  // ─── ATTENDANCE SELF-CHECK-IN ─────────────────────
+  app.post("/api/attendance/sessions/:id/checkin", requireAuth, requireRole(["PLAYER"]), async (req, res, next) => {
+    try {
+      if (!req.user!.playerId) return res.status(400).json({ message: "No player profile linked" });
+      const session = await storage.getAttendanceSession(req.params.id);
+      if (!session) return res.status(404).json({ message: "Session not found" });
+
+      const existing = await storage.getAttendanceRecordBySessionAndPlayer(req.params.id, req.user!.playerId);
+      if (existing) return res.status(400).json({ message: "Already checked in" });
+
+      const now = new Date();
+      const sessionDate = new Date(session.sessionDate);
+      const isLate = now.getTime() - sessionDate.getTime() > 15 * 60 * 1000;
+
+      const record = await storage.createAttendanceRecord({
+        sessionId: req.params.id,
+        playerId: req.user!.playerId,
+        status: isLate ? "LATE" : "PRESENT",
+        selfMarked: true,
+      });
+      res.status(201).json(record);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/attendance/records/:id/confirm", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        status: z.enum(["PRESENT","LATE","ABSENT","EXCUSED"]).optional(),
+        notes: z.string().optional(),
+      }).parse(req.body);
+      const updated = await storage.updateAttendanceRecord(req.params.id, {
+        ...(body.status ? { status: body.status } : {}),
+        ...(body.notes ? { reason: body.notes } : {}),
+        confirmedByUserId: req.user!.userId,
+        confirmedAt: new Date(),
+      } as any);
+      if (!updated) return res.status(404).json({ message: "Record not found" });
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.get("/api/attendance/pending-confirmations", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (_req, res, next) => {
+    try {
+      const sessions = await storage.getAttendanceSessions();
+      const pending: any[] = [];
+      for (const session of sessions) {
+        const records = await storage.getAttendanceRecords(session.id);
+        const unconfirmed = records.filter(r => r.selfMarked && !r.confirmedByUserId);
+        if (unconfirmed.length > 0) {
+          pending.push({ session, records: unconfirmed });
+        }
+      }
+      res.json(pending);
+    } catch (e) { next(e); }
+  });
+
+  // ─── ADMIN CREATE USER ────────────────────────────
+  app.post("/api/admin/users", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        fullName: z.string().min(1),
+        email: z.string().email(),
+        password: z.string().min(6),
+        role: z.enum(["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL","PLAYER"]),
+      }).parse(req.body);
+
+      const existing = await storage.getUserByEmail(body.email);
+      if (existing) return res.status(400).json({ message: "Email already registered" });
+
+      const passwordHash = await hashPassword(body.password);
+      let playerId: string | null = null;
+      if (body.role === "PLAYER") {
+        const nameParts = body.fullName.trim().split(/\s+/);
+        const player = await storage.createPlayer({
+          firstName: nameParts[0] || body.fullName,
+          lastName: nameParts.slice(1).join(" ") || "",
+          email: body.email,
+          status: "ACTIVE",
+          eligibilityStatus: "ELIGIBLE",
+          registrationStatus: "APPROVED",
+        });
+        playerId = player.id;
+      }
+
+      const user = await storage.createUser({
+        fullName: body.fullName,
+        email: body.email,
+        passwordHash,
+        role: body.role,
+        playerId,
+        emailVerified: true,
+        accountStatus: "ACTIVE",
+      });
+
+      res.status(201).json({ id: user.id, fullName: user.fullName, email: user.email, role: user.role });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/admin/users/:id/role", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const body = z.object({ role: z.enum(["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL","PLAYER"]) }).parse(req.body);
+      const user = await storage.getUser(req.params.id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const updated = await storage.updateUser(req.params.id, { role: body.role } as any);
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
   // ─── TEAMS ───────────────────────────────────────
   app.get("/api/teams", requireAuth, async (_req, res, next) => {
     try { res.json(await storage.getTeams()); } catch (e) { next(e); }
@@ -1493,6 +1832,12 @@ th{background:#0d7377;color:white}
       const team = await storage.getTeam(body.teamId);
       if (!team) return res.status(404).json({ message: "Team not found" });
 
+      if (req.user!.role === "COACH") {
+        const assignments = await storage.getCoachAssignmentsByTeam(body.teamId);
+        const isAssigned = assignments.some(a => a.coachUserId === req.user!.userId && a.active);
+        if (!isAssigned) return res.status(403).json({ message: "You are not assigned to this team" });
+      }
+
       let playerList;
       if (body.selectedPlayerIds && body.selectedPlayerIds.length > 0) {
         const allPlayers = await storage.getPlayersByTeam(body.teamId);
@@ -1987,6 +2332,26 @@ th{background:#0d7377;color:white}
         }
       }
 
+      const motivationalMessages: string[] = [];
+      const attRate = attendanceSummary.total > 0 ? ((attendanceSummary.present + attendanceSummary.late) / attendanceSummary.total) * 100 : 100;
+      if (attRate >= 90) motivationalMessages.push("🔥 Elite discipline! Keep leading by example.");
+      else if (attRate >= 70) motivationalMessages.push("✅ Good consistency — aim for 90% attendance this month.");
+      else if (attendanceSummary.total > 0) motivationalMessages.push("⚠️ Attendance is holding you back. Let's commit to training this week.");
+
+      if (statsWithMatch.length >= 3) {
+        const last3 = statsWithMatch.slice(0, 3);
+        const trend = last3.map(s => s.pointsTotal ?? 0);
+        if (trend[0] > trend[1] && trend[1] > trend[2]) motivationalMessages.push("📈 Great progress! Keep building on your strengths.");
+        else if (trend[0] < trend[1] && trend[1] < trend[2]) motivationalMessages.push("🛠️ Tough stretch — focus on your Smart Focus areas.");
+      }
+
+      const totalErrors = (totals.spikesError || 0) + (totals.servesError || 0) + (totals.receiveError || 0);
+      if (allStats.length > 0 && totalErrors / allStats.length > 3) {
+        const worstError = Math.max(totals.spikesError || 0, totals.servesError || 0, totals.receiveError || 0);
+        const area = worstError === (totals.servesError || 0) ? "Serving" : worstError === (totals.spikesError || 0) ? "Spiking" : "Receiving";
+        motivationalMessages.push(`🎯 Focus: ${area} consistency — reduce errors next session.`);
+      }
+
       res.json({
         player: {
           id: player.id,
@@ -2002,6 +2367,7 @@ th{background:#0d7377;color:white}
         totals,
         recentStats: statsWithMatch,
         performanceTrend,
+        motivationalMessages,
         smartFocusHistory: smartFocusHistory.map(f => ({
           id: f.id,
           matchId: f.matchId,

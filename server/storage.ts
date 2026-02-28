@@ -18,7 +18,11 @@ import type {
   NvfTransferFeeSchedule, InsertNvfTransferFeeSchedule,
   PlayerTransferCase, InsertPlayerTransferCase,
   SystemSecuritySettings, InsertSystemSecuritySettings,
-  PasswordResetAudit, InsertPasswordResetAudit
+  PasswordResetAudit, InsertPasswordResetAudit,
+  ShopItem, InsertShopItem,
+  MediaPost, InsertMediaPost,
+  MediaTag, InsertMediaTag,
+  MediaTagRequest, InsertMediaTagRequest
 } from "@shared/schema";
 
 export interface IStorage {
@@ -126,6 +130,25 @@ export interface IStorage {
   getUserByResetToken(tokenHash: string): Promise<User | undefined>;
   createPasswordResetAudit(audit: InsertPasswordResetAudit): Promise<PasswordResetAudit>;
   getPasswordResetAudits(targetUserId?: string): Promise<PasswordResetAudit[]>;
+  getShopItems(publicOnly?: boolean): Promise<ShopItem[]>;
+  getShopItem(id: string): Promise<ShopItem | undefined>;
+  createShopItem(item: InsertShopItem): Promise<ShopItem>;
+  updateShopItem(id: string, data: Partial<InsertShopItem>): Promise<ShopItem | undefined>;
+  deleteShopItem(id: string): Promise<void>;
+  getMediaPosts(filter?: { status?: string; visibility?: string }): Promise<MediaPost[]>;
+  getMediaPost(id: string): Promise<MediaPost | undefined>;
+  createMediaPost(post: InsertMediaPost): Promise<MediaPost>;
+  updateMediaPost(id: string, data: Partial<InsertMediaPost>): Promise<MediaPost | undefined>;
+  getMediaTags(mediaId: string): Promise<MediaTag[]>;
+  getMediaTagsByPlayer(playerId: string): Promise<MediaTag[]>;
+  getMediaTagsByUser(userId: string): Promise<MediaTag[]>;
+  createMediaTag(tag: InsertMediaTag): Promise<MediaTag>;
+  deleteMediaTag(id: string): Promise<void>;
+  getMediaTagRequests(status?: string): Promise<MediaTagRequest[]>;
+  createMediaTagRequest(req: InsertMediaTagRequest): Promise<MediaTagRequest>;
+  updateMediaTagRequest(id: string, data: Partial<InsertMediaTagRequest>): Promise<MediaTagRequest | undefined>;
+  updateAttendanceRecord(id: string, data: Partial<InsertAttendanceRecord>): Promise<AttendanceRecord | undefined>;
+  getAttendanceRecordBySessionAndPlayer(sessionId: string, playerId: string): Promise<AttendanceRecord | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -578,6 +601,97 @@ export class DatabaseStorage implements IStorage {
     }
     return db.select().from(schema.passwordResetAudits)
       .orderBy(desc(schema.passwordResetAudits.createdAt));
+  }
+
+  async getShopItems(publicOnly?: boolean) {
+    if (publicOnly) {
+      return db.select().from(schema.shopItems)
+        .where(and(eq(schema.shopItems.isPublic, true), eq(schema.shopItems.isActive, true)))
+        .orderBy(desc(schema.shopItems.createdAt));
+    }
+    return db.select().from(schema.shopItems).orderBy(desc(schema.shopItems.createdAt));
+  }
+  async getShopItem(id: string) {
+    const [item] = await db.select().from(schema.shopItems).where(eq(schema.shopItems.id, id));
+    return item;
+  }
+  async createShopItem(item: InsertShopItem) {
+    const [created] = await db.insert(schema.shopItems).values(item).returning();
+    return created;
+  }
+  async updateShopItem(id: string, data: Partial<InsertShopItem>) {
+    const [updated] = await db.update(schema.shopItems).set(data).where(eq(schema.shopItems.id, id)).returning();
+    return updated;
+  }
+  async deleteShopItem(id: string) {
+    await db.delete(schema.shopItems).where(eq(schema.shopItems.id, id));
+  }
+
+  async getMediaPosts(filter?: { status?: string; visibility?: string }) {
+    let q = db.select().from(schema.mediaPosts);
+    const conditions = [];
+    if (filter?.status) conditions.push(eq(schema.mediaPosts.status, filter.status as any));
+    if (filter?.visibility) conditions.push(eq(schema.mediaPosts.visibility, filter.visibility as any));
+    if (conditions.length > 0) {
+      return q.where(and(...conditions)).orderBy(desc(schema.mediaPosts.createdAt));
+    }
+    return q.orderBy(desc(schema.mediaPosts.createdAt));
+  }
+  async getMediaPost(id: string) {
+    const [post] = await db.select().from(schema.mediaPosts).where(eq(schema.mediaPosts.id, id));
+    return post;
+  }
+  async createMediaPost(post: InsertMediaPost) {
+    const [created] = await db.insert(schema.mediaPosts).values(post).returning();
+    return created;
+  }
+  async updateMediaPost(id: string, data: Partial<InsertMediaPost>) {
+    const [updated] = await db.update(schema.mediaPosts).set(data).where(eq(schema.mediaPosts.id, id)).returning();
+    return updated;
+  }
+
+  async getMediaTags(mediaId: string) {
+    return db.select().from(schema.mediaTags).where(eq(schema.mediaTags.mediaId, mediaId));
+  }
+  async getMediaTagsByPlayer(playerId: string) {
+    return db.select().from(schema.mediaTags).where(eq(schema.mediaTags.taggedPlayerId, playerId));
+  }
+  async getMediaTagsByUser(userId: string) {
+    return db.select().from(schema.mediaTags).where(eq(schema.mediaTags.taggedUserId, userId));
+  }
+  async createMediaTag(tag: InsertMediaTag) {
+    const [created] = await db.insert(schema.mediaTags).values(tag).returning();
+    return created;
+  }
+  async deleteMediaTag(id: string) {
+    await db.delete(schema.mediaTags).where(eq(schema.mediaTags.id, id));
+  }
+
+  async getMediaTagRequests(status?: string) {
+    if (status) {
+      return db.select().from(schema.mediaTagRequests)
+        .where(eq(schema.mediaTagRequests.status, status as any))
+        .orderBy(desc(schema.mediaTagRequests.createdAt));
+    }
+    return db.select().from(schema.mediaTagRequests).orderBy(desc(schema.mediaTagRequests.createdAt));
+  }
+  async createMediaTagRequest(req: InsertMediaTagRequest) {
+    const [created] = await db.insert(schema.mediaTagRequests).values(req).returning();
+    return created;
+  }
+  async updateMediaTagRequest(id: string, data: Partial<InsertMediaTagRequest>) {
+    const [updated] = await db.update(schema.mediaTagRequests).set(data).where(eq(schema.mediaTagRequests.id, id)).returning();
+    return updated;
+  }
+
+  async updateAttendanceRecord(id: string, data: Partial<InsertAttendanceRecord>) {
+    const [updated] = await db.update(schema.attendanceRecords).set(data).where(eq(schema.attendanceRecords.id, id)).returning();
+    return updated;
+  }
+  async getAttendanceRecordBySessionAndPlayer(sessionId: string, playerId: string) {
+    const [record] = await db.select().from(schema.attendanceRecords)
+      .where(and(eq(schema.attendanceRecords.sessionId, sessionId), eq(schema.attendanceRecords.playerId, playerId)));
+    return record;
   }
 }
 

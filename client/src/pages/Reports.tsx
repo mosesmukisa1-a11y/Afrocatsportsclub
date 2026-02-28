@@ -198,7 +198,7 @@ export default function Reports() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h3 className="text-lg font-display font-semibold text-afrocat-text flex items-center gap-2"><FileText className="h-5 w-5" /> Match Report</h3>
               <Select value={selectedMatchId} onValueChange={setSelectedMatchId}>
-                <SelectTrigger className="w-full md:w-[350px]" data-testid="select-report-match">
+                <SelectTrigger className="w-full md:w-[350px] bg-afrocat-card border-afrocat-border text-afrocat-text" data-testid="select-report-match">
                   <SelectValue placeholder="Select a match" />
                 </SelectTrigger>
                 <SelectContent>

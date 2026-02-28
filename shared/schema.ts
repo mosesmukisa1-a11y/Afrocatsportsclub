@@ -27,6 +27,10 @@ export const accountStatusEnum = pgEnum("account_status", ["PENDING_APPROVAL", "
 export const resetMethodEnum = pgEnum("reset_method", ["TEMP_PASSWORD", "ONE_TIME_LINK"]);
 export const approvalStatusEnum = pgEnum("approval_status", ["PENDING", "APPROVED", "REJECTED"]);
 export const registrationStatusEnum = pgEnum("registration_status", ["PENDING_APPROVAL", "APPROVED", "REJECTED"]);
+export const mediaVisibilityEnum = pgEnum("media_visibility", ["PUBLIC", "TEAM_ONLY", "PRIVATE"]);
+export const mediaStatusEnum = pgEnum("media_status", ["PENDING_REVIEW", "APPROVED", "REJECTED"]);
+export const tagTypeEnum = pgEnum("tag_type", ["PLAYER", "COACH", "ADMIN", "STAFF"]);
+export const mediaTagRequestStatusEnum = pgEnum("media_tag_request_status", ["PENDING", "APPROVED", "REJECTED"]);
 
 export const users = pgTable("users", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
@@ -166,6 +170,9 @@ export const attendanceRecords = pgTable("attendance_records", {
   playerId: varchar("player_id", { length: 36 }).notNull(),
   status: attendanceStatusEnum("status").notNull(),
   reason: text("reason"),
+  selfMarked: boolean("self_marked").notNull().default(false),
+  confirmedByUserId: varchar("confirmed_by_user_id", { length: 36 }),
+  confirmedAt: timestamp("confirmed_at"),
 });
 
 export const disciplineCases = pgTable("discipline_cases", {
@@ -225,6 +232,9 @@ export const coachAssignments = pgTable("coach_assignments", {
   startDate: text("start_date").notNull(),
   endDate: text("end_date"),
   active: boolean("active").notNull().default(true),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  isTemporary: boolean("is_temporary").notNull().default(false),
+  tempReason: text("temp_reason"),
 });
 
 export const coachPerformanceSnapshots = pgTable("coach_performance_snapshots", {
@@ -376,6 +386,53 @@ export const passwordResetAudits = pgTable("password_reset_audits", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const shopItems = pgTable("shop_items", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  description: text("description"),
+  price: real("price"),
+  currency: text("currency").default("NAD"),
+  imageUrl: text("image_url"),
+  category: text("category"),
+  isPublic: boolean("is_public").notNull().default(true),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const mediaPosts = pgTable("media_posts", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title"),
+  caption: text("caption"),
+  imageUrl: text("image_url").notNull(),
+  visibility: mediaVisibilityEnum("visibility").notNull().default("PUBLIC"),
+  status: mediaStatusEnum("status").notNull().default("PENDING_REVIEW"),
+  uploadedByUserId: varchar("uploaded_by_user_id", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const mediaTags = pgTable("media_tags", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  mediaId: varchar("media_id", { length: 36 }).notNull(),
+  taggedUserId: varchar("tagged_user_id", { length: 36 }),
+  taggedPlayerId: varchar("tagged_player_id", { length: 36 }),
+  tagType: tagTypeEnum("tag_type").notNull().default("PLAYER"),
+  createdByUserId: varchar("created_by_user_id", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const mediaTagRequests = pgTable("media_tag_requests", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  mediaId: varchar("media_id", { length: 36 }).notNull(),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  status: mediaTagRequestStatusEnum("status").notNull().default("PENDING"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertShopItemSchema = createInsertSchema(shopItems).omit({ id: true, createdAt: true });
+export const insertMediaPostSchema = createInsertSchema(mediaPosts).omit({ id: true, createdAt: true });
+export const insertMediaTagSchema = createInsertSchema(mediaTags).omit({ id: true, createdAt: true });
+export const insertMediaTagRequestSchema = createInsertSchema(mediaTagRequests).omit({ id: true, createdAt: true });
+
 export const insertPasswordResetAuditSchema = createInsertSchema(passwordResetAudits).omit({ id: true, createdAt: true });
 export const insertSystemSecuritySettingsSchema = createInsertSchema(systemSecuritySettings).omit({ createdAt: true, updatedAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
@@ -461,3 +518,11 @@ export type InsertSystemSecuritySettings = z.infer<typeof insertSystemSecuritySe
 export type SystemSecuritySettings = typeof systemSecuritySettings.$inferSelect;
 export type InsertPasswordResetAudit = z.infer<typeof insertPasswordResetAuditSchema>;
 export type PasswordResetAudit = typeof passwordResetAudits.$inferSelect;
+export type InsertShopItem = z.infer<typeof insertShopItemSchema>;
+export type ShopItem = typeof shopItems.$inferSelect;
+export type InsertMediaPost = z.infer<typeof insertMediaPostSchema>;
+export type MediaPost = typeof mediaPosts.$inferSelect;
+export type InsertMediaTag = z.infer<typeof insertMediaTagSchema>;
+export type MediaTag = typeof mediaTags.$inferSelect;
+export type InsertMediaTagRequest = z.infer<typeof insertMediaTagRequestSchema>;
+export type MediaTagRequest = typeof mediaTagRequests.$inferSelect;

@@ -5,7 +5,7 @@ import {
   Users, Trophy, DollarSign, Activity, ArrowUpRight, ArrowDownRight,
   Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
   User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
-  FileText, Bell, ChevronRight
+  FileText, Bell, ChevronRight, MessageCircle
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -286,7 +286,7 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <h2 className="text-xl font-display font-bold text-afrocat-text">{playerDash.player?.fullName}</h2>
+                  <h2 className="text-xl font-display font-bold text-afrocat-text">{playerDash.player?.firstName} {playerDash.player?.lastName}</h2>
                   <div className="flex flex-wrap gap-2 mt-1">
                     {playerDash.player?.jerseyNo && (
                       <Badge className="bg-afrocat-gold-soft text-afrocat-gold border-0 font-bold" data-testid="badge-jersey">#{playerDash.player.jerseyNo}</Badge>
@@ -301,6 +301,21 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+
+            {(playerDash.motivationalMessages || []).length > 0 && (
+              <div className="afrocat-card p-5" data-testid="player-motivational-messages">
+                <h3 className="flex items-center gap-2 text-base font-bold text-afrocat-text mb-3">
+                  <MessageCircle className="h-4 w-4 text-afrocat-gold" /> Coach's Corner
+                </h3>
+                <div className="space-y-2">
+                  {playerDash.motivationalMessages.map((msg: string, i: number) => (
+                    <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-afrocat-white-3" data-testid={`motivational-msg-${i}`}>
+                      <span className="text-sm text-afrocat-text" data-testid={`text-motivational-msg-${i}`}>{msg}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {playerDash.totals && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

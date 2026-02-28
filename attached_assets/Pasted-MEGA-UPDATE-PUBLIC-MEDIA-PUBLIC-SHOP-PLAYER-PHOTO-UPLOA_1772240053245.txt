@@ -1,0 +1,304 @@
+MEGA UPDATE: PUBLIC MEDIA + PUBLIC SHOP + PLAYER PHOTO UPLOAD + TAGGING + DASHBOARD SYNC + MOTIVATION + ATTENDANCE SELF-CHECK (COACH CONFIRMS) + O2BIS PERMISSIONS + COACH ALLOCATION + ADMIN MANAGEMENT
+
+GOAL SUMMARY
+1) Add a PUBLIC landing page for anyone opening the system:
+   - Media (photos gallery)
+   - Shop (products/merch/services)
+   - Basic club info + login/register buttons
+2) Admin can upload media photos to gallery.
+3) Players can upload their own sports photos from their dashboard (subject to approval).
+4) Media photos must be identifiable and appear on dashboards of people in the photo:
+   - Use manual tagging (no face recognition): tag players/coaches in a photo.
+5) Add motivational messages on Player Dashboard based on attendance + stats trends.
+6) Let players record their own attendance (check-in), but COACH must confirm.
+7) O-2bis downloads: only Admin + the Team’s assigned Coach can generate/download.
+8) Admin can allocate/assign a coach to a team (and temporary replacement if coach absent).
+9) Admin can add other admins (create users with ADMIN role) and manage staff roles.
+
+SECURITY & PRIVACY (NON-NEGOTIABLE)
+- No automatic face recognition.
+- Manual tags only: Admin/Coach can tag; players can request tags.
+- Media visibility rules:
+  - Public gallery shows only APPROVED public media
+  - Internal gallery can show team-only media if marked private
+
+DATABASE (Prisma)
+
+A) PUBLIC SHOP
+ShopItem {
+  id        String @id @default(cuid())
+  tenantId  String
+  title     String
+  description String?
+  price     Float?
+  currency  String @default("NAD")
+  imageUrl  String?
+  category  String?
+  isPublic  Boolean @default(true)
+  isActive  Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+B) MEDIA GALLERY (photos)
+MediaPost {
+  id          String @id @default(cuid())
+  tenantId    String
+  title       String?
+  caption     String?
+  imageUrl    String
+  visibility  MediaVisibility @default(PUBLIC)  // public vs internal
+  status      MediaStatus @default(PENDING_REVIEW)
+  uploadedByUserId String
+  createdAt   DateTime @default(now())
+
+  tags MediaTag[]
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+enum MediaVisibility { PUBLIC TEAM_ONLY PRIVATE }
+enum MediaStatus { PENDING_REVIEW APPROVED REJECTED }
+
+MediaTag {
+  id         String @id @default(cuid())
+  tenantId   String
+  mediaId    String
+  taggedUserId String?   // if tagging staff
+  taggedPlayerId String? // if tagging player profile
+  tagType    TagType @default(PLAYER)
+  createdByUserId String
+  createdAt  DateTime @default(now())
+
+  media MediaPost @relation(fields:[mediaId], references:[id])
+
+  @@index([tenantId])
+  @@index([mediaId])
+  @@index([taggedPlayerId])
+}
+
+enum TagType { PLAYER COACH ADMIN STAFF }
+
+C) PLAYER PHOTO UPLOAD REQUESTS (optional but recommended)
+MediaTagRequest {
+  id         String @id @default(cuid())
+  tenantId   String
+  mediaId    String
+  playerId   String
+  status     RequestStatus @default(PENDING)
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+enum RequestStatus { PENDING APPROVED REJECTED }
+
+D) ATTENDANCE SELF-CHECK IN + COACH CONFIRMATION
+Add/extend attendance models to support:
+- player submits check-in
+- coach confirms
+
+AttendanceRecord {
+  id          String @id @default(cuid())
+  tenantId    String
+  sessionId   String
+  playerId    String
+  status      AttendanceStatus  // PRESENT/LATE/ABSENT
+  selfMarked  Boolean @default(false)
+  confirmedByUserId String?   // coach/admin who confirms
+  confirmedAt DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([sessionId])
+  @@index([playerId])
+}
+
+AttendanceSession {
+  id        String @id @default(cuid())
+  tenantId  String
+  teamId    String?
+  sessionDate DateTime
+  startTime String?
+  venue     String?
+  type      SessionType @default(TRAINING) // TRAINING/MATCH
+  createdByUserId String
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([sessionDate])
+}
+
+enum SessionType { TRAINING MATCH }
+
+E) TEAM COACH ASSIGNMENT + TEMP REPLACEMENT
+CoachAssignment already exists; extend with "isPrimary" and "isTemporary" + dates if missing:
+CoachAssignment {
+  ...
+  isPrimary   Boolean @default(false)
+  isTemporary Boolean @default(false)
+  tempReason  String?
+}
+
+F) ADMIN MANAGEMENT
+User role already exists.
+Add admin create/update endpoints (no schema change required).
+Optional audit:
+AdminActionLog { id, tenantId, adminUserId, action, targetUserId?, createdAt }
+
+PUBLIC LANDING PAGES (CLIENT)
+
+1) Add Public Home page "/"
+Visible to anyone (no login required):
+- Afrocat branding
+- CTA buttons: Login / Register
+- Sections:
+  A) Media Gallery (PUBLIC + APPROVED only)
+  B) Shop (PUBLIC + ACTIVE)
+  C) Next fixture preview (optional)
+  D) Contact info (optional)
+
+2) Media Public route: "/media"
+- Shows approved public posts only
+- Infinite scroll or pagination
+
+3) Shop Public route: "/shop"
+- Shows items, price, contact CTA (“Contact Admin/WhatsApp” if you want)
+- No payment processing needed now (MVP)
+
+MEDIA UPLOAD & TAGGING (CLIENT + API)
+
+API
+1) Public fetch (no auth):
+GET /public/media?cursor=
+- returns APPROVED + PUBLIC
+
+GET /public/shop
+- returns isPublic=true and isActive=true
+
+2) Admin/Coach media management:
+POST /media (upload image, title, caption, visibility)
+- RBAC: Admin/Manager can upload
+- Players can upload to PENDING_REVIEW only
+
+POST /media/:id/approve   (Admin/Manager)
+POST /media/:id/reject    (Admin/Manager)
+GET /media/pending        (Admin/Manager/Coach optional)
+
+3) Tagging:
+POST /media/:id/tags
+Body: { taggedPlayerIds:[], taggedUserIds:[] }
+- RBAC: Admin/Manager/Coach can tag
+- Players can request tags via:
+POST /media/:id/tag-request
+Body: { playerId }  // only self
+Admin approves tag requests.
+
+4) Dashboard media:
+GET /players/me/media
+- returns media posts where MediaTag.taggedPlayerId == playerId AND status=APPROVED
+
+GET /coaches/me/media
+- returns media posts where taggedUserId == coachUserId AND status=APPROVED
+
+UI
+- Admin: Media Manager page
+  - Upload, approve/reject, set visibility
+  - Tag people in photo (multi-select players/coaches)
+- Player dashboard:
+  - “My Media” section (photos they appear in)
+  - “Upload My Sports Photo” button -> creates PENDING_REVIEW MediaPost with visibility TEAM_ONLY or PRIVATE default
+
+MOTIVATIONAL MESSAGES (PLAYER DASHBOARD)
+
+Implement a small engine that generates 1–3 messages daily based on:
+- attendance last 30 days
+- last match pointsTotal trend
+- smart focus completion (if tracked)
+Rules examples:
+A) Attendance
+- if attendanceRate >= 90%: “🔥 Elite discipline! Keep leading by example.”
+- if 70–89%: “✅ Good consistency — aim for 90% this month.”
+- if <70%: “⚠️ Attendance is holding you back. Let’s commit to training this week.”
+
+B) Performance trend (last 3 matches)
+- improving: “📈 Great progress! Keep building on your strengths.”
+- dropping: “🛠️ Tough stretch — focus on your Smart Focus areas.”
+
+C) Errors high (serve/spike/receive)
+- “🎯 Focus: Serving consistency — reduce errors next session.”
+
+Implementation
+- Return messages from /players/me/dashboard
+OR
+- Create table PlayerMotivationMessage (optional) and refresh daily via cron.
+
+ATTENDANCE SELF-CHECK (PLAYER) + COACH CONFIRM
+
+UI
+- Player sees upcoming training sessions
+- For each session, a “Check In” button:
+  - sets AttendanceRecord.selfMarked=true, status=PRESENT (or LATE if after start time)
+- Coach sees “Pending Confirmations” list:
+  - confirm or change to LATE/ABSENT
+  - confirmedByUserId set
+
+API
+POST /attendance/sessions/:id/checkin (PLAYER only)
+- create/upsert AttendanceRecord with selfMarked=true
+
+POST /attendance/records/:id/confirm (COACH/Admin)
+Body: { status, notes }
+- sets confirmedAt and confirmedByUserId
+
+O-2BIS PERMISSIONS (IMPORTANT)
+
+Ensure generation & download are restricted:
+- Admin/Manager: always allowed
+- Coach: allowed ONLY if assigned to that team (CoachAssignment active & matches date)
+- Others: not allowed
+
+Enforce in:
+POST /o2bis/generate
+GET /teams/:teamId/o2bis
+GET /matches/:matchId/documents (filtering permissions)
+
+COACH ALLOCATION / REPLACEMENT
+
+Admin UI:
+- Team page -> “Coach Assignment”
+  - assign primary coach
+  - assign assistant
+  - assign temporary coach with date range + reason (coach absent)
+Coach dashboard:
+- show teams coached (primary + temporary)
+
+ADMIN CAN ADD OTHER ADMINS
+
+Admin UI:
+- Admin -> Users
+  - Create user
+  - Set role = ADMIN / MANAGER / COACH / MEDICAL / FINANCE / STATISTICIAN / PLAYER
+  - If creating COACH, create Coach profile linkage
+  - If creating PLAYER, optionally link to Player profile
+API:
+POST /admin/users (ADMIN only)
+PUT /admin/users/:id/role (ADMIN only)
+Disable dangerous actions:
+- Prevent non-admin from elevating roles
+- Optional: prevent removing last admin in tenant
+
+DELIVERABLE
+Implement:
+- schema migrations
+- public pages (Home/Media/Shop)
+- media upload + approval + tagging + dashboard sync
+- motivational messages on player dashboard
+- attendance self-check + coach confirmation
+- O2bis permission enforcement (Admin + assigned Coach only)
+- coach assignment UI with temporary replacement
+- admin user management
+Update README accordingly.
