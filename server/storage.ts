@@ -207,6 +207,12 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
   async deletePlayer(id: string) {
+    await db.delete(schema.playerMatchStats).where(eq(schema.playerMatchStats.playerId, id));
+    await db.delete(schema.attendanceRecords).where(eq(schema.attendanceRecords.playerId, id));
+    await db.delete(schema.injuries).where(eq(schema.injuries.playerId, id));
+    await db.delete(schema.awards).where(eq(schema.awards.playerId, id));
+    await db.delete(schema.playerContracts).where(eq(schema.playerContracts.playerId, id));
+    await db.delete(schema.smartFocus).where(eq(schema.smartFocus.playerId, id));
     await db.delete(schema.players).where(eq(schema.players.id, id));
   }
 

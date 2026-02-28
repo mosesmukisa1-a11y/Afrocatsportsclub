@@ -5,10 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, FileText, Eye, Printer, User, Phone, Heart, Shield } from "lucide-react";
+import { Plus, Search, Eye, Printer, Shield, Trash2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -16,7 +14,6 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 
 const POSITIONS = ["Setter", "Outside Hitter", "Opposite", "Middle Blocker", "Libero"];
-const STATUSES = ["ACTIVE", "SUSPENDED", "INJURED", "SUSPENDED_CONTRACT"] as const;
 
 const emptyForm = {
   firstName: "", lastName: "", gender: "", jerseyNo: 0, position: "", teamId: "",
@@ -40,6 +37,7 @@ export default function Players() {
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const createMut = useMutation({
     mutationFn: () => api.createPlayer({ ...form, jerseyNo: Number(form.jerseyNo) || undefined }),
@@ -50,6 +48,12 @@ export default function Players() {
   const updateMut = useMutation({
     mutationFn: () => api.updatePlayer(selectedPlayer.id, { ...form, jerseyNo: Number(form.jerseyNo) || undefined }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/players"] }); setViewOpen(false); toast({ title: "Player updated" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.deletePlayer(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/players"] }); setDeleteConfirmId(null); setViewOpen(false); toast({ title: "Player removed" }); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -90,6 +94,7 @@ export default function Players() {
 
   const canCreate = user && ["ADMIN", "MANAGER"].includes(user.role);
   const canEdit = user && ["ADMIN", "MANAGER"].includes(user.role);
+  const canDelete = user && ["ADMIN"].includes(user.role);
   const set = (field: string, value: string | number) => setForm(prev => ({ ...prev, [field]: value }));
 
   const PlayerFormFields = ({ isCreate }: { isCreate?: boolean }) => (
@@ -102,78 +107,78 @@ export default function Players() {
       </TabsList>
       <TabsContent value="identity" className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>First Name *</Label><Input value={form.firstName} onChange={e => set("firstName", e.target.value)} required data-testid="input-firstName" /></div>
-          <div><Label>Last Name *</Label><Input value={form.lastName} onChange={e => set("lastName", e.target.value)} required data-testid="input-lastName" /></div>
+          <div><Label className="text-afrocat-muted text-sm">First Name *</Label><Input value={form.firstName} onChange={e => set("firstName", e.target.value)} required data-testid="input-firstName" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Last Name *</Label><Input value={form.lastName} onChange={e => set("lastName", e.target.value)} required data-testid="input-lastName" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
-        <div><Label>Team</Label>
+        <div><Label className="text-afrocat-muted text-sm">Team</Label>
           <Select value={form.teamId} onValueChange={v => set("teamId", v)}>
-            <SelectTrigger data-testid="select-team"><SelectValue placeholder="Select team" /></SelectTrigger>
+            <SelectTrigger data-testid="select-team" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"><SelectValue placeholder="Select team" /></SelectTrigger>
             <SelectContent>{teams.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Jersey #</Label><Input type="number" value={form.jerseyNo} onChange={e => set("jerseyNo", Number(e.target.value))} data-testid="input-jerseyNo" /></div>
-          <div><Label>Position</Label>
+          <div><Label className="text-afrocat-muted text-sm">Jersey #</Label><Input type="number" value={form.jerseyNo} onChange={e => set("jerseyNo", Number(e.target.value))} data-testid="input-jerseyNo" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Position</Label>
             <Select value={form.position} onValueChange={v => set("position", v)}>
-              <SelectTrigger data-testid="select-position"><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectTrigger data-testid="select-position" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>{POSITIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Gender</Label>
+          <div><Label className="text-afrocat-muted text-sm">Gender</Label>
             <Select value={form.gender} onValueChange={v => set("gender", v)}>
-              <SelectTrigger data-testid="select-gender"><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectTrigger data-testid="select-gender" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent><SelectItem value="Male">Male</SelectItem><SelectItem value="Female">Female</SelectItem></SelectContent>
             </Select>
           </div>
-          <div><Label>Date of Birth</Label><Input type="date" value={form.dob} onChange={e => set("dob", e.target.value)} data-testid="input-dob" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Date of Birth</Label><Input type="date" value={form.dob} onChange={e => set("dob", e.target.value)} data-testid="input-dob" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Nationality</Label><Input value={form.nationality} onChange={e => set("nationality", e.target.value)} data-testid="input-nationality" /></div>
-          <div><Label>ID/Passport</Label><Input value={form.idNumber} onChange={e => set("idNumber", e.target.value)} data-testid="input-idNumber" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Nationality</Label><Input value={form.nationality} onChange={e => set("nationality", e.target.value)} data-testid="input-nationality" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+          <div><Label className="text-afrocat-muted text-sm">ID/Passport</Label><Input value={form.idNumber} onChange={e => set("idNumber", e.target.value)} data-testid="input-idNumber" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
-        <div><Label>Photo URL</Label><Input value={form.photoUrl} onChange={e => set("photoUrl", e.target.value)} placeholder="https://..." data-testid="input-photoUrl" /></div>
+        <div><Label className="text-afrocat-muted text-sm">Photo URL</Label><Input value={form.photoUrl} onChange={e => set("photoUrl", e.target.value)} placeholder="https://..." data-testid="input-photoUrl" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
       </TabsContent>
       <TabsContent value="contact" className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Phone</Label><Input value={form.phone} onChange={e => set("phone", e.target.value)} data-testid="input-phone" /></div>
-          <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => set("email", e.target.value)} data-testid="input-playerEmail" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Phone</Label><Input value={form.phone} onChange={e => set("phone", e.target.value)} data-testid="input-phone" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Email</Label><Input type="email" value={form.email} onChange={e => set("email", e.target.value)} data-testid="input-playerEmail" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
-        <div><Label>Home Address</Label><Input value={form.homeAddress} onChange={e => set("homeAddress", e.target.value)} data-testid="input-homeAddress" /></div>
+        <div><Label className="text-afrocat-muted text-sm">Home Address</Label><Input value={form.homeAddress} onChange={e => set("homeAddress", e.target.value)} data-testid="input-homeAddress" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Town</Label><Input value={form.town} onChange={e => set("town", e.target.value)} data-testid="input-town" /></div>
-          <div><Label>Region</Label><Input value={form.region} onChange={e => set("region", e.target.value)} data-testid="input-region" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Town</Label><Input value={form.town} onChange={e => set("town", e.target.value)} data-testid="input-town" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Region</Label><Input value={form.region} onChange={e => set("region", e.target.value)} data-testid="input-region" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
       </TabsContent>
       <TabsContent value="kin" className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Name</Label><Input value={form.nextOfKinName} onChange={e => set("nextOfKinName", e.target.value)} data-testid="input-nextOfKinName" /></div>
-          <div><Label>Relationship</Label><Input value={form.nextOfKinRelation} onChange={e => set("nextOfKinRelation", e.target.value)} data-testid="input-nextOfKinRelation" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Name</Label><Input value={form.nextOfKinName} onChange={e => set("nextOfKinName", e.target.value)} data-testid="input-nextOfKinName" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Relationship</Label><Input value={form.nextOfKinRelation} onChange={e => set("nextOfKinRelation", e.target.value)} data-testid="input-nextOfKinRelation" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Phone</Label><Input value={form.nextOfKinPhone} onChange={e => set("nextOfKinPhone", e.target.value)} data-testid="input-nextOfKinPhone" /></div>
-          <div><Label>Address</Label><Input value={form.nextOfKinAddress} onChange={e => set("nextOfKinAddress", e.target.value)} data-testid="input-nextOfKinAddress" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Phone</Label><Input value={form.nextOfKinPhone} onChange={e => set("nextOfKinPhone", e.target.value)} data-testid="input-nextOfKinPhone" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Address</Label><Input value={form.nextOfKinAddress} onChange={e => set("nextOfKinAddress", e.target.value)} data-testid="input-nextOfKinAddress" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
-        <Card className="bg-muted/30 border-dashed">
-          <CardHeader className="py-3"><CardTitle className="text-sm flex items-center gap-1"><Shield className="h-3 w-3" /> Emergency Contact</CardTitle></CardHeader>
-          <CardContent className="grid grid-cols-2 gap-3 pb-4">
-            <div><Label>Name</Label><Input value={form.emergencyContactName} onChange={e => set("emergencyContactName", e.target.value)} data-testid="input-emergencyContactName" /></div>
-            <div><Label>Phone</Label><Input value={form.emergencyContactPhone} onChange={e => set("emergencyContactPhone", e.target.value)} data-testid="input-emergencyContactPhone" /></div>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-dashed border-afrocat-border bg-afrocat-white-3 p-4">
+          <h4 className="text-sm font-bold text-afrocat-text flex items-center gap-1 mb-3"><Shield className="h-3 w-3 text-afrocat-teal" /> Emergency Contact</h4>
+          <div className="grid grid-cols-2 gap-3">
+            <div><Label className="text-afrocat-muted text-sm">Name</Label><Input value={form.emergencyContactName} onChange={e => set("emergencyContactName", e.target.value)} data-testid="input-emergencyContactName" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+            <div><Label className="text-afrocat-muted text-sm">Phone</Label><Input value={form.emergencyContactPhone} onChange={e => set("emergencyContactPhone", e.target.value)} data-testid="input-emergencyContactPhone" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+          </div>
+        </div>
       </TabsContent>
       <TabsContent value="medical" className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div><Label>Blood Group</Label>
+          <div><Label className="text-afrocat-muted text-sm">Blood Group</Label>
             <Select value={form.bloodGroup} onValueChange={v => set("bloodGroup", v)}>
-              <SelectTrigger data-testid="select-bloodGroup"><SelectValue placeholder="Select" /></SelectTrigger>
+              <SelectTrigger data-testid="select-bloodGroup" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"><SelectValue placeholder="Select" /></SelectTrigger>
               <SelectContent>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(bg => <SelectItem key={bg} value={bg}>{bg}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div><Label>Allergies</Label><Input value={form.allergies} onChange={e => set("allergies", e.target.value)} data-testid="input-allergies" /></div>
+          <div><Label className="text-afrocat-muted text-sm">Allergies</Label><Input value={form.allergies} onChange={e => set("allergies", e.target.value)} data-testid="input-allergies" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
-        <div><Label>Medical Notes</Label><Textarea value={form.medicalNotes} onChange={e => set("medicalNotes", e.target.value)} rows={3} data-testid="input-medicalNotes" /></div>
+        <div><Label className="text-afrocat-muted text-sm">Medical Notes</Label><Textarea value={form.medicalNotes} onChange={e => set("medicalNotes", e.target.value)} rows={3} data-testid="input-medicalNotes" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
       </TabsContent>
     </Tabs>
   );
@@ -183,13 +188,13 @@ export default function Players() {
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">Players</h1>
-            <p className="text-muted-foreground mt-1">Club roster and athlete profiles</p>
+            <h1 className="text-3xl font-display font-bold text-afrocat-text tracking-tight">Players</h1>
+            <p className="text-afrocat-muted mt-1">Club roster and athlete profiles</p>
           </div>
           {canCreate && (
             <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (o) setForm({ ...emptyForm }); }}>
               <DialogTrigger asChild>
-                <Button data-testid="button-add-player"><Plus className="mr-2 h-4 w-4" /> Add Player</Button>
+                <Button className="bg-afrocat-teal hover:bg-afrocat-teal-dark text-white" data-testid="button-add-player"><Plus className="mr-2 h-4 w-4" /> Add Player</Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
                 <DialogHeader>
@@ -199,7 +204,7 @@ export default function Players() {
                 <form onSubmit={e => { e.preventDefault(); createMut.mutate(); }} className="space-y-4">
                   <PlayerFormFields isCreate />
                   <div className="flex justify-end">
-                    <Button type="submit" disabled={createMut.isPending} data-testid="button-submit-player">
+                    <Button type="submit" disabled={createMut.isPending} className="bg-afrocat-teal hover:bg-afrocat-teal-dark text-white" data-testid="button-submit-player">
                       {createMut.isPending ? "Adding..." : "Add Player"}
                     </Button>
                   </div>
@@ -210,17 +215,17 @@ export default function Players() {
         </div>
 
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search players..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} data-testid="input-search-players" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-afrocat-muted" />
+          <Input placeholder="Search players..." className="pl-9 bg-afrocat-white-5 border-afrocat-border text-afrocat-text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} data-testid="input-search-players" />
         </div>
 
         {isLoading ? (
-          <div className="text-center py-10 text-muted-foreground">Loading players...</div>
+          <div className="text-center py-10 text-afrocat-muted">Loading players...</div>
         ) : (
-          <div className="bg-card border rounded-lg shadow-sm overflow-hidden">
+          <div className="afrocat-card overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
+                <thead className="text-xs text-afrocat-muted uppercase bg-afrocat-white-5 border-b border-afrocat-border">
                   <tr>
                     <th className="px-6 py-4 font-semibold">Player</th>
                     <th className="px-6 py-4 font-semibold">Jersey</th>
@@ -233,35 +238,40 @@ export default function Players() {
                 <tbody>
                   {filteredPlayers.map((player: any) => {
                     const team = teams.find((t: any) => t.id === player.teamId);
-                    let statusColor = "bg-green-100 text-green-800";
-                    if (player.status === "INJURED") statusColor = "bg-red-100 text-red-800";
-                    if (player.status === "SUSPENDED") statusColor = "bg-yellow-100 text-yellow-800";
+                    let statusColor = "bg-afrocat-green-soft text-afrocat-green";
+                    if (player.status === "INJURED") statusColor = "bg-afrocat-red-soft text-afrocat-red";
+                    if (player.status === "SUSPENDED") statusColor = "bg-afrocat-gold-soft text-afrocat-gold";
                     return (
-                      <tr key={player.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors" data-testid={`row-player-${player.id}`}>
+                      <tr key={player.id} className="border-b border-afrocat-border last:border-0 hover:bg-afrocat-white-3 transition-colors" data-testid={`row-player-${player.id}`}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-3">
                             {player.photoUrl ? (
-                              <img src={player.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                              <img src={player.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-afrocat-border" data-testid={`img-player-${player.id}`} />
                             ) : (
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
+                              <div className="w-8 h-8 rounded-full bg-afrocat-teal-soft flex items-center justify-center text-afrocat-teal font-bold text-xs" data-testid={`avatar-player-${player.id}`}>
                                 {(player.firstName || "")[0]}{(player.lastName || "")[0]}
                               </div>
                             )}
-                            <div className="font-semibold">{player.firstName} {player.lastName}</div>
+                            <div className="font-semibold text-afrocat-text" data-testid={`text-player-name-${player.id}`}>{player.firstName} {player.lastName}</div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 font-medium text-muted-foreground">{player.jerseyNo ? `#${player.jerseyNo}` : "—"}</td>
-                        <td className="px-6 py-4">{player.position || "—"}</td>
-                        <td className="px-6 py-4">{team?.name || "Unassigned"}</td>
-                        <td className="px-6 py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${statusColor}`}>{player.status}</span></td>
+                        <td className="px-6 py-4 font-medium text-afrocat-muted" data-testid={`text-jersey-${player.id}`}>{player.jerseyNo ? `#${player.jerseyNo}` : "—"}</td>
+                        <td className="px-6 py-4 text-afrocat-text" data-testid={`text-position-${player.id}`}>{player.position || "—"}</td>
+                        <td className="px-6 py-4 text-afrocat-text" data-testid={`text-team-${player.id}`}>{team?.name || "Unassigned"}</td>
+                        <td className="px-6 py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${statusColor}`} data-testid={`badge-status-${player.id}`}>{player.status}</span></td>
                         <td className="px-6 py-4">
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="ghost" onClick={() => openView(player)} data-testid={`button-view-${player.id}`}>
-                              <Eye className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => pdfMut.mutate(player.id)} data-testid={`button-pdf-${player.id}`}>
-                              <Printer className="h-3.5 w-3.5" />
-                            </Button>
+                          <div className="flex gap-1">
+                            <button onClick={() => openView(player)} className="p-1.5 rounded hover:bg-afrocat-white-5 text-afrocat-muted hover:text-afrocat-text cursor-pointer" data-testid={`button-view-${player.id}`}>
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => pdfMut.mutate(player.id)} className="p-1.5 rounded hover:bg-afrocat-white-5 text-afrocat-muted hover:text-afrocat-text cursor-pointer" data-testid={`button-pdf-${player.id}`}>
+                              <Printer className="h-4 w-4" />
+                            </button>
+                            {canDelete && (
+                              <button onClick={() => setDeleteConfirmId(player.id)} className="p-1.5 rounded hover:bg-afrocat-red-soft text-afrocat-muted hover:text-afrocat-red cursor-pointer" data-testid={`button-delete-${player.id}`}>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -269,7 +279,25 @@ export default function Players() {
                   })}
                 </tbody>
               </table>
-              {filteredPlayers.length === 0 && <div className="text-center py-10 text-muted-foreground">No players found.</div>}
+              {filteredPlayers.length === 0 && <div className="text-center py-10 text-afrocat-muted" data-testid="text-no-players">No players found.</div>}
+            </div>
+          </div>
+        )}
+
+        {deleteConfirmId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="afrocat-card p-6 w-full max-w-sm" data-testid="dialog-confirm-delete">
+              <h3 className="text-lg font-bold text-afrocat-text mb-2">Remove Player</h3>
+              <p className="text-sm text-afrocat-muted mb-4">
+                Are you sure you want to permanently remove this player? This will also delete their stats, attendance records, and other related data.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setDeleteConfirmId(null)} className="border-afrocat-border text-afrocat-muted" data-testid="button-cancel-delete">Cancel</Button>
+                <Button onClick={() => deleteMut.mutate(deleteConfirmId)} disabled={deleteMut.isPending}
+                  className="bg-red-600 hover:bg-red-700 text-white" data-testid="button-confirm-delete">
+                  {deleteMut.isPending ? "Removing..." : "Remove Player"}
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -279,14 +307,14 @@ export default function Players() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-3">
                 {selectedPlayer?.photoUrl ? (
-                  <img src={selectedPlayer.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover" />
+                  <img src={selectedPlayer.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-afrocat-border" />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                  <div className="w-10 h-10 rounded-full bg-afrocat-teal-soft flex items-center justify-center text-afrocat-teal font-bold text-sm">
                     {(selectedPlayer?.firstName || "")[0]}{(selectedPlayer?.lastName || "")[0]}
                   </div>
                 )}
                 <span>{selectedPlayer?.firstName} {selectedPlayer?.lastName}</span>
-                {selectedPlayer?.jerseyNo && <Badge>#{selectedPlayer.jerseyNo}</Badge>}
+                {selectedPlayer?.jerseyNo && <span className="px-2 py-0.5 rounded-full bg-afrocat-gold-soft text-afrocat-gold text-sm font-bold">#{selectedPlayer.jerseyNo}</span>}
               </DialogTitle>
               <DialogDescription>Player profile details</DialogDescription>
             </DialogHeader>
@@ -295,8 +323,8 @@ export default function Players() {
               <form onSubmit={e => { e.preventDefault(); updateMut.mutate(); }} className="space-y-4">
                 <PlayerFormFields />
                 <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setEditMode(false)} data-testid="button-cancel-edit">Cancel</Button>
-                  <Button type="submit" disabled={updateMut.isPending} data-testid="button-save-edit">
+                  <Button type="button" variant="outline" onClick={() => setEditMode(false)} className="border-afrocat-border text-afrocat-muted" data-testid="button-cancel-edit">Cancel</Button>
+                  <Button type="submit" disabled={updateMut.isPending} className="bg-afrocat-teal hover:bg-afrocat-teal-dark text-white" data-testid="button-save-edit">
                     {updateMut.isPending ? "Saving..." : "Save Changes"}
                   </Button>
                 </div>
@@ -304,33 +332,39 @@ export default function Players() {
             ) : (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><span className="text-muted-foreground text-xs uppercase">Position</span><p className="font-medium">{selectedPlayer?.position || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">Gender</span><p className="font-medium">{selectedPlayer?.gender || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">DOB</span><p className="font-medium">{selectedPlayer?.dob || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">Nationality</span><p className="font-medium">{selectedPlayer?.nationality || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">Phone</span><p className="font-medium">{selectedPlayer?.phone || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">Email</span><p className="font-medium">{selectedPlayer?.email || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">Address</span><p className="font-medium">{selectedPlayer?.homeAddress || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">Town/Region</span><p className="font-medium">{[selectedPlayer?.town, selectedPlayer?.region].filter(Boolean).join(", ") || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">ID/Passport</span><p className="font-medium">{selectedPlayer?.idNumber || "—"}</p></div>
-                  <div><span className="text-muted-foreground text-xs uppercase">Blood Group</span><p className="font-medium">{selectedPlayer?.bloodGroup || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Position</span><p className="font-medium text-afrocat-text">{selectedPlayer?.position || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Gender</span><p className="font-medium text-afrocat-text">{selectedPlayer?.gender || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">DOB</span><p className="font-medium text-afrocat-text">{selectedPlayer?.dob || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Nationality</span><p className="font-medium text-afrocat-text">{selectedPlayer?.nationality || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Phone</span><p className="font-medium text-afrocat-text">{selectedPlayer?.phone || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Email</span><p className="font-medium text-afrocat-text">{selectedPlayer?.email || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Address</span><p className="font-medium text-afrocat-text">{selectedPlayer?.homeAddress || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Town/Region</span><p className="font-medium text-afrocat-text">{[selectedPlayer?.town, selectedPlayer?.region].filter(Boolean).join(", ") || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">ID/Passport</span><p className="font-medium text-afrocat-text">{selectedPlayer?.idNumber || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Blood Group</span><p className="font-medium text-afrocat-text">{selectedPlayer?.bloodGroup || "—"}</p></div>
                 </div>
                 {(selectedPlayer?.nextOfKinName || selectedPlayer?.emergencyContactName) && (
-                  <div className="border-t pt-3">
-                    <h4 className="text-xs uppercase text-muted-foreground font-semibold mb-2">Next of Kin / Emergency</h4>
+                  <div className="border-t border-afrocat-border pt-3">
+                    <h4 className="text-xs uppercase text-afrocat-muted font-semibold mb-2">Next of Kin / Emergency</h4>
                     <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div><span className="text-muted-foreground text-xs">Next of Kin</span><p className="font-medium">{selectedPlayer?.nextOfKinName || "—"} ({selectedPlayer?.nextOfKinRelation || "—"})</p></div>
-                      <div><span className="text-muted-foreground text-xs">NoK Phone</span><p className="font-medium">{selectedPlayer?.nextOfKinPhone || "—"}</p></div>
-                      <div><span className="text-muted-foreground text-xs">Emergency</span><p className="font-medium">{selectedPlayer?.emergencyContactName || "—"}</p></div>
-                      <div><span className="text-muted-foreground text-xs">Emergency Phone</span><p className="font-medium">{selectedPlayer?.emergencyContactPhone || "—"}</p></div>
+                      <div><span className="text-afrocat-muted text-xs">Next of Kin</span><p className="font-medium text-afrocat-text">{selectedPlayer?.nextOfKinName || "—"} ({selectedPlayer?.nextOfKinRelation || "—"})</p></div>
+                      <div><span className="text-afrocat-muted text-xs">NoK Phone</span><p className="font-medium text-afrocat-text">{selectedPlayer?.nextOfKinPhone || "—"}</p></div>
+                      <div><span className="text-afrocat-muted text-xs">Emergency</span><p className="font-medium text-afrocat-text">{selectedPlayer?.emergencyContactName || "—"}</p></div>
+                      <div><span className="text-afrocat-muted text-xs">Emergency Phone</span><p className="font-medium text-afrocat-text">{selectedPlayer?.emergencyContactPhone || "—"}</p></div>
                     </div>
                   </div>
                 )}
                 <div className="flex gap-2 pt-2">
-                  {canEdit && <Button variant="outline" onClick={() => setEditMode(true)} data-testid="button-edit-player">Edit</Button>}
-                  <Button variant="outline" onClick={() => pdfMut.mutate(selectedPlayer?.id)} data-testid="button-print-profile">
+                  {canEdit && <Button variant="outline" onClick={() => setEditMode(true)} className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5" data-testid="button-edit-player">Edit</Button>}
+                  <Button variant="outline" onClick={() => pdfMut.mutate(selectedPlayer?.id)} className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5" data-testid="button-print-profile">
                     <Printer className="mr-2 h-4 w-4" /> Print Profile
                   </Button>
+                  {canDelete && (
+                    <Button variant="outline" onClick={() => { setViewOpen(false); setDeleteConfirmId(selectedPlayer?.id); }}
+                      className="border-afrocat-red/30 text-afrocat-red hover:bg-afrocat-red-soft" data-testid="button-delete-player">
+                      <Trash2 className="mr-2 h-4 w-4" /> Remove
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
