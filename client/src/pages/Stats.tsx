@@ -4,8 +4,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Save, RotateCcw, Plus, Minus, Trophy, AlertTriangle, CheckCircle2, Zap, Shield, Target, Hand, ArrowUpCircle } from "lucide-react";
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { Save, RotateCcw, Plus, Minus, Trophy, AlertTriangle, CheckCircle2, Zap, Shield, Target, Hand, ArrowUpCircle, Loader2 } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 import { Badge } from "@/components/ui/badge";
 
@@ -264,6 +264,7 @@ export default function Stats() {
   }, [existingStats, matchPlayers]);
 
   const handleIncrement = useCallback((playerId: string, key: StatKey) => {
+    hasUserEdited.current = true;
     setStatsData((prev) => ({
       ...prev,
       [playerId]: { ...prev[playerId], [key]: (prev[playerId]?.[key] || 0) + 1 },
@@ -271,6 +272,7 @@ export default function Stats() {
   }, []);
 
   const handleDecrement = useCallback((playerId: string, key: StatKey) => {
+    hasUserEdited.current = true;
     setStatsData((prev) => ({
       ...prev,
       [playerId]: { ...prev[playerId], [key]: Math.max(0, (prev[playerId]?.[key] || 0) - 1) },
@@ -312,31 +314,58 @@ export default function Stats() {
       .slice(0, 5);
   }, [matchPlayers, statsData]);
 
+  const buildPayload = useCallback(() => {
+    return matchPlayers.map((p: any) => ({
+      playerId: p.id,
+      spikesKill: statsData[p.id]?.spikesKill || 0,
+      spikesError: statsData[p.id]?.spikesError || 0,
+      servesAce: statsData[p.id]?.servesAce || 0,
+      servesError: statsData[p.id]?.servesError || 0,
+      blocksSolo: statsData[p.id]?.blocksSolo || 0,
+      blocksAssist: statsData[p.id]?.blocksAssist || 0,
+      receivePerfect: statsData[p.id]?.receivePerfect || 0,
+      receiveError: statsData[p.id]?.receiveError || 0,
+      digs: statsData[p.id]?.digs || 0,
+      settingAssist: statsData[p.id]?.settingAssist || 0,
+      settingError: statsData[p.id]?.settingError || 0,
+      minutesPlayed: statsData[p.id]?.minutesPlayed || 0,
+    }));
+  }, [matchPlayers, statsData]);
+
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasUserEdited = useRef(false);
+
+  useEffect(() => {
+    if (!selectedMatchId || matchPlayers.length === 0 || !hasUserEdited.current) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setAutoSaveStatus("idle");
+    autoSaveTimer.current = setTimeout(async () => {
+      try {
+        setAutoSaveStatus("saving");
+        await api.submitStats(selectedMatchId, buildPayload());
+        queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+        setAutoSaveStatus("saved");
+        setTimeout(() => setAutoSaveStatus("idle"), 2000);
+      } catch {
+        setAutoSaveStatus("idle");
+      }
+    }, 2000);
+    return () => { if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current); };
+  }, [statsData, selectedMatchId, matchPlayers.length, buildPayload, queryClient]);
+
   const submitMut = useMutation({
     mutationFn: () => {
-      const payload = matchPlayers.map((p: any) => ({
-        playerId: p.id,
-        spikesKill: statsData[p.id]?.spikesKill || 0,
-        spikesError: statsData[p.id]?.spikesError || 0,
-        servesAce: statsData[p.id]?.servesAce || 0,
-        servesError: statsData[p.id]?.servesError || 0,
-        blocksSolo: statsData[p.id]?.blocksSolo || 0,
-        blocksAssist: statsData[p.id]?.blocksAssist || 0,
-        receivePerfect: statsData[p.id]?.receivePerfect || 0,
-        receiveError: statsData[p.id]?.receiveError || 0,
-        digs: statsData[p.id]?.digs || 0,
-        settingAssist: statsData[p.id]?.settingAssist || 0,
-        settingError: statsData[p.id]?.settingError || 0,
-        minutesPlayed: statsData[p.id]?.minutesPlayed || 0,
-      }));
-      return api.submitStats(selectedMatchId, payload);
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      return api.submitStats(selectedMatchId, buildPayload());
     },
     onSuccess: () => {
       toast({
-        title: "✅ Stats Saved Successfully!",
+        title: "Stats Saved Successfully!",
         description: "Smart Focus training recommendations have been generated.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      setAutoSaveStatus("saved");
 
       setSummaryData({
         teamTotals,
@@ -486,16 +515,28 @@ export default function Stats() {
                 <RotateCcw className="w-4 h-4 mr-2" />
                 Reset
               </Button>
-              <Button
-                onClick={() => submitMut.mutate()}
-                disabled={submitMut.isPending}
-                size="lg"
-                className="px-8"
-                data-testid="button-submit-stats"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {submitMut.isPending ? "Saving..." : "Save Match Stats"}
-              </Button>
+              <div className="flex items-center gap-4">
+                {autoSaveStatus === "saving" && (
+                  <span className="flex items-center gap-1.5 text-xs text-afrocat-muted" data-testid="text-autosave-saving">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Auto-saving...
+                  </span>
+                )}
+                {autoSaveStatus === "saved" && (
+                  <span className="flex items-center gap-1.5 text-xs text-afrocat-green" data-testid="text-autosave-saved">
+                    <CheckCircle2 className="w-3 h-3" /> Auto-saved
+                  </span>
+                )}
+                <Button
+                  onClick={() => submitMut.mutate()}
+                  disabled={submitMut.isPending}
+                  size="lg"
+                  className="px-8"
+                  data-testid="button-submit-stats"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {submitMut.isPending ? "Saving..." : "Save Match Stats"}
+                </Button>
+              </div>
             </div>
           </>
         )}

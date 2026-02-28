@@ -697,7 +697,7 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     try { res.json(await storage.getStatsByPlayer(req.params.playerId)); } catch (e) { next(e); }
   });
 
-  app.post("/api/stats/match/:matchId", requireAuth, requireRole(["ADMIN","MANAGER","STATISTICIAN","COACH"]), async (req, res, next) => {
+  app.post("/api/stats/match/:matchId", requireAuth, requireRole(["ADMIN","MANAGER","STATISTICIAN","COACH","PLAYER"]), async (req, res, next) => {
     try {
       const matchId = req.params.matchId;
       const statsArray = z.array(z.object({
