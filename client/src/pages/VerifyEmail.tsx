@@ -56,7 +56,7 @@ export default function VerifyEmail() {
                 <h3 className="text-xl font-bold" data-testid="text-verify-success">Email Verified!</h3>
                 <p className="text-sm text-muted-foreground" data-testid="text-verify-message">{message}</p>
                 {!requiresApproval && (
-                  <Button onClick={() => setLocation("/")} className="mt-4" data-testid="button-goto-login">
+                  <Button onClick={() => setLocation("/login")} className="mt-4" data-testid="button-goto-login">
                     Go to Login
                   </Button>
                 )}
@@ -77,7 +77,7 @@ export default function VerifyEmail() {
                 <p className="text-sm text-muted-foreground" data-testid="text-verify-error-message">{message}</p>
               </>
             )}
-            <Button variant="outline" onClick={() => setLocation("/")} className="mt-4" data-testid="button-back-login">
+            <Button variant="outline" onClick={() => setLocation("/login")} className="mt-4" data-testid="button-back-login">
               Back to Login
             </Button>
           </CardContent>

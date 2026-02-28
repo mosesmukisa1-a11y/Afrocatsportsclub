@@ -54,7 +54,7 @@ export default function ResetPassword() {
             </div>
             <h2 className="text-2xl font-display font-bold mb-2 text-afrocat-text">Password Reset Complete</h2>
             <p className="text-afrocat-muted mb-6">Your password has been updated. You can now sign in.</p>
-            <Button onClick={() => setLocation("/")} className="bg-afrocat-teal hover:bg-afrocat-teal-dark text-white" data-testid="button-go-login">Go to Login</Button>
+            <Button onClick={() => setLocation("/login")} className="bg-afrocat-teal hover:bg-afrocat-teal-dark text-white" data-testid="button-go-login">Go to Login</Button>
           </div>
         </div>
       </div>

@@ -108,7 +108,7 @@ export default function Register() {
                   </div>
                 </div>
               </div>
-              <Button variant="outline" className="mt-4 border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text" onClick={() => setLocation("/")} data-testid="button-back-login">
+              <Button variant="outline" className="mt-4 border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text" onClick={() => setLocation("/login")} data-testid="button-back-login">
                 Back to Login
               </Button>
             </div>
@@ -221,7 +221,7 @@ export default function Register() {
           <div className="flex flex-col border-t border-afrocat-border px-6 py-4 bg-afrocat-white-3 rounded-b-[18px]">
             <p className="text-sm text-center text-afrocat-muted">
               Already have an account?{" "}
-              <button onClick={() => setLocation("/")} className="text-afrocat-gold font-semibold hover:underline cursor-pointer" data-testid="link-login">
+              <button onClick={() => setLocation("/login")} className="text-afrocat-gold font-semibold hover:underline cursor-pointer" data-testid="link-login">
                 Sign in
               </button>
             </p>

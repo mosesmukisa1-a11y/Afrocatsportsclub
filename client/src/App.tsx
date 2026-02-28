@@ -7,6 +7,9 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import NotFound from "@/pages/not-found";
 
 import Login from "@/pages/Login";
+import PublicHome from "@/pages/PublicHome";
+import PublicMedia from "@/pages/PublicMedia";
+import PublicShop from "@/pages/PublicShop";
 import Dashboard from "@/pages/Dashboard";
 import Teams from "@/pages/Teams";
 import Players from "@/pages/Players";
@@ -32,7 +35,7 @@ import AdminUsers from "@/pages/AdminUsers";
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
-  if (!user) return <Redirect to="/" />;
+  if (!user) return <Redirect to="/login" />;
   if (user.mustChangePassword && !allowMustChange) return <Redirect to="/change-password" />;
   return <Component />;
 }
@@ -40,7 +43,10 @@ function ProtectedRoute({ component: Component, allowMustChange }: { component: 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Login}/>
+      <Route path="/" component={PublicHome}/>
+      <Route path="/login" component={Login}/>
+      <Route path="/media" component={PublicMedia}/>
+      <Route path="/shop" component={PublicShop}/>
       <Route path="/register" component={Register}/>
       <Route path="/verify-email" component={VerifyEmail}/>
       <Route path="/reset-password" component={ResetPassword}/>

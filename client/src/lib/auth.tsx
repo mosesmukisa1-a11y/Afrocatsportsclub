@@ -67,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     clearToken();
     setUser(null);
-    setLocation("/");
+    setLocation("/login");
   };
 
   return (

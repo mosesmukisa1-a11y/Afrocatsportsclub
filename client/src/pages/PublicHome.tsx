@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useLocation } from "wouter";
-import { ShoppingBag, Camera, LogIn, UserPlus, ChevronRight, MapPin, Mail, Phone } from "lucide-react";
+import { ShoppingBag, Camera, LogIn, UserPlus, ChevronRight, MapPin, Mail, Phone, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -38,7 +38,7 @@ export default function PublicHome() {
           <h2 className="text-4xl md:text-5xl font-display font-bold text-afrocat-text mb-4">Afrocat Volleyball Club</h2>
           <p className="text-lg text-afrocat-muted mb-2">One Team One Dream — Passion Discipline Victory</p>
           <p className="text-sm text-afrocat-muted max-w-xl mx-auto mb-8">Namibia's premier volleyball club. Building champions through discipline, teamwork, and relentless pursuit of excellence.</p>
-          <div className="flex justify-center gap-4">
+          <div className="flex flex-wrap justify-center gap-4">
             <Button onClick={() => setLocation("/register")} className="bg-afrocat-teal hover:bg-afrocat-teal-dark text-white px-8" data-testid="button-hero-register">
               Join the Club <ChevronRight className="h-4 w-4 ml-1" />
             </Button>
@@ -46,11 +46,38 @@ export default function PublicHome() {
               Member Login
             </Button>
           </div>
+          <div className="mt-6">
+            <button
+              onClick={() => {
+                const mediaSection = document.getElementById("guest-media");
+                if (mediaSection) mediaSection.scrollIntoView({ behavior: "smooth" });
+                else setLocation("/media");
+              }}
+              className="inline-flex items-center gap-2 text-sm text-afrocat-muted hover:text-afrocat-teal transition-colors cursor-pointer"
+              data-testid="button-guest-browse"
+            >
+              <Eye className="h-4 w-4" /> Browse as Guest
+              <ChevronRight className="h-3 w-3" />
+            </button>
+            <p className="text-xs text-afrocat-muted/60 mt-1">View our media gallery and club shop without signing in</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="guest-media" className="py-16 px-4 max-w-6xl mx-auto">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-afrocat-white-5 border border-afrocat-border">
+            <Eye className="h-3.5 w-3.5 text-afrocat-muted" />
+            <span className="text-xs font-medium text-afrocat-muted">Guest Access</span>
+          </div>
+          <button onClick={() => setLocation("/media")} className="text-xs text-afrocat-teal hover:underline cursor-pointer" data-testid="link-guest-media">Media</button>
+          <span className="text-afrocat-muted text-xs">&bull;</span>
+          <button onClick={() => setLocation("/shop")} className="text-xs text-afrocat-teal hover:underline cursor-pointer" data-testid="link-guest-shop">Shop</button>
         </div>
       </section>
 
       {media.length > 0 && (
-        <section className="py-16 px-4 max-w-6xl mx-auto">
+        <section className="py-16 px-4 max-w-6xl mx-auto -mt-10">
           <div className="flex items-center justify-between mb-8">
             <h3 className="flex items-center gap-2 text-2xl font-display font-bold text-afrocat-text">
               <Camera className="h-6 w-6 text-afrocat-teal" /> Media Gallery
