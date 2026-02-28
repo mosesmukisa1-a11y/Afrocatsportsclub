@@ -11,6 +11,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl2: 18px;
   
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
@@ -40,6 +41,30 @@
   --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
   --color-sidebar-border: hsl(var(--sidebar-border));
   --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --color-ac-teal: #0F8B7D;
+  --color-ac-teal-dark: #0B6F66;
+  --color-ac-teal-soft: rgba(15,139,125,0.18);
+  --color-ac-gold: #F2B705;
+  --color-ac-gold-dark: #D9A300;
+  --color-ac-gold-soft: rgba(242,183,5,0.18);
+  --color-ac-bg: #0B0F14;
+  --color-ac-card: #111827;
+  --color-ac-card2: #0F172A;
+  --color-ac-text: #E5E7EB;
+  --color-ac-muted: rgba(229,231,235,0.70);
+  --color-ac-border: rgba(255,255,255,0.08);
+  --color-ac-green: #22c55e;
+  --color-ac-red: #ef4444;
+  --color-ac-green-soft: rgba(34,197,94,0.15);
+  --color-ac-red-soft: rgba(239,68,68,0.15);
+  --color-ac-white-3: rgba(255,255,255,0.03);
+  --color-ac-white-4: rgba(255,255,255,0.04);
+  --color-ac-white-5: rgba(255,255,255,0.05);
+  --color-ac-white-10: rgba(255,255,255,0.1);
+
+  --shadow-ac-card: 0 12px 30px rgba(0,0,0,0.45);
+  --shadow-ac-soft: 0 8px 22px rgba(0,0,0,0.35);
 }
 
 :root {
@@ -137,21 +162,17 @@
 }
 
 .afrocat-dark {
-  --ac-bg: #0B0F14;
-  --ac-card: #111827;
-  --ac-card2: #0F172A;
-  --ac-border: rgba(255,255,255,0.08);
-  --ac-text: #E5E7EB;
-  --ac-text-muted: rgba(229,231,235,0.70);
-  --ac-primary: #0F8B7D;
-  --ac-primary-dark: #0B6F66;
-  --ac-primary-soft: rgba(15,139,125,0.18);
-  --ac-accent: #F2B705;
-  --ac-accent-dark: #D9A300;
-  --ac-accent-soft: rgba(242,183,5,0.18);
-  background: var(--ac-bg);
+  background: var(--color-ac-bg);
   background-image:
-    radial-gradient(ellipse 60% 40% at 20% 30%, var(--ac-primary-soft), transparent),
-    radial-gradient(ellipse 50% 50% at 80% 70%, var(--ac-accent-soft), transparent);
-  color: var(--ac-text);
+    radial-gradient(900px circle at 20% 15%, var(--color-ac-teal-soft), transparent 55%),
+    radial-gradient(800px circle at 80% 10%, var(--color-ac-gold-soft), transparent 52%),
+    radial-gradient(900px circle at 70% 90%, var(--color-ac-teal-soft), transparent 55%);
+  color: var(--color-ac-text);
+}
+
+.ac-card {
+  background: linear-gradient(180deg, var(--color-ac-card) 0%, var(--color-ac-card2) 100%);
+  border: 1px solid var(--color-ac-border);
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
 }
