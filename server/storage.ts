@@ -22,7 +22,8 @@ import type {
   ShopItem, InsertShopItem,
   MediaPost, InsertMediaPost,
   MediaTag, InsertMediaTag,
-  MediaTagRequest, InsertMediaTagRequest
+  MediaTagRequest, InsertMediaTagRequest,
+  Notification, InsertNotification
 } from "@shared/schema";
 
 export interface IStorage {
@@ -150,6 +151,10 @@ export interface IStorage {
   updateMediaTagRequest(id: string, data: Partial<InsertMediaTagRequest>): Promise<MediaTagRequest | undefined>;
   updateAttendanceRecord(id: string, data: Partial<InsertAttendanceRecord>): Promise<AttendanceRecord | undefined>;
   getAttendanceRecordBySessionAndPlayer(sessionId: string, playerId: string): Promise<AttendanceRecord | undefined>;
+  getNotifications(userId?: string, playerId?: string): Promise<Notification[]>;
+  createNotification(notif: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: string): Promise<void>;
+  markAllNotificationsRead(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -708,6 +713,30 @@ export class DatabaseStorage implements IStorage {
     const [record] = await db.select().from(schema.attendanceRecords)
       .where(and(eq(schema.attendanceRecords.sessionId, sessionId), eq(schema.attendanceRecords.playerId, playerId)));
     return record;
+  }
+
+  async getNotifications(userId?: string, playerId?: string) {
+    if (userId) {
+      return db.select().from(schema.notifications)
+        .where(eq(schema.notifications.userId, userId))
+        .orderBy(desc(schema.notifications.createdAt));
+    }
+    if (playerId) {
+      return db.select().from(schema.notifications)
+        .where(eq(schema.notifications.playerId, playerId))
+        .orderBy(desc(schema.notifications.createdAt));
+    }
+    return db.select().from(schema.notifications).orderBy(desc(schema.notifications.createdAt));
+  }
+  async createNotification(notif: InsertNotification) {
+    const [created] = await db.insert(schema.notifications).values(notif).returning();
+    return created;
+  }
+  async markNotificationRead(id: string) {
+    await db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.id, id));
+  }
+  async markAllNotificationsRead(userId: string) {
+    await db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.userId, userId));
   }
 }
 

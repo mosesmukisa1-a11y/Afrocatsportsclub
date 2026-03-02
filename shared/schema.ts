@@ -528,3 +528,19 @@ export type InsertMediaTag = z.infer<typeof insertMediaTagSchema>;
 export type MediaTag = typeof mediaTags.$inferSelect;
 export type InsertMediaTagRequest = z.infer<typeof insertMediaTagRequestSchema>;
 export type MediaTagRequest = typeof mediaTagRequests.$inferSelect;
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }),
+  playerId: varchar("player_id", { length: 36 }),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  metadata: jsonb("metadata"),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;

@@ -7,9 +7,10 @@ import {
   User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
   FileText, Bell, ChevronRight, MessageCircle, Cake, PartyPopper, Gift
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 
 export default function Dashboard() {
@@ -44,6 +45,55 @@ export default function Dashboard() {
     queryFn: api.getBirthdays,
     enabled: !!user,
   });
+
+  const { data: trainingSchedule } = useQuery({
+    queryKey: ["/api/training/my-schedule"],
+    queryFn: api.getMyTrainingSchedule,
+    enabled: isPlayerView && !!user,
+  });
+
+  const { data: attendanceReport } = useQuery({
+    queryKey: ["/api/training/attendance-report"],
+    queryFn: () => api.getAttendanceReport(),
+    enabled: isPlayerView && !!user,
+  });
+
+  const { data: coachTrainingSummary = [] } = useQuery({
+    queryKey: ["/api/training/coach-summary", teamIdForCoach],
+    queryFn: () => api.getCoachTrainingSummary(teamIdForCoach),
+    enabled: isCoachView && !!teamIdForCoach,
+  });
+
+  const { data: notifications = [] } = useQuery({
+    queryKey: ["/api/notifications"],
+    queryFn: api.getNotifications,
+    enabled: !!user,
+  });
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const checkinMut = useMutation({
+    mutationFn: (sessionId: string) => api.attendanceCheckIn(sessionId),
+    onSuccess: () => {
+      toast({ title: "Checked In!", description: "Your attendance has been recorded." });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/my-schedule"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/training/attendance-report"] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const autoGenMut = useMutation({
+    mutationFn: api.autoGenerateTraining,
+    onSuccess: (data: any) => {
+      toast({ title: "Training Sessions Generated", description: `${data.generated} sessions created for this week.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/training"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const unreadNotifs = notifications.filter((n: any) => !n.read);
 
   const totalIncome = financeTxns.filter((f: any) => f.type === "INCOME").reduce((acc: number, curr: any) => acc + curr.amount, 0);
   const totalExpense = financeTxns.filter((f: any) => f.type === "EXPENSE").reduce((acc: number, curr: any) => acc + curr.amount, 0);
@@ -354,6 +404,225 @@ export default function Dashboard() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {isCoachView && (
+          <div className="afrocat-card overflow-hidden" data-testid="card-coach-training">
+            <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px]">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-text">
+                  <Calendar className="h-5 w-5 text-afrocat-teal" /> Today's Training
+                </h3>
+                <button
+                  onClick={() => autoGenMut.mutate()}
+                  disabled={autoGenMut.isPending}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-afrocat-teal-soft text-afrocat-teal hover:bg-afrocat-teal/20 transition-colors"
+                  data-testid="button-auto-generate-training"
+                >
+                  {autoGenMut.isPending ? "Generating..." : "Auto-Generate Week"}
+                </button>
+              </div>
+            </div>
+            <div className="p-5">
+              {coachTrainingSummary.length === 0 ? (
+                <p className="text-sm text-afrocat-muted text-center py-4">No training sessions scheduled for today. Use "Auto-Generate Week" to create sessions based on the training schedule.</p>
+              ) : (
+                <div className="space-y-4">
+                  {coachTrainingSummary.map((s: any, i: number) => (
+                    <div key={i} className="p-4 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid={`card-training-summary-${i}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-bold text-sm text-afrocat-text">{s.session?.teamName}</h4>
+                          <p className="text-xs text-afrocat-muted">{s.session?.sessionType} — {s.session?.sessionDate}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold px-2 py-1 rounded-full bg-afrocat-green-soft text-afrocat-green" data-testid={`text-present-count-${i}`}>
+                            {s.present + s.late} / {s.totalPlayers} checked in
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                        <div className="p-2 rounded-lg bg-afrocat-green-soft">
+                          <div className="text-lg font-bold text-afrocat-green">{s.present}</div>
+                          <div className="text-[10px] text-afrocat-muted">Present</div>
+                        </div>
+                        <div className="p-2 rounded-lg bg-afrocat-gold-soft">
+                          <div className="text-lg font-bold text-afrocat-gold">{s.late}</div>
+                          <div className="text-[10px] text-afrocat-muted">Late</div>
+                        </div>
+                        <div className="p-2 rounded-lg bg-afrocat-red-soft">
+                          <div className="text-lg font-bold text-afrocat-red">{s.absent}</div>
+                          <div className="text-[10px] text-afrocat-muted">Absent</div>
+                        </div>
+                        <div className="p-2 rounded-lg bg-afrocat-white-5">
+                          <div className="text-lg font-bold text-afrocat-text">{s.totalPlayers}</div>
+                          <div className="text-[10px] text-afrocat-muted">Total</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isPlayerView && trainingSchedule && (
+          <div className="afrocat-card overflow-hidden" data-testid="card-player-training">
+            <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px]">
+              <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-teal">
+                <Calendar className="h-5 w-5" /> Training Schedule
+              </h3>
+            </div>
+            <div className="p-5 space-y-4">
+              {trainingSchedule.trainingDays && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-afrocat-muted font-semibold uppercase">Your days:</span>
+                  {trainingSchedule.trainingDays.map((d: string) => (
+                    <Badge key={d} className="bg-afrocat-teal-soft text-afrocat-teal border-0 text-xs">{d}</Badge>
+                  ))}
+                </div>
+              )}
+
+              {trainingSchedule.todaySession && (
+                <div className={`p-4 rounded-xl border ${trainingSchedule.todaySession.alreadyCheckedIn ? 'bg-afrocat-green-soft border-afrocat-green/30' : 'bg-afrocat-gold-soft border-afrocat-gold/30'}`} data-testid="card-today-training">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-sm text-afrocat-text flex items-center gap-2">
+                        {trainingSchedule.todaySession.alreadyCheckedIn ? (
+                          <CheckCircle className="h-4 w-4 text-afrocat-green" />
+                        ) : (
+                          <AlertCircle className="h-4 w-4 text-afrocat-gold" />
+                        )}
+                        Today's Training
+                      </h4>
+                      <p className="text-xs text-afrocat-muted mt-0.5">
+                        {trainingSchedule.todaySession.teamName} — {trainingSchedule.todaySession.sessionDate}
+                      </p>
+                      {trainingSchedule.todaySession.alreadyCheckedIn && (
+                        <p className="text-xs text-afrocat-green font-semibold mt-1">
+                          Status: {trainingSchedule.todaySession.checkinStatus}
+                        </p>
+                      )}
+                    </div>
+                    {!trainingSchedule.todaySession.alreadyCheckedIn && (
+                      <button
+                        onClick={() => checkinMut.mutate(trainingSchedule.todaySession.id)}
+                        disabled={checkinMut.isPending}
+                        className="px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-sm hover:bg-afrocat-teal/80 transition-colors"
+                        data-testid="button-checkin-today"
+                      >
+                        {checkinMut.isPending ? "Checking in..." : "Check In"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!trainingSchedule.todaySession && trainingSchedule.isTrainingDay && (
+                <div className="p-4 rounded-xl bg-afrocat-gold-soft border border-afrocat-gold/30">
+                  <p className="text-sm text-afrocat-gold font-semibold flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4" />
+                    It's a training day but no session has been created yet. Contact your coach.
+                  </p>
+                </div>
+              )}
+
+              {trainingSchedule.pendingCheckin?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Pending Check-in</p>
+                  <div className="space-y-2">
+                    {trainingSchedule.pendingCheckin.map((s: any) => (
+                      <div key={s.id} className="flex items-center justify-between p-3 rounded-xl bg-afrocat-red-soft border border-afrocat-red/20" data-testid={`card-pending-checkin-${s.id}`}>
+                        <div>
+                          <p className="text-sm font-medium text-afrocat-text">{s.teamName}</p>
+                          <p className="text-xs text-afrocat-muted">{s.sessionDate}</p>
+                        </div>
+                        <button
+                          onClick={() => checkinMut.mutate(s.id)}
+                          disabled={checkinMut.isPending}
+                          className="px-3 py-1.5 rounded-lg bg-afrocat-teal text-white font-bold text-xs"
+                          data-testid={`button-checkin-${s.id}`}
+                        >
+                          Check In
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {trainingSchedule.upcomingSessions?.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Upcoming Sessions</p>
+                  <div className="space-y-2">
+                    {trainingSchedule.upcomingSessions.map((s: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-afrocat-teal" />
+                          <div>
+                            <p className="text-sm font-medium text-afrocat-text">{s.dayName}</p>
+                            <p className="text-xs text-afrocat-muted">{s.date} — {s.teamName}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {attendanceReport && (
+                <div>
+                  <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Attendance Report</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {attendanceReport.weekly && (
+                      <div className="p-4 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid="card-weekly-report">
+                        <h5 className="text-xs font-bold text-afrocat-teal uppercase mb-2">This Week</h5>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div><div className="text-lg font-bold text-afrocat-green">{attendanceReport.weekly.present}</div><div className="text-[10px] text-afrocat-muted">Present</div></div>
+                          <div><div className="text-lg font-bold text-afrocat-gold">{attendanceReport.weekly.late}</div><div className="text-[10px] text-afrocat-muted">Late</div></div>
+                          <div><div className="text-lg font-bold text-afrocat-red">{attendanceReport.weekly.absent}</div><div className="text-[10px] text-afrocat-muted">Absent</div></div>
+                          <div><div className="text-lg font-bold text-afrocat-teal">{attendanceReport.weekly.rate}%</div><div className="text-[10px] text-afrocat-muted">Rate</div></div>
+                        </div>
+                      </div>
+                    )}
+                    {attendanceReport.monthly && (
+                      <div className="p-4 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid="card-monthly-report">
+                        <h5 className="text-xs font-bold text-afrocat-gold uppercase mb-2">This Month</h5>
+                        <div className="grid grid-cols-4 gap-2 text-center">
+                          <div><div className="text-lg font-bold text-afrocat-green">{attendanceReport.monthly.present}</div><div className="text-[10px] text-afrocat-muted">Present</div></div>
+                          <div><div className="text-lg font-bold text-afrocat-gold">{attendanceReport.monthly.late}</div><div className="text-[10px] text-afrocat-muted">Late</div></div>
+                          <div><div className="text-lg font-bold text-afrocat-red">{attendanceReport.monthly.absent}</div><div className="text-[10px] text-afrocat-muted">Absent</div></div>
+                          <div><div className="text-lg font-bold text-afrocat-teal">{attendanceReport.monthly.rate}%</div><div className="text-[10px] text-afrocat-muted">Rate</div></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isPlayerView && unreadNotifs.length > 0 && (
+          <div className="afrocat-card overflow-hidden" data-testid="card-notifications">
+            <div className="bg-afrocat-gold-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px]">
+              <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold">
+                <Bell className="h-5 w-5" /> Notifications ({unreadNotifs.length})
+              </h3>
+            </div>
+            <div className="p-5 space-y-2">
+              {unreadNotifs.slice(0, 5).map((n: any) => (
+                <div key={n.id} className="flex items-start gap-3 p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid={`card-notif-${n.id}`}>
+                  <Bell className="h-4 w-4 text-afrocat-gold mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-sm text-afrocat-text">{n.title}</p>
+                    <p className="text-xs text-afrocat-muted mt-0.5">{n.message}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}

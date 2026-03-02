@@ -1,11 +1,10 @@
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, CalendarCheck } from "lucide-react";
+import { Plus, CalendarCheck, Calendar, Users, Send, Loader2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -16,13 +15,42 @@ export default function Attendance() {
   const queryClient = useQueryClient();
   const { data: sessions = [], isLoading } = useQuery({ queryKey: ["/api/attendance/sessions"], queryFn: () => api.getAttendanceSessions() });
   const { data: teams = [] } = useQuery({ queryKey: ["/api/teams"], queryFn: api.getTeams });
+  const { data: allPlayers = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
 
   const [open, setOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
   const [form, setForm] = useState({ teamId: "", sessionDate: "", sessionType: "TRAINING" as string, notes: "" });
+  const [scheduleForm, setScheduleForm] = useState({ teamId: "", playerIds: [] as string[], sessionDate: "", sessionType: "TRAINING" as string, notes: "" });
 
   const createMut = useMutation({
     mutationFn: () => api.createAttendanceSession(form),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/attendance/sessions"] }); setOpen(false); toast({ title: "Session created" }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const scheduleMut = useMutation({
+    mutationFn: () => api.scheduleCustomTraining({
+      teamId: scheduleForm.teamId || undefined,
+      playerIds: scheduleForm.playerIds.length > 0 ? scheduleForm.playerIds : undefined,
+      sessionDate: scheduleForm.sessionDate,
+      sessionType: scheduleForm.sessionType,
+      notes: scheduleForm.notes,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/sessions"] });
+      setScheduleOpen(false);
+      setScheduleForm({ teamId: "", playerIds: [], sessionDate: "", sessionType: "TRAINING", notes: "" });
+      toast({ title: "Training Scheduled", description: "Players have been notified." });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const autoGenMut = useMutation({
+    mutationFn: api.autoGenerateTraining,
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/sessions"] });
+      toast({ title: "Auto-Generated", description: `${data.generated} sessions created for this week.` });
+    },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
@@ -48,57 +76,147 @@ export default function Attendance() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const togglePlayer = (playerId: string) => {
+    setScheduleForm(prev => ({
+      ...prev,
+      playerIds: prev.playerIds.includes(playerId)
+        ? prev.playerIds.filter(id => id !== playerId)
+        : [...prev.playerIds, playerId],
+    }));
+  };
+
+  const filteredPlayers = scheduleForm.teamId
+    ? allPlayers.filter((p: any) => p.teamId === scheduleForm.teamId)
+    : allPlayers;
+
   return (
     <Layout>
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-display font-bold text-foreground tracking-tight">Attendance</h1>
-            <p className="text-muted-foreground mt-1">Track training and match attendance</p>
+            <h1 className="text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-attendance-title">Attendance</h1>
+            <p className="text-afrocat-muted mt-1">Track training and match attendance</p>
           </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild><Button data-testid="button-add-session"><Plus className="mr-2 h-4 w-4" /> New Session</Button></DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>New Attendance Session</DialogTitle></DialogHeader>
-              <form onSubmit={e => { e.preventDefault(); createMut.mutate(); }} className="space-y-3">
-                <div><Label>Team</Label>
-                  <Select value={form.teamId} onValueChange={v => setForm({...form, teamId: v})}>
-                    <SelectTrigger><SelectValue placeholder="Select team" /></SelectTrigger>
-                    <SelectContent>{teams.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div><Label>Date</Label><Input type="date" value={form.sessionDate} onChange={e => setForm({...form, sessionDate: e.target.value})} required /></div>
-                <div><Label>Type</Label>
-                  <Select value={form.sessionType} onValueChange={v => setForm({...form, sessionType: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="TRAINING">Training</SelectItem>
-                      <SelectItem value="MATCH">Match</SelectItem>
-                      <SelectItem value="GYM">Gym</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button type="submit" disabled={createMut.isPending}>{createMut.isPending ? "Creating..." : "Create"}</Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={() => autoGenMut.mutate()}
+              disabled={autoGenMut.isPending}
+              className="border-afrocat-border text-afrocat-teal"
+              data-testid="button-auto-generate"
+            >
+              {autoGenMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calendar className="mr-2 h-4 w-4" />}
+              Auto-Generate Week
+            </Button>
+
+            <Dialog open={scheduleOpen} onOpenChange={setScheduleOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="border-afrocat-border text-afrocat-gold" data-testid="button-schedule-training">
+                  <Send className="mr-2 h-4 w-4" /> Schedule Training
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader><DialogTitle>Schedule Custom Training</DialogTitle></DialogHeader>
+                <form onSubmit={e => { e.preventDefault(); scheduleMut.mutate(); }} className="space-y-4">
+                  <div>
+                    <Label>Team (or select individual players below)</Label>
+                    <Select value={scheduleForm.teamId} onValueChange={v => setScheduleForm({ ...scheduleForm, teamId: v, playerIds: [] })}>
+                      <SelectTrigger data-testid="select-schedule-team"><SelectValue placeholder="Select team" /></SelectTrigger>
+                      <SelectContent>{teams.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Date</Label>
+                    <Input type="date" value={scheduleForm.sessionDate} onChange={e => setScheduleForm({ ...scheduleForm, sessionDate: e.target.value })} required data-testid="input-schedule-date" />
+                  </div>
+                  <div>
+                    <Label>Type</Label>
+                    <Select value={scheduleForm.sessionType} onValueChange={v => setScheduleForm({ ...scheduleForm, sessionType: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="TRAINING">Training</SelectItem>
+                        <SelectItem value="MATCH">Match</SelectItem>
+                        <SelectItem value="GYM">Gym</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Notes (optional)</Label>
+                    <Input value={scheduleForm.notes} onChange={e => setScheduleForm({ ...scheduleForm, notes: e.target.value })} placeholder="e.g. Bring shin guards" data-testid="input-schedule-notes" />
+                  </div>
+                  {!scheduleForm.teamId && (
+                    <div>
+                      <Label>Select Individual Players</Label>
+                      <div className="max-h-48 overflow-y-auto border border-afrocat-border rounded-lg p-2 space-y-1 mt-1">
+                        {filteredPlayers.map((p: any) => (
+                          <label key={p.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-afrocat-white-5 cursor-pointer text-sm">
+                            <input
+                              type="checkbox"
+                              checked={scheduleForm.playerIds.includes(p.id)}
+                              onChange={() => togglePlayer(p.id)}
+                              className="rounded"
+                            />
+                            #{p.jerseyNo} {p.firstName} {p.lastName}
+                          </label>
+                        ))}
+                      </div>
+                      {scheduleForm.playerIds.length > 0 && (
+                        <p className="text-xs text-afrocat-teal mt-1">{scheduleForm.playerIds.length} player(s) selected</p>
+                      )}
+                    </div>
+                  )}
+                  <Button type="submit" disabled={scheduleMut.isPending || (!scheduleForm.teamId && scheduleForm.playerIds.length === 0)} data-testid="button-confirm-schedule">
+                    {scheduleMut.isPending ? "Scheduling..." : "Schedule & Notify Players"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild><Button data-testid="button-add-session"><Plus className="mr-2 h-4 w-4" /> New Session</Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>New Attendance Session</DialogTitle></DialogHeader>
+                <form onSubmit={e => { e.preventDefault(); createMut.mutate(); }} className="space-y-3">
+                  <div><Label>Team</Label>
+                    <Select value={form.teamId} onValueChange={v => setForm({...form, teamId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select team" /></SelectTrigger>
+                      <SelectContent>{teams.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label>Date</Label><Input type="date" value={form.sessionDate} onChange={e => setForm({...form, sessionDate: e.target.value})} required /></div>
+                  <div><Label>Type</Label>
+                    <Select value={form.sessionType} onValueChange={v => setForm({...form, sessionType: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="TRAINING">Training</SelectItem>
+                        <SelectItem value="MATCH">Match</SelectItem>
+                        <SelectItem value="GYM">Gym</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button type="submit" disabled={createMut.isPending}>{createMut.isPending ? "Creating..." : "Create"}</Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        {/* Mark Attendance Modal */}
         {markSessionId && (
-          <Card className="border-2 border-primary">
-            <CardHeader><CardTitle>Mark Attendance — {markSession?.sessionDate} ({markSession?.sessionType})</CardTitle></CardHeader>
-            <CardContent>
+          <div className="afrocat-card overflow-hidden">
+            <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px]">
+              <h3 className="font-display font-bold text-afrocat-text">Mark Attendance — {markSession?.sessionDate} ({markSession?.sessionType})</h3>
+            </div>
+            <div className="p-5">
               {sessionPlayers.length === 0 ? (
-                <p className="text-muted-foreground">No players found for this team.</p>
+                <p className="text-afrocat-muted">No players found for this team.</p>
               ) : (
                 <>
                   <div className="space-y-3">
                     {sessionPlayers.map((p: any) => (
-                      <div key={p.id} className="flex items-center justify-between border-b pb-2 last:border-0">
-                        <span className="font-medium">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
+                      <div key={p.id} className="flex items-center justify-between border-b border-afrocat-border pb-2 last:border-0">
+                        <span className="font-medium text-afrocat-text">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
                         <Select value={attendance[p.id] || "PRESENT"} onValueChange={v => setAttendance({...attendance, [p.id]: v})}>
-                          <SelectTrigger className="w-[130px]"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="w-[130px] border-afrocat-border"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="PRESENT">Present</SelectItem>
                             <SelectItem value="LATE">Late</SelectItem>
@@ -110,36 +228,59 @@ export default function Attendance() {
                     ))}
                   </div>
                   <div className="flex gap-2 mt-4">
-                    <Button onClick={() => submitAttendance.mutate()} disabled={submitAttendance.isPending}>
+                    <Button onClick={() => submitAttendance.mutate()} disabled={submitAttendance.isPending} data-testid="button-save-attendance">
                       {submitAttendance.isPending ? "Saving..." : "Save Attendance"}
                     </Button>
                     <Button variant="outline" onClick={() => setMarkSessionId(null)}>Cancel</Button>
                   </div>
                 </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
 
+        <div className="afrocat-card overflow-hidden">
+          <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px]">
+            <h3 className="font-display font-bold text-afrocat-text flex items-center gap-2">
+              <CalendarCheck className="h-5 w-5 text-afrocat-teal" /> Training Schedule Rules
+            </h3>
+          </div>
+          <div className="p-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-afrocat-teal-soft border border-afrocat-teal/20">
+                <h4 className="font-bold text-sm text-afrocat-teal mb-1">Men's Teams</h4>
+                <p className="text-xs text-afrocat-muted">Tuesday & Thursday</p>
+              </div>
+              <div className="p-3 rounded-xl bg-afrocat-gold-soft border border-afrocat-gold/20">
+                <h4 className="font-bold text-sm text-afrocat-gold mb-1">Women's Teams</h4>
+                <p className="text-xs text-afrocat-muted">Monday & Thursday</p>
+              </div>
+              <div className="p-3 rounded-xl bg-afrocat-green-soft border border-afrocat-green/20">
+                <h4 className="font-bold text-sm text-afrocat-green mb-1">All Teams</h4>
+                <p className="text-xs text-afrocat-muted">Friday (Combined)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {isLoading ? (
-          <div className="text-center py-10 text-muted-foreground">Loading...</div>
+          <div className="text-center py-10 text-afrocat-muted">Loading...</div>
         ) : sessions.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground">No attendance sessions yet.</div>
+          <div className="text-center py-10 text-afrocat-muted">No attendance sessions yet. Use "Auto-Generate Week" or create one manually.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {sessions.map((s: any) => {
               const team = teams.find((t: any) => t.id === s.teamId);
               return (
-                <Card key={s.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setMarkSessionId(s.id)}>
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-3 mb-2">
-                      <CalendarCheck className="h-5 w-5 text-primary" />
-                      <span className="font-semibold">{s.sessionDate}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{team?.name || "Team"} • {s.sessionType}</p>
-                    <Button variant="outline" size="sm" className="mt-3 w-full" data-testid={`button-mark-attendance-${s.id}`}>Mark Attendance</Button>
-                  </CardContent>
-                </Card>
+                <div key={s.id} className="afrocat-card p-5 cursor-pointer hover:border-afrocat-teal/30 transition-all" onClick={() => setMarkSessionId(s.id)} data-testid={`card-session-${s.id}`}>
+                  <div className="flex items-center gap-3 mb-2">
+                    <CalendarCheck className="h-5 w-5 text-afrocat-teal" />
+                    <span className="font-semibold text-afrocat-text">{s.sessionDate}</span>
+                  </div>
+                  <p className="text-sm text-afrocat-muted">{team?.name || "Team"} • {s.sessionType}</p>
+                  {s.notes && <p className="text-xs text-afrocat-muted mt-1 italic">{s.notes}</p>}
+                  <Button variant="outline" size="sm" className="mt-3 w-full border-afrocat-border text-afrocat-teal" data-testid={`button-mark-attendance-${s.id}`}>Mark Attendance</Button>
+                </div>
               );
             })}
           </div>

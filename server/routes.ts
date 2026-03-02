@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import * as schema from "@shared/schema";
 import { hashPassword, comparePassword, signToken, requireAuth, requireRole } from "./auth";
 import { z } from "zod";
 import crypto from "crypto";
@@ -2717,6 +2719,289 @@ th{background:#0d7377;color:white}
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
       next(e);
     }
+  });
+
+  // ─── TRAINING SCHEDULE & NOTIFICATIONS ──────────
+  const TRAINING_SCHEDULE: Record<string, number[]> = {
+    MEN: [2, 4],
+    WOMEN: [1, 4],
+    ALL: [5],
+  };
+
+  app.get("/api/training/my-schedule", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.user!.playerId;
+      if (!playerId) return res.json({ todaySession: null, upcomingSessions: [], pendingCheckin: [] });
+
+      const player = await storage.getPlayer(playerId);
+      if (!player) return res.json({ todaySession: null, upcomingSessions: [], pendingCheckin: [] });
+
+      const team = player.teamId ? (await storage.getTeams()).find(t => t.id === player.teamId) : null;
+      const category = team?.category || "MEN";
+
+      const now = new Date();
+      const todayStr = now.toISOString().split("T")[0];
+      const dayOfWeek = now.getDay();
+
+      const trainingDays = [...(TRAINING_SCHEDULE[category] || []), ...TRAINING_SCHEDULE.ALL];
+
+      const isTrainingDay = trainingDays.includes(dayOfWeek);
+
+      let todaySession: any = null;
+      const pendingCheckin: any[] = [];
+
+      if (team) {
+        const sessions = await storage.getAttendanceSessions(team.id);
+        const todaySess = sessions.find(s => s.sessionDate === todayStr && s.sessionType === "TRAINING");
+        if (todaySess) {
+          const existingRecord = await storage.getAttendanceRecordBySessionAndPlayer(todaySess.id, playerId);
+          todaySession = {
+            ...todaySess,
+            teamName: team.name,
+            alreadyCheckedIn: !!existingRecord,
+            checkinStatus: existingRecord?.status || null,
+          };
+        }
+
+        for (const sess of sessions) {
+          if (sess.sessionDate <= todayStr && sess.sessionType === "TRAINING") {
+            const record = await storage.getAttendanceRecordBySessionAndPlayer(sess.id, playerId);
+            if (!record) {
+              pendingCheckin.push({ ...sess, teamName: team.name });
+            }
+          }
+        }
+      }
+
+      const upcoming: any[] = [];
+      for (let i = 1; i <= 7; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() + i);
+        const dow = d.getDay();
+        if (trainingDays.includes(dow)) {
+          const dateStr = d.toISOString().split("T")[0];
+          const dayName = d.toLocaleDateString("en-US", { weekday: "long" });
+          upcoming.push({ date: dateStr, dayName, teamName: team?.name || "Unassigned" });
+        }
+      }
+
+      res.json({
+        todaySession,
+        isTrainingDay,
+        trainingDays: trainingDays.map(d => ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]),
+        upcomingSessions: upcoming,
+        pendingCheckin: pendingCheckin.slice(0, 5),
+      });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/training/auto-generate", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const teams = await storage.getTeams();
+      const now = new Date();
+      const created: any[] = [];
+
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(now);
+        d.setDate(d.getDate() + i);
+        const dow = d.getDay();
+        const dateStr = d.toISOString().split("T")[0];
+
+        for (const team of teams) {
+          const teamDays = [...(TRAINING_SCHEDULE[team.category] || []), ...TRAINING_SCHEDULE.ALL];
+          if (!teamDays.includes(dow)) continue;
+
+          const existing = (await storage.getAttendanceSessions(team.id))
+            .find(s => s.sessionDate === dateStr && s.sessionType === "TRAINING");
+          if (existing) continue;
+
+          const session = await storage.createAttendanceSession({
+            teamId: team.id,
+            sessionDate: dateStr,
+            sessionType: "TRAINING",
+            notes: `Auto-scheduled: ${d.toLocaleDateString("en-US", { weekday: "long" })} training`,
+          });
+          created.push({ ...session, teamName: team.name });
+        }
+      }
+
+      res.json({ generated: created.length, sessions: created });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/training/schedule-custom", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        teamId: z.string().optional(),
+        playerIds: z.array(z.string()).optional(),
+        sessionDate: z.string(),
+        sessionType: z.enum(["TRAINING","MATCH","GYM"]).default("TRAINING"),
+        notes: z.string().optional(),
+      }).parse(req.body);
+
+      const teams = await storage.getTeams();
+      const allUsers = await db.select().from(schema.users);
+      const created: any[] = [];
+
+      if (body.teamId) {
+        const team = teams.find(t => t.id === body.teamId);
+        const session = await storage.createAttendanceSession({
+          teamId: body.teamId,
+          sessionDate: body.sessionDate,
+          sessionType: body.sessionType as any,
+          notes: body.notes || `Scheduled by ${req.user!.role}`,
+        });
+        created.push(session);
+
+        const players = await storage.getPlayersByTeam(body.teamId);
+        for (const p of players) {
+          const linkedUser = allUsers.find(u => u.playerId === p.id);
+          await storage.createNotification({
+            userId: linkedUser?.id || null,
+            playerId: p.id,
+            type: "TRAINING_SCHEDULED",
+            title: `${body.sessionType} Session Scheduled`,
+            message: `${team?.name || "Your team"} has a ${body.sessionType.toLowerCase()} session on ${body.sessionDate}. ${body.notes || ""}`.trim(),
+            metadata: { sessionId: session.id, teamId: body.teamId, date: body.sessionDate },
+            read: false,
+          });
+        }
+      }
+
+      if (body.playerIds && body.playerIds.length > 0) {
+        const playerIdSet = new Set(body.playerIds);
+        const teamPlayerMap = new Map<string, string[]>();
+        for (const pid of body.playerIds) {
+          const player = await storage.getPlayer(pid);
+          if (!player) continue;
+          const list = teamPlayerMap.get(player.teamId) || [];
+          list.push(pid);
+          teamPlayerMap.set(player.teamId, list);
+        }
+
+        for (const [teamId] of teamPlayerMap) {
+          const existing = (await storage.getAttendanceSessions(teamId))
+            .find(s => s.sessionDate === body.sessionDate && s.sessionType === body.sessionType);
+          const session = existing || await storage.createAttendanceSession({
+            teamId,
+            sessionDate: body.sessionDate,
+            sessionType: body.sessionType as any,
+            notes: body.notes || `Scheduled by ${req.user!.role} for selected players`,
+          });
+          if (!existing) created.push(session);
+        }
+
+        for (const pid of body.playerIds) {
+          const linkedUser = allUsers.find(u => u.playerId === pid);
+          const player = await storage.getPlayer(pid);
+          await storage.createNotification({
+            userId: linkedUser?.id || null,
+            playerId: pid,
+            type: "TRAINING_SCHEDULED",
+            title: `${body.sessionType} Session Scheduled`,
+            message: `You have been scheduled for a ${body.sessionType.toLowerCase()} session on ${body.sessionDate}. ${body.notes || ""}`.trim(),
+            metadata: { date: body.sessionDate, teamId: player?.teamId },
+            read: false,
+          });
+        }
+      }
+
+      res.json({ success: true, sessionsCreated: created.length });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/training/coach-summary", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const teamId = req.query.teamId as string;
+      const sessions = await storage.getAttendanceSessions(teamId || undefined);
+      const today = new Date().toISOString().split("T")[0];
+      const todaySessions = sessions.filter(s => s.sessionDate === today);
+
+      const summaries: any[] = [];
+      for (const sess of todaySessions) {
+        const records = await storage.getAttendanceRecords(sess.id);
+        const teams = await storage.getTeams();
+        const team = teams.find(t => t.id === sess.teamId);
+        const players = await storage.getPlayersByTeam(sess.teamId);
+
+        summaries.push({
+          session: { ...sess, teamName: team?.name },
+          totalPlayers: players.length,
+          present: records.filter(r => r.status === "PRESENT").length,
+          late: records.filter(r => r.status === "LATE").length,
+          absent: players.length - records.length,
+          checkedIn: records.length,
+          records: records.map(r => {
+            const p = players.find(pl => pl.id === r.playerId);
+            return { ...r, playerName: p ? `${p.firstName} ${p.lastName}` : "Unknown", jerseyNo: p?.jerseyNo };
+          }),
+        });
+      }
+
+      res.json(summaries);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/training/attendance-report", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.query.playerId as string || req.user!.playerId;
+      if (!playerId) return res.json({ weekly: null, monthly: null });
+
+      const now = new Date();
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const weekStartStr = weekStart.toISOString().split("T")[0];
+      const monthStartStr = monthStart.toISOString().split("T")[0];
+
+      const allRecords = await storage.getAttendanceRecordsByPlayer(playerId);
+
+      const player = await storage.getPlayer(playerId);
+      const teamSessions = player?.teamId ? await storage.getAttendanceSessions(player.teamId) : [];
+
+      const weekSessions = teamSessions.filter(s => s.sessionDate >= weekStartStr && s.sessionType === "TRAINING");
+      const monthSessions = teamSessions.filter(s => s.sessionDate >= monthStartStr && s.sessionType === "TRAINING");
+
+      const weekRecords = allRecords.filter(r => weekSessions.some(s => s.id === r.sessionId));
+      const monthRecords = allRecords.filter(r => monthSessions.some(s => s.id === r.sessionId));
+
+      const summarize = (records: any[], total: number) => ({
+        total,
+        present: records.filter(r => r.status === "PRESENT").length,
+        late: records.filter(r => r.status === "LATE").length,
+        absent: total - records.length,
+        excused: records.filter(r => r.status === "EXCUSED").length,
+        rate: total > 0 ? Math.round((records.filter(r => r.status === "PRESENT" || r.status === "LATE").length / total) * 100) : 0,
+      });
+
+      res.json({
+        weekly: summarize(weekRecords, weekSessions.length),
+        monthly: summarize(monthRecords, monthSessions.length),
+        weekRange: `${weekStartStr} to ${now.toISOString().split("T")[0]}`,
+        monthRange: `${monthStartStr} to ${now.toISOString().split("T")[0]}`,
+      });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/notifications", requireAuth, async (req, res, next) => {
+    try {
+      const notifs = await storage.getNotifications(req.user!.userId);
+      res.json(notifs.slice(0, 50));
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/notifications/:id/read", requireAuth, async (req, res, next) => {
+    try {
+      await storage.markNotificationRead(req.params.id);
+      res.json({ success: true });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/notifications/read-all", requireAuth, async (req, res, next) => {
+    try {
+      await storage.markAllNotificationsRead(req.user!.userId);
+      res.json({ success: true });
+    } catch (e) { next(e); }
   });
 
   app.get("/api/birthdays", requireAuth, async (_req, res, next) => {

@@ -113,6 +113,15 @@ export const api = {
   getPlayerDashboard: (playerId: string) => apiFetch<any>("/players/" + playerId + "/dashboard"),
   getBirthdays: () => apiFetch<any[]>("/birthdays"),
 
+  getMyTrainingSchedule: () => apiFetch<any>("/training/my-schedule"),
+  autoGenerateTraining: () => apiFetch<any>("/training/auto-generate", { method: "POST" }),
+  scheduleCustomTraining: (data: any) => apiFetch<any>("/training/schedule-custom", { method: "POST", body: JSON.stringify(data) }),
+  getCoachTrainingSummary: (teamId?: string) => apiFetch<any[]>(`/training/coach-summary${teamId ? "?teamId=" + teamId : ""}`),
+  getAttendanceReport: (playerId?: string) => apiFetch<any>(`/training/attendance-report${playerId ? "?playerId=" + playerId : ""}`),
+  getNotifications: () => apiFetch<any[]>("/notifications"),
+  markNotificationRead: (id: string) => apiFetch<any>(`/notifications/${id}/read`, { method: "POST" }),
+  markAllNotificationsRead: () => apiFetch<any>("/notifications/read-all", { method: "POST" }),
+
   getCoachAssignments: () => apiFetch<any[]>("/coach-assignments"),
   getCoachAssignmentsByTeam: (teamId: string) => apiFetch<any[]>(`/coach-assignments/team/${teamId}`),
   createCoachAssignment: (data: any) => apiFetch<any>("/coach-assignments", { method: "POST", body: JSON.stringify(data) }),
