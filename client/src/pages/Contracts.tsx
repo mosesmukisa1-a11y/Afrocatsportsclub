@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   FileText, Plus, CheckCircle, XCircle, Clock, AlertTriangle, Shield,
   Package, Truck, DollarSign, Calculator, Printer, Trash2, ChevronDown, ChevronUp,
-  CreditCard, Banknote, Users, TrendingUp, Hash, Loader2
+  CreditCard, Banknote, Users, TrendingUp, Hash, Loader2, Bell, PenLine
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 

@@ -134,6 +134,9 @@ export const api = {
   updateContract: (id: string, data: any) => apiFetch<any>(`/contracts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   approveContract: (id: string) => apiFetch<any>(`/contracts/${id}/approve`, { method: "POST" }),
   terminateContract: (id: string) => apiFetch<any>(`/contracts/${id}/terminate`, { method: "POST" }),
+  getMyContract: () => apiFetch<any>("/contracts/my-contract"),
+  playerSignContract: (id: string) => apiFetch<any>(`/contracts/${id}/player-sign`, { method: "POST" }),
+  sendUnsignedReminders: () => apiFetch<any>("/contracts/send-unsigned-reminders", { method: "POST" }),
 
   getContractItems: (contractId: string) => apiFetch<any[]>(`/contracts/${contractId}/items`),
   createContractItem: (contractId: string, data: any) => apiFetch<any>(`/contracts/${contractId}/items`, { method: "POST", body: JSON.stringify(data) }),

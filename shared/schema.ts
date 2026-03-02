@@ -270,6 +270,8 @@ export const playerContracts = pgTable("player_contracts", {
   obligations: text("obligations"),
   contractFileUrl: text("contract_file_url"),
   status: contractStatusEnum("status").notNull().default("DRAFT"),
+  signedByPlayer: boolean("signed_by_player").default(false),
+  playerSignedAt: timestamp("player_signed_at"),
   approvedByUserId: varchar("approved_by_user_id", { length: 36 }),
   createdByUserId: varchar("created_by_user_id", { length: 36 }),
   createdAt: timestamp("created_at").defaultNow(),

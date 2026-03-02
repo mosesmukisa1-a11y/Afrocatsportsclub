@@ -1431,6 +1431,80 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     } catch (e) { next(e); }
   });
 
+  app.get("/api/contracts/my-contract", requireAuth, async (req, res, next) => {
+    try {
+      const user = req.user!;
+      if (!user.playerId) return res.json(null);
+      const contracts = await storage.getPlayerContracts(user.playerId);
+      const activeContract = contracts.find((c: any) => c.status === "ACTIVE") || contracts.find((c: any) => c.status === "DRAFT") || contracts[0];
+      if (!activeContract) return res.json(null);
+      const items = await storage.getContractItems(activeContract.id);
+      const transport = await storage.getContractTransportBenefits(activeContract.id);
+      const contributions = await storage.getContractContributions(activeContract.id);
+      const player = await storage.getPlayer(user.playerId);
+      res.json({
+        contract: activeContract,
+        items,
+        transport,
+        contributions,
+        player,
+      });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/contracts/:id/player-sign", requireAuth, async (req, res, next) => {
+    try {
+      const user = req.user!;
+      const contract = await storage.getPlayerContract(req.params.id);
+      if (!contract) return res.status(404).json({ message: "Contract not found" });
+      if (!user.playerId || contract.playerId !== user.playerId) {
+        return res.status(403).json({ message: "You can only sign your own contract" });
+      }
+      if (contract.signedByPlayer) {
+        return res.status(400).json({ message: "Contract already signed" });
+      }
+      const updated = await storage.updatePlayerContract(req.params.id, {
+        signedByPlayer: true,
+        playerSignedAt: new Date(),
+      } as any);
+      const admins = await storage.getUsersByRole("ADMIN");
+      for (const admin of admins) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: "CONTRACT_SIGNED",
+          title: "Contract Signed",
+          message: `${user.fullName} has signed their contract.`,
+          metadata: { contractId: req.params.id, playerId: user.playerId },
+        });
+      }
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/contracts/send-unsigned-reminders", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const allContracts = await storage.getAllContracts();
+      const unsigned = allContracts.filter((c: any) => (c.status === "ACTIVE" || c.status === "DRAFT") && !c.signedByPlayer);
+      let sent = 0;
+      for (const contract of unsigned) {
+        const player = await storage.getPlayer(contract.playerId);
+        if (!player) continue;
+        const playerUser = await storage.getUserByPlayerId(contract.playerId);
+        if (!playerUser) continue;
+        await storage.createNotification({
+          userId: playerUser.id,
+          playerId: contract.playerId,
+          type: "CONTRACT_REMINDER",
+          title: "Contract Signature Required",
+          message: "Please review and sign your contract in the My Contract section.",
+          metadata: { contractId: contract.id },
+        });
+        sent++;
+      }
+      res.json({ sent, total: unsigned.length });
+    } catch (e) { next(e); }
+  });
+
   // ─── CONTRACT ISSUED ITEMS ────────────────────────────
   app.get("/api/contracts/:id/items", requireAuth, async (req, res, next) => {
     try { res.json(await storage.getContractItems(req.params.id)); } catch (e) { next(e); }

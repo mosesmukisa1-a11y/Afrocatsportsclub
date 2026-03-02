@@ -32,6 +32,7 @@ import ChangePassword from "@/pages/ChangePassword";
 import ResetPassword from "@/pages/ResetPassword";
 import ForgotPassword from "@/pages/ForgotPassword";
 import AdminUsers from "@/pages/AdminUsers";
+import MyContract from "@/pages/MyContract";
 
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
@@ -68,6 +69,7 @@ function Router() {
       <Route path="/documents">{() => <ProtectedRoute component={Documents} />}</Route>
       <Route path="/reports">{() => <ProtectedRoute component={Reports} />}</Route>
       <Route path="/player-dashboard">{() => <ProtectedRoute component={PlayerDashboard} />}</Route>
+      <Route path="/my-contract">{() => <ProtectedRoute component={MyContract} />}</Route>
       <Route path="/admin/registrations">{() => <ProtectedRoute component={AdminRegistrations} />}</Route>
       <Route path="/admin/users">{() => <ProtectedRoute component={AdminUsers} />}</Route>
       <Route component={NotFound} />
