@@ -12,7 +12,7 @@ import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Search, KeyRound, Shield, Copy, Check, Users, Loader2, UserCog, Crown, Trash2, AlertTriangle } from "lucide-react";
 
-const ALL_ROLES = ["ADMIN", "MANAGER", "COACH", "STATISTICIAN", "FINANCE", "MEDICAL", "PLAYER"] as const;
+const ALL_ROLES = ["ADMIN", "MANAGER", "COACH", "CAPTAIN", "STATISTICIAN", "FINANCE", "MEDICAL", "PLAYER"] as const;
 
 export default function AdminUsers() {
   const { user: currentUser } = useAuth();

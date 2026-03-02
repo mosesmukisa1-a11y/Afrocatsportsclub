@@ -11,9 +11,9 @@ import logo from "@assets/afrocate_logo_1772226294597.png";
 import { useState } from "react";
 
 const allNavItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
-  { icon: Users, label: "Teams", href: "/teams", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL"] },
-  { icon: Users, label: "Players", href: "/players", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL"] },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
+  { icon: Users, label: "Teams", href: "/teams", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL"] },
+  { icon: Users, label: "Players", href: "/players", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL"] },
   { icon: Trophy, label: "Matches", href: "/matches", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: ClipboardList, label: "Enter Stats", href: "/stats", roles: ["ADMIN","MANAGER","STATISTICIAN","COACH","PLAYER"] },
   { icon: CalendarCheck, label: "Attendance", href: "/attendance", roles: ["ADMIN","MANAGER","COACH"] },

@@ -825,7 +825,7 @@ export async function registerRoutes(
   });
 
   // ─── PLAYERS ─────────────────────────────────────
-  app.get("/api/players", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL"]), async (_req, res, next) => {
+  app.get("/api/players", requireAuth, requireRole(["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL"]), async (_req, res, next) => {
     try { res.json(await storage.getPlayers()); } catch (e) { next(e); }
   });
 

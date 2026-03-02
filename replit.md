@@ -40,6 +40,7 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Multi-Role Support**: Users can have multiple roles (stored in `roles` text[] column). The `role` column holds the primary role. JWT includes `roles[]`. Sidebar, `requireRole` middleware, and route guards check the full `roles` array.
 - **Admin/Manager**: Full access to all modules, add/edit/delete players, generate profile PDFs, manage shop/media
 - **Coach**: Teams, players, matches, attendance, stats, awards, contracts (read), documents
+- **Captain**: View players/teams, contact players by email/phone. Assigned as additional role via User Management (not self-registered)
 - **Statistician**: Matches, stats entry, reports
 - **Finance**: Finance module only + read-only lists
 - **Medical**: Injury module only + read-only lists

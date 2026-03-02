@@ -6,13 +6,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Eye, Printer, Shield, Trash2 } from "lucide-react";
+import { Plus, Search, Eye, Printer, Shield, Trash2, Mail, Phone } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { CameraCapture } from "@/components/CameraCapture";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 const POSITIONS = ["Setter", "Outside Hitter", "Opposite", "Middle Blocker", "Libero"];
 
@@ -30,6 +30,8 @@ export default function Players() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterTeam, setFilterTeam] = useState("ALL");
+  const [filterGender, setFilterGender] = useState("ALL");
   const { data: players = [], isLoading } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
   const { data: teams = [] } = useQuery({ queryKey: ["/api/teams"], queryFn: api.getTeams });
 
@@ -39,6 +41,8 @@ export default function Players() {
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({ ...emptyForm });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const userRoles = user?.roles && user.roles.length > 0 ? user.roles : user ? [user.role] : [];
 
   const createMut = useMutation({
     mutationFn: () => api.createPlayer({ ...form, jerseyNo: Number(form.jerseyNo) || undefined }),
@@ -88,14 +92,21 @@ export default function Players() {
     setViewOpen(true);
   };
 
-  const filteredPlayers = players.filter((p: any) =>
-    `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.position || "").toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredPlayers = useMemo(() => {
+    return players.filter((p: any) => {
+      const matchesSearch =
+        `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (p.position || "").toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesTeam = filterTeam === "ALL" || p.teamId === filterTeam;
+      const matchesGender = filterGender === "ALL" || (p.gender || "").toLowerCase() === filterGender.toLowerCase();
+      return matchesSearch && matchesTeam && matchesGender;
+    });
+  }, [players, searchTerm, filterTeam, filterGender]);
 
   const canCreate = user && ["ADMIN", "MANAGER"].includes(user.role);
   const canEdit = user && ["ADMIN", "MANAGER"].includes(user.role);
   const canDelete = user && ["ADMIN"].includes(user.role);
+  const canContact = user && (["ADMIN", "MANAGER", "COACH"].includes(user.role) || userRoles.includes("CAPTAIN"));
   const set = (field: string, value: string | number) => setForm(prev => ({ ...prev, [field]: value }));
 
   const PlayerFormFields = ({ isCreate }: { isCreate?: boolean }) => (
@@ -222,9 +233,36 @@ export default function Players() {
           )}
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-afrocat-muted" />
-          <Input placeholder="Search players..." className="pl-9 bg-afrocat-white-5 border-afrocat-border text-afrocat-text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} data-testid="input-search-players" />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-afrocat-muted" />
+            <Input placeholder="Search players..." className="pl-9 bg-afrocat-white-5 border-afrocat-border text-afrocat-text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} data-testid="input-search-players" />
+          </div>
+          <Select value={filterTeam} onValueChange={setFilterTeam}>
+            <SelectTrigger className="w-full sm:w-[200px] bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="select-filter-team">
+              <SelectValue placeholder="Filter by team" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Teams</SelectItem>
+              {teams.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={filterGender} onValueChange={setFilterGender}>
+            <SelectTrigger className="w-full sm:w-[160px] bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="select-filter-gender">
+              <SelectValue placeholder="Filter by gender" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Genders</SelectItem>
+              <SelectItem value="Male">Male</SelectItem>
+              <SelectItem value="Female">Female</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="text-xs text-afrocat-muted">
+          Showing {filteredPlayers.length} of {players.length} players
+          {filterTeam !== "ALL" && <span> • Team: {teams.find((t: any) => t.id === filterTeam)?.name}</span>}
+          {filterGender !== "ALL" && <span> • Gender: {filterGender}</span>}
         </div>
 
         {isLoading ? (
@@ -239,6 +277,7 @@ export default function Players() {
                     <th className="px-6 py-4 font-semibold">Jersey</th>
                     <th className="px-6 py-4 font-semibold">Position</th>
                     <th className="px-6 py-4 font-semibold">Team</th>
+                    <th className="px-6 py-4 font-semibold">Gender</th>
                     <th className="px-6 py-4 font-semibold">Status</th>
                     <th className="px-6 py-4 font-semibold">Actions</th>
                   </tr>
@@ -266,17 +305,28 @@ export default function Players() {
                         <td className="px-6 py-4 font-medium text-afrocat-muted" data-testid={`text-jersey-${player.id}`}>{player.jerseyNo ? `#${player.jerseyNo}` : "—"}</td>
                         <td className="px-6 py-4 text-afrocat-text" data-testid={`text-position-${player.id}`}>{player.position || "—"}</td>
                         <td className="px-6 py-4 text-afrocat-text" data-testid={`text-team-${player.id}`}>{team?.name || "Unassigned"}</td>
+                        <td className="px-6 py-4 text-afrocat-text" data-testid={`text-gender-${player.id}`}>{player.gender || "—"}</td>
                         <td className="px-6 py-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${statusColor}`} data-testid={`badge-status-${player.id}`}>{player.status}</span></td>
                         <td className="px-6 py-4">
                           <div className="flex gap-1">
-                            <button onClick={() => openView(player)} className="p-1.5 rounded hover:bg-afrocat-white-5 text-afrocat-muted hover:text-afrocat-text cursor-pointer" data-testid={`button-view-${player.id}`}>
+                            <button onClick={() => openView(player)} className="p-1.5 rounded hover:bg-afrocat-white-5 text-afrocat-muted hover:text-afrocat-text cursor-pointer" data-testid={`button-view-${player.id}`} title="View profile">
                               <Eye className="h-4 w-4" />
                             </button>
-                            <button onClick={() => pdfMut.mutate(player.id)} className="p-1.5 rounded hover:bg-afrocat-white-5 text-afrocat-muted hover:text-afrocat-text cursor-pointer" data-testid={`button-pdf-${player.id}`}>
+                            {canContact && player.email && (
+                              <a href={`mailto:${player.email}`} className="p-1.5 rounded hover:bg-afrocat-teal-soft text-afrocat-muted hover:text-afrocat-teal cursor-pointer" data-testid={`button-email-${player.id}`} title={`Email ${player.email}`}>
+                                <Mail className="h-4 w-4" />
+                              </a>
+                            )}
+                            {canContact && player.phone && (
+                              <a href={`tel:${player.phone}`} className="p-1.5 rounded hover:bg-afrocat-green-soft text-afrocat-muted hover:text-afrocat-green cursor-pointer" data-testid={`button-phone-${player.id}`} title={`Call ${player.phone}`}>
+                                <Phone className="h-4 w-4" />
+                              </a>
+                            )}
+                            <button onClick={() => pdfMut.mutate(player.id)} className="p-1.5 rounded hover:bg-afrocat-white-5 text-afrocat-muted hover:text-afrocat-text cursor-pointer" data-testid={`button-pdf-${player.id}`} title="Print profile">
                               <Printer className="h-4 w-4" />
                             </button>
                             {canDelete && (
-                              <button onClick={() => setDeleteConfirmId(player.id)} className="p-1.5 rounded hover:bg-afrocat-red-soft text-afrocat-muted hover:text-afrocat-red cursor-pointer" data-testid={`button-delete-${player.id}`}>
+                              <button onClick={() => setDeleteConfirmId(player.id)} className="p-1.5 rounded hover:bg-afrocat-red-soft text-afrocat-muted hover:text-afrocat-red cursor-pointer" data-testid={`button-delete-${player.id}`} title="Remove player">
                                 <Trash2 className="h-4 w-4" />
                               </button>
                             )}
@@ -344,8 +394,24 @@ export default function Players() {
                   <div><span className="text-afrocat-muted text-xs uppercase">Gender</span><p className="font-medium text-afrocat-text">{selectedPlayer?.gender || "—"}</p></div>
                   <div><span className="text-afrocat-muted text-xs uppercase">DOB</span><p className="font-medium text-afrocat-text">{selectedPlayer?.dob || "—"}</p></div>
                   <div><span className="text-afrocat-muted text-xs uppercase">Nationality</span><p className="font-medium text-afrocat-text">{selectedPlayer?.nationality || "—"}</p></div>
-                  <div><span className="text-afrocat-muted text-xs uppercase">Phone</span><p className="font-medium text-afrocat-text">{selectedPlayer?.phone || "—"}</p></div>
-                  <div><span className="text-afrocat-muted text-xs uppercase">Email</span><p className="font-medium text-afrocat-text">{selectedPlayer?.email || "—"}</p></div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Phone</span>
+                    <p className="font-medium text-afrocat-text">
+                      {selectedPlayer?.phone ? (
+                        canContact ? (
+                          <a href={`tel:${selectedPlayer.phone}`} className="text-afrocat-teal hover:underline" data-testid="link-player-phone">{selectedPlayer.phone}</a>
+                        ) : selectedPlayer.phone
+                      ) : "—"}
+                    </p>
+                  </div>
+                  <div><span className="text-afrocat-muted text-xs uppercase">Email</span>
+                    <p className="font-medium text-afrocat-text">
+                      {selectedPlayer?.email ? (
+                        canContact ? (
+                          <a href={`mailto:${selectedPlayer.email}`} className="text-afrocat-teal hover:underline" data-testid="link-player-email">{selectedPlayer.email}</a>
+                        ) : selectedPlayer.email
+                      ) : "—"}
+                    </p>
+                  </div>
                   <div><span className="text-afrocat-muted text-xs uppercase">Address</span><p className="font-medium text-afrocat-text">{selectedPlayer?.homeAddress || "—"}</p></div>
                   <div><span className="text-afrocat-muted text-xs uppercase">Town/Region</span><p className="font-medium text-afrocat-text">{[selectedPlayer?.town, selectedPlayer?.region].filter(Boolean).join(", ") || "—"}</p></div>
                   <div><span className="text-afrocat-muted text-xs uppercase">ID/Passport</span><p className="font-medium text-afrocat-text">{selectedPlayer?.idNumber || "—"}</p></div>
@@ -362,6 +428,29 @@ export default function Players() {
                     </div>
                   </div>
                 )}
+
+                {canContact && (selectedPlayer?.email || selectedPlayer?.phone) && (
+                  <div className="border-t border-afrocat-border pt-3">
+                    <h4 className="text-xs uppercase text-afrocat-muted font-semibold mb-2">Quick Contact</h4>
+                    <div className="flex gap-2">
+                      {selectedPlayer?.email && (
+                        <a href={`mailto:${selectedPlayer.email}`}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-afrocat-teal-soft text-afrocat-teal text-sm font-medium hover:bg-afrocat-teal/20 transition-colors"
+                          data-testid="button-quick-email">
+                          <Mail className="h-4 w-4" /> Email Player
+                        </a>
+                      )}
+                      {selectedPlayer?.phone && (
+                        <a href={`tel:${selectedPlayer.phone}`}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-afrocat-green-soft text-afrocat-green text-sm font-medium hover:bg-afrocat-green/20 transition-colors"
+                          data-testid="button-quick-phone">
+                          <Phone className="h-4 w-4" /> Call Player
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2 pt-2">
                   {canEdit && <Button variant="outline" onClick={() => setEditMode(true)} className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5" data-testid="button-edit-player">Edit</Button>}
                   <Button variant="outline" onClick={() => pdfMut.mutate(selectedPlayer?.id)} className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5" data-testid="button-print-profile">
