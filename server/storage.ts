@@ -31,6 +31,7 @@ export interface IStorage {
   getUserByVerificationToken(tokenHash: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<void>;
   getTeams(): Promise<Team[]>;
   getTeam(id: string): Promise<Team | undefined>;
   createTeam(team: InsertTeam): Promise<Team>;
@@ -171,6 +172,15 @@ export class DatabaseStorage implements IStorage {
   async updateUser(id: string, data: Partial<InsertUser>) {
     const [updated] = await db.update(schema.users).set(data).where(eq(schema.users.id, id)).returning();
     return updated;
+  }
+
+  async deleteUser(id: string) {
+    const user = await this.getUser(id);
+    if (!user) return;
+    if (user.playerId) {
+      await this.deletePlayer(user.playerId);
+    }
+    await db.delete(schema.users).where(eq(schema.users.id, id));
   }
 
   async getTeams() { return db.select().from(schema.teams).orderBy(schema.teams.name); }

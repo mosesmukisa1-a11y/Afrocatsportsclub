@@ -216,4 +216,6 @@ export const api = {
     apiFetch<any>("/admin/users", { method: "POST", body: JSON.stringify(data) }),
   adminUpdateRole: (userId: string, roles: string[]) =>
     apiFetch<any>(`/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roles }) }),
+  adminDeleteUser: (userId: string) =>
+    apiFetch<any>(`/admin/users/${userId}`, { method: "DELETE" }),
 };

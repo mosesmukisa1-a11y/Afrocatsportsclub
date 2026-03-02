@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Search, KeyRound, Shield, Copy, Check, Users, Loader2, UserCog, Crown } from "lucide-react";
+import { Search, KeyRound, Shield, Copy, Check, Users, Loader2, UserCog, Crown, Trash2, AlertTriangle } from "lucide-react";
 
 const ALL_ROLES = ["ADMIN", "MANAGER", "COACH", "STATISTICIAN", "FINANCE", "MEDICAL", "PLAYER"] as const;
 
@@ -27,6 +27,7 @@ export default function AdminUsers() {
   const [copied, setCopied] = useState(false);
   const [roleDialog, setRoleDialog] = useState<any>(null);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [deleteDialog, setDeleteDialog] = useState<any>(null);
 
   const isSuperAdmin = !!currentUser?.isSuperAdmin;
 
@@ -60,6 +61,16 @@ export default function AdminUsers() {
       toast({ title: "Roles updated", description: `User roles have been updated.` });
       setRoleDialog(null);
       setSelectedRoles([]);
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (userId: string) => api.adminDeleteUser(userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "User deleted", description: "The user and all associated data have been permanently removed." });
+      setDeleteDialog(null);
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -201,6 +212,17 @@ export default function AdminUsers() {
                         >
                           <KeyRound className="h-4 w-4 mr-1" /> Reset
                         </Button>
+                        {isSuperAdmin && !u.isSuperAdmin && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDeleteDialog(u)}
+                            className="border-afrocat-red/30 text-afrocat-red hover:bg-afrocat-red-soft"
+                            data-testid={`button-delete-${u.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -355,6 +377,39 @@ export default function AdminUsers() {
             ) : (
               <Button onClick={() => { setResetDialog(null); setGeneratedLink(""); }} data-testid="button-done">Done</Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteDialog} onOpenChange={(open) => { if (!open) setDeleteDialog(null); }}>
+        <DialogContent className="max-w-md bg-afrocat-card border-afrocat-border text-afrocat-text">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-afrocat-red">
+              <AlertTriangle className="h-5 w-5" /> Delete User Permanently
+            </DialogTitle>
+          </DialogHeader>
+          {deleteDialog && (
+            <div className="space-y-4">
+              <div className="p-3 bg-afrocat-white-5 rounded-lg">
+                <p className="font-semibold text-sm text-afrocat-text">{deleteDialog.fullName}</p>
+                <p className="text-xs text-afrocat-muted">{deleteDialog.email}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-afrocat-red-soft">
+                <p className="text-sm text-afrocat-red font-medium">This action cannot be undone.</p>
+                <p className="text-xs text-afrocat-red mt-1">This will permanently delete the user account and all associated data including player records, stats, attendance, injuries, contracts, and awards.</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialog(null)} className="border-afrocat-border text-afrocat-muted">Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteDialog && deleteMut.mutate(deleteDialog.id)}
+              disabled={deleteMut.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteMut.isPending ? "Deleting..." : "Delete Permanently"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -748,6 +748,21 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/users/:id", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const currentUser = await storage.getUser(req.user!.userId);
+      if (!currentUser) return res.status(401).json({ message: "Unauthorized" });
+      if (!currentUser.isSuperAdmin) return res.status(403).json({ message: "Only the Super Admin can delete users" });
+
+      const targetUser = await storage.getUser(req.params.id);
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+      if (targetUser.isSuperAdmin) return res.status(403).json({ message: "Cannot delete the Super Admin account" });
+
+      await storage.deleteUser(req.params.id);
+      res.json({ message: "User deleted successfully" });
+    } catch (e) { next(e); }
+  });
+
   // ─── TEAMS ───────────────────────────────────────
   app.get("/api/teams", requireAuth, async (_req, res, next) => {
     try { res.json(await storage.getTeams()); } catch (e) { next(e); }
