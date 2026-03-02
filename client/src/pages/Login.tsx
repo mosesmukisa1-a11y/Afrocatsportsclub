@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useState, useEffect } from "react";
@@ -12,8 +11,8 @@ export default function Login() {
   const [, setLocation] = useLocation();
   const { login, user } = useAuth();
   const { toast } = useToast();
-  const [email, setEmail] = useState("admin@afrocat.test");
-  const [password, setPassword] = useState("Passw0rd!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const getRoleDashboard = (role: string) => {
@@ -45,10 +44,7 @@ export default function Login() {
     }
   };
 
-  const quickLogin = (email: string) => {
-    setEmail(email);
-    setPassword("Passw0rd!");
-  };
+  
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-afrocat-glow p-4">
@@ -68,11 +64,21 @@ export default function Login() {
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-afrocat-muted text-sm">Email</Label>
-                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required data-testid="input-email"
+                <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="you@example.com" data-testid="input-email"
                   className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-afrocat-muted text-sm">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password" className="text-afrocat-muted text-sm">Password</Label>
+                  <button
+                    type="button"
+                    onClick={() => setLocation("/forgot-password")}
+                    className="text-xs text-afrocat-teal hover:underline cursor-pointer"
+                    data-testid="link-forgot-password"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required data-testid="input-password"
                   className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
               </div>
@@ -82,29 +88,12 @@ export default function Login() {
             </form>
           </div>
           <div className="flex flex-col border-t border-afrocat-border px-6 py-4 bg-afrocat-white-3 rounded-b-[18px]">
-            <p className="text-sm text-center text-afrocat-muted mb-3">
+            <p className="text-sm text-center text-afrocat-muted">
               New to Afrocat?{" "}
               <button onClick={() => setLocation("/register")} className="text-afrocat-gold font-semibold hover:underline cursor-pointer" data-testid="link-register">
                 Register here
               </button>
             </p>
-            <div className="text-sm text-center text-afrocat-muted mb-3">Quick login as:</div>
-            <div className="flex flex-wrap gap-2 justify-center">
-              {[
-                { label: "Admin", email: "admin@afrocat.test" },
-                { label: "Coach", email: "coach@afrocat.test" },
-                { label: "Stats", email: "stats@afrocat.test" },
-                { label: "Finance", email: "finance@afrocat.test" },
-                { label: "Medical", email: "medical@afrocat.test" },
-                { label: "Player", email: "player1@afrocat.test" },
-              ].map(r => (
-                <button key={r.email} onClick={() => quickLogin(r.email)}
-                  className="text-xs px-2 py-1 bg-afrocat-white-5 border border-afrocat-border rounded-md hover:bg-afrocat-teal/15 hover:border-afrocat-teal/30 hover:text-afrocat-teal transition-colors cursor-pointer text-afrocat-muted"
-                  data-testid={`button-quick-login-${r.label.toLowerCase()}`}>
-                  {r.label}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
       </div>

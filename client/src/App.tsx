@@ -30,6 +30,7 @@ import VerifyEmail from "@/pages/VerifyEmail";
 import AdminRegistrations from "@/pages/AdminRegistrations";
 import ChangePassword from "@/pages/ChangePassword";
 import ResetPassword from "@/pages/ResetPassword";
+import ForgotPassword from "@/pages/ForgotPassword";
 import AdminUsers from "@/pages/AdminUsers";
 
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/shop" component={PublicShop}/>
       <Route path="/register" component={Register}/>
       <Route path="/verify-email" component={VerifyEmail}/>
+      <Route path="/forgot-password" component={ForgotPassword}/>
       <Route path="/reset-password" component={ResetPassword}/>
       <Route path="/change-password">{() => <ProtectedRoute component={ChangePassword} allowMustChange />}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute component={Dashboard} />}</Route>

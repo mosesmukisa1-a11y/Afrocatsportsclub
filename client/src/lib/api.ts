@@ -218,4 +218,6 @@ export const api = {
     apiFetch<any>(`/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roles }) }),
   adminDeleteUser: (userId: string) =>
     apiFetch<any>(`/admin/users/${userId}`, { method: "DELETE" }),
+  forgotPassword: (email: string) =>
+    apiFetch<any>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
 };

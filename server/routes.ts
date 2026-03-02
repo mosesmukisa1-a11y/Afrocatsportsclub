@@ -270,6 +270,40 @@ export async function registerRoutes(
     }
   });
 
+  // ─── FORGOT PASSWORD (public, email-based) ────────
+  app.post("/api/auth/forgot-password", async (req, res, next) => {
+    try {
+      const body = z.object({ email: z.string().email() }).parse(req.body);
+      const user = await storage.getUserByEmail(body.email);
+      if (!user) {
+        return res.json({ message: "If an account with that email exists, a password reset link has been generated." });
+      }
+
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const tokenExp = new Date(Date.now() + 60 * 60 * 1000);
+
+      await storage.updateUser(user.id, {
+        passwordResetTokenHash: tokenHash,
+        passwordResetTokenExp: tokenExp,
+      } as any);
+
+      const host = req.headers.host || "localhost:5000";
+      const protocol = req.headers["x-forwarded-proto"] || "http";
+      const frontendUrl = `${protocol}://${host}`;
+      const resetLink = `${frontendUrl}/reset-password?token=${rawToken}&email=${encodeURIComponent(user.email)}`;
+
+      return res.json({
+        message: "If an account with that email exists, a password reset link has been generated.",
+        resetLink,
+        expiresIn: "1 hour",
+      });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
   // ─── RESET PASSWORD (public, token-based) ────────
   app.post("/api/auth/reset-password", async (req, res, next) => {
     try {
