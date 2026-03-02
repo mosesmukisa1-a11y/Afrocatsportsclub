@@ -2163,7 +2163,7 @@ th{background:#0d7377;color:white}
         }
       }
 
-      const sortedPlayers = [...playerList].sort((a, b) => (b.jerseyNo || 0) - (a.jerseyNo || 0));
+      const sortedPlayers = [...playerList].sort((a, b) => (a.jerseyNo || 0) - (b.jerseyNo || 0));
 
       const teamGender = team.gender || (sortedPlayers.length > 0 ? sortedPlayers[0].gender : "");
       const teamCountry = sortedPlayers.length > 0 ? (sortedPlayers[0].nationality || "Namibia") : "Namibia";
@@ -2238,7 +2238,7 @@ th{background:#0d7377;color:white}
 
       const officials = await storage.getTeamOfficials(body.teamId);
 
-      const sortedPlayers = [...activePlayers].sort((a, b) => (b.jerseyNo || 0) - (a.jerseyNo || 0));
+      const sortedPlayers = [...activePlayers].sort((a, b) => (a.jerseyNo || 0) - (b.jerseyNo || 0));
 
       const data = {
         clubName: "AFROCAT VOLLEYBALL CLUB",

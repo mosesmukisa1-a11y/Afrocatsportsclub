@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import logo from "@assets/afrocate_logo_1772226294597.png";
+import { AFROCAT_LOGO_BASE64 } from "@/lib/logo-base64";
 
 const docTypeLabels: Record<string, string> = {
   O2BIS: "O-2 Bis Form",
@@ -385,6 +386,7 @@ function generateO2bisHTML(data: any): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Arial', sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; color: #000; font-size: 11px; }
   .header { text-align: center; margin-bottom: 15px; }
+  .header img.logo { width: 80px; height: 80px; object-fit: contain; margin-bottom: 8px; }
   .header h1 { font-size: 16px; letter-spacing: 3px; margin-bottom: 2px; color: #0d6e6e; }
   .header h2 { font-size: 13px; font-weight: bold; margin-bottom: 2px; }
   .header .subtitle { font-size: 10px; color: #666; letter-spacing: 1px; }
@@ -403,6 +405,7 @@ function generateO2bisHTML(data: any): string {
   @media print { body { margin: 0; padding: 10px; } }
 </style></head><body>
 <div class="header">
+  <img src="${AFROCAT_LOGO_BASE64}" alt="Afrocat Logo" class="logo" />
   <h1>AFROCAT VOLLEYBALL CLUB</h1>
   <div class="subtitle">One Team One Dream &mdash; Passion Discipline Victory</div>
   <div class="nvf-title">O-2 Bis &mdash; OFFICIAL TEAM COMPOSITION FORM</div>
@@ -476,6 +479,7 @@ function generateTeamListHTML(data: any): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Arial', sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; color: #000; }
   .header { text-align: center; margin-bottom: 20px; border-bottom: 3px solid #0d6e6e; padding-bottom: 15px; }
+  .header img.logo { width: 80px; height: 80px; object-fit: contain; margin-bottom: 8px; }
   .header h1 { font-size: 18px; letter-spacing: 3px; color: #0d6e6e; }
   .header h2 { font-size: 14px; margin-top: 5px; }
   .header .subtitle { font-size: 10px; color: #666; letter-spacing: 1px; margin-top: 3px; }
@@ -490,6 +494,7 @@ function generateTeamListHTML(data: any): string {
   @media print { body { margin: 0; padding: 10px; } }
 </style></head><body>
 <div class="header">
+  <img src="${AFROCAT_LOGO_BASE64}" alt="Afrocat Logo" class="logo" />
   <h1>AFROCAT VOLLEYBALL CLUB</h1>
   <div class="subtitle">One Team One Dream &mdash; Passion Discipline Victory</div>
   <h2>OFFICIAL TEAM LIST</h2>

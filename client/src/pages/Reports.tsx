@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useState } from "react";
 import { FileText, Download, Printer, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AFROCAT_LOGO_BASE64 } from "@/lib/logo-base64";
 
 function generateMatchReportHTML(data: any): string {
   const topPerformersRows = (data.topPerformers || []).map((p: any) =>
@@ -35,6 +36,7 @@ function generateMatchReportHTML(data: any): string {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 30px; color: #1a1a1a; }
   .header { text-align: center; margin-bottom: 30px; border-bottom: 4px solid #0d6e6e; padding-bottom: 20px; }
+  .header img.logo { width: 80px; height: 80px; object-fit: contain; margin-bottom: 8px; }
   .header h1 { color: #0d6e6e; font-size: 24px; letter-spacing: 2px; margin-bottom: 4px; }
   .header .motto { font-size: 11px; color: #888; letter-spacing: 1px; margin-bottom: 15px; }
   .header h2 { font-size: 18px; color: #333; margin-top: 10px; }
@@ -60,6 +62,7 @@ function generateMatchReportHTML(data: any): string {
   @media print { body { margin: 0; padding: 15px; } .no-print { display: none; } }
 </style></head><body>
 <div class="header">
+  <img src="${AFROCAT_LOGO_BASE64}" alt="Afrocat Logo" class="logo" />
   <h1>${data.clubName || 'AFROCAT VOLLEYBALL CLUB'}</h1>
   <div class="motto">${data.motto || 'One Team One Dream — Passion Discipline Victory'}</div>
   <h2>MATCH REPORT</h2>
