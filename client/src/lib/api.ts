@@ -231,4 +231,28 @@ export const api = {
     apiFetch<any>(`/admin/users/${userId}`, { method: "DELETE" }),
   forgotPassword: (email: string) =>
     apiFetch<any>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+
+  getContractContributions: (contractId: string) => apiFetch<any[]>(`/contracts/${contractId}/contributions`),
+  getPlayerContributions: (playerId: string) => apiFetch<any[]>(`/contributions/player/${playerId}`),
+  createContractContribution: (contractId: string, data: any) => apiFetch<any>(`/contracts/${contractId}/contributions`, { method: "POST", body: JSON.stringify(data) }),
+  updateContribution: (id: string, data: any) => apiFetch<any>(`/contributions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteContribution: (id: string) => apiFetch<void>(`/contributions/${id}`, { method: "DELETE" }),
+
+  getFundRaisingActivities: () => apiFetch<any[]>("/fundraising/activities"),
+  createFundRaisingActivity: (data: any) => apiFetch<any>("/fundraising/activities", { method: "POST", body: JSON.stringify(data) }),
+  updateFundRaisingActivity: (id: string, data: any) => apiFetch<any>(`/fundraising/activities/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteFundRaisingActivity: (id: string) => apiFetch<void>(`/fundraising/activities/${id}`, { method: "DELETE" }),
+  getFundRaisingContributions: (activityId?: string, playerId?: string) => {
+    const params = new URLSearchParams();
+    if (activityId) params.set("activityId", activityId);
+    if (playerId) params.set("playerId", playerId);
+    return apiFetch<any[]>(`/fundraising/contributions?${params.toString()}`);
+  },
+  createFundRaisingContribution: (data: any) => apiFetch<any>("/fundraising/contributions", { method: "POST", body: JSON.stringify(data) }),
+  updateFundRaisingContribution: (id: string, data: any) => apiFetch<any>(`/fundraising/contributions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteFundRaisingContribution: (id: string) => apiFetch<void>(`/fundraising/contributions/${id}`, { method: "DELETE" }),
+
+  getNextMembershipNo: () => apiFetch<{ membershipNo: string }>("/membership/next"),
+  assignMembershipNo: (playerId: string) => apiFetch<any>(`/membership/assign/${playerId}`, { method: "POST" }),
+  getPlayerValue: (playerId: string) => apiFetch<any>(`/player-value/${playerId}`),
 };
