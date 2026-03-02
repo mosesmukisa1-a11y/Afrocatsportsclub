@@ -111,6 +111,7 @@ export const api = {
 
   getCoachDashboard: (teamId: string) => apiFetch<any>("/dashboard/coach/summary?teamId=" + teamId),
   getPlayerDashboard: (playerId: string) => apiFetch<any>("/players/" + playerId + "/dashboard"),
+  getBirthdays: () => apiFetch<any[]>("/birthdays"),
 
   getCoachAssignments: () => apiFetch<any[]>("/coach-assignments"),
   getCoachAssignmentsByTeam: (teamId: string) => apiFetch<any[]>(`/coach-assignments/team/${teamId}`),

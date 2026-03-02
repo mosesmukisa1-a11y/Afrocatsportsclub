@@ -2719,5 +2719,51 @@ th{background:#0d7377;color:white}
     }
   });
 
+  app.get("/api/birthdays", requireAuth, async (_req, res, next) => {
+    try {
+      const allPlayers = await storage.getPlayers();
+      const teams = await storage.getTeams();
+      const teamMap = new Map(teams.map(t => [t.id, t.name]));
+      const now = new Date();
+      const todayMM = String(now.getMonth() + 1).padStart(2, "0");
+      const todayDD = String(now.getDate()).padStart(2, "0");
+
+      const birthdays: any[] = [];
+      for (const p of allPlayers) {
+        if (!p.dob) continue;
+        const parts = p.dob.split("-");
+        if (parts.length < 3) continue;
+        const mm = parts[1];
+        const dd = parts[2];
+
+        const thisYearBday = new Date(now.getFullYear(), parseInt(mm) - 1, parseInt(dd));
+        if (thisYearBday < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+          thisYearBday.setFullYear(now.getFullYear() + 1);
+        }
+        const diffDays = Math.floor((thisYearBday.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays <= 7) {
+          const birthYear = parseInt(parts[0]);
+          const turningAge = thisYearBday.getFullYear() - birthYear;
+          birthdays.push({
+            playerId: p.id,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            photoUrl: p.photoUrl,
+            jerseyNo: p.jerseyNo,
+            position: p.position,
+            teamName: teamMap.get(p.teamId) || null,
+            dob: p.dob,
+            isToday: mm === todayMM && dd === todayDD,
+            daysUntil: diffDays,
+            turningAge,
+          });
+        }
+      }
+      birthdays.sort((a, b) => a.daysUntil - b.daysUntil);
+      res.json(birthdays);
+    } catch (e) { next(e); }
+  });
+
   return httpServer;
 }

@@ -5,7 +5,7 @@ import {
   Users, Trophy, DollarSign, Activity, ArrowUpRight, ArrowDownRight,
   Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
   User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
-  FileText, Bell, ChevronRight, MessageCircle
+  FileText, Bell, ChevronRight, MessageCircle, Cake, PartyPopper, Gift
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -39,6 +39,12 @@ export default function Dashboard() {
     enabled: isPlayerView && !!playerDashId,
   });
 
+  const { data: birthdays = [] } = useQuery({
+    queryKey: ["/api/birthdays"],
+    queryFn: api.getBirthdays,
+    enabled: !!user,
+  });
+
   const totalIncome = financeTxns.filter((f: any) => f.type === "INCOME").reduce((acc: number, curr: any) => acc + curr.amount, 0);
   const totalExpense = financeTxns.filter((f: any) => f.type === "EXPENSE").reduce((acc: number, curr: any) => acc + curr.amount, 0);
   const openInjuries = injuries.filter((i: any) => i.status === "OPEN").length;
@@ -51,6 +57,84 @@ export default function Dashboard() {
           <h1 className="text-3xl font-display font-bold text-afrocat-text tracking-tight">Dashboard</h1>
           <p className="text-afrocat-muted mt-1">Welcome back, {user?.fullName}</p>
         </div>
+
+        {birthdays.length > 0 && (
+          <div className="afrocat-card overflow-hidden" data-testid="card-birthdays">
+            <div className="bg-gradient-to-r from-afrocat-gold-soft via-afrocat-teal-soft to-afrocat-gold-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px]">
+              <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold" data-testid="text-birthdays-title">
+                <Cake className="h-5 w-5" /> Birthday Celebrations
+              </h3>
+            </div>
+            <div className="p-5 space-y-3">
+              {birthdays.filter((b: any) => b.isToday).length > 0 && (
+                <div className="space-y-3">
+                  {birthdays.filter((b: any) => b.isToday).map((b: any) => (
+                    <div key={b.playerId} className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-afrocat-gold-soft to-afrocat-teal-soft border border-afrocat-gold/30 animate-in fade-in slide-in-from-left-4 duration-500" data-testid={`card-birthday-today-${b.playerId}`}>
+                      <div className="relative shrink-0">
+                        {b.photoUrl ? (
+                          <img src={b.photoUrl} alt={`${b.firstName} ${b.lastName}`} className="w-14 h-14 rounded-full object-cover border-2 border-afrocat-gold" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-full bg-afrocat-gold-soft flex items-center justify-center border-2 border-afrocat-gold text-lg font-bold text-afrocat-gold">
+                            {(b.firstName?.[0] || "")}{(b.lastName?.[0] || "")}
+                          </div>
+                        )}
+                        <div className="absolute -top-1 -right-1 text-lg">🎂</div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display font-bold text-afrocat-text text-lg">{b.firstName} {b.lastName}</span>
+                          <PartyPopper className="h-5 w-5 text-afrocat-gold" />
+                        </div>
+                        <p className="text-sm text-afrocat-gold font-semibold mt-0.5">
+                          Happy Birthday! Turning {b.turningAge} today! 🎉
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-afrocat-muted">
+                          {b.jerseyNo && <span>#{b.jerseyNo}</span>}
+                          {b.position && <span>{b.position}</span>}
+                          {b.teamName && <span>{b.teamName}</span>}
+                        </div>
+                      </div>
+                      <Gift className="h-8 w-8 text-afrocat-gold shrink-0 opacity-60" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {birthdays.filter((b: any) => !b.isToday).length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Upcoming This Week</p>
+                  <div className="space-y-2">
+                    {birthdays.filter((b: any) => !b.isToday).map((b: any) => (
+                      <div key={b.playerId} className="flex items-center gap-3 p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid={`card-birthday-upcoming-${b.playerId}`}>
+                        <div className="shrink-0">
+                          {b.photoUrl ? (
+                            <img src={b.photoUrl} alt={`${b.firstName} ${b.lastName}`} className="w-10 h-10 rounded-full object-cover border border-afrocat-border" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-afrocat-white-5 flex items-center justify-center border border-afrocat-border text-sm font-bold text-afrocat-muted">
+                              {(b.firstName?.[0] || "")}{(b.lastName?.[0] || "")}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="font-semibold text-sm text-afrocat-text">{b.firstName} {b.lastName}</span>
+                          <div className="flex items-center gap-2 text-xs text-afrocat-muted">
+                            {b.teamName && <span>{b.teamName}</span>}
+                            {b.position && <span>{b.position}</span>}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <Badge className="bg-afrocat-teal-soft text-afrocat-teal border-0 text-xs" data-testid={`badge-birthday-days-${b.playerId}`}>
+                            {b.daysUntil === 1 ? "Tomorrow" : `In ${b.daysUntil} days`}
+                          </Badge>
+                          <p className="text-[10px] text-afrocat-muted mt-0.5">Turning {b.turningAge}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {user && !["FINANCE","MEDICAL","PLAYER"].includes(user.role) && (
