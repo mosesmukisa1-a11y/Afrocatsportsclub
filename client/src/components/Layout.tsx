@@ -35,7 +35,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const navItems = allNavItems.filter(item => user && item.roles.includes(user.role));
+  const userRoles = user?.roles && user.roles.length > 0 ? user.roles : user ? [user.role] : [];
+  const navItems = allNavItems.filter(item => user && item.roles.some(r => userRoles.includes(r)));
 
   return (
     <div className="min-h-screen bg-afrocat-bg text-afrocat-text flex flex-col md:flex-row">
@@ -89,7 +90,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </div>
             <div>
               <p className="text-sm font-semibold text-afrocat-text">{user?.fullName}</p>
-              <p className="text-xs text-afrocat-muted">{user?.role}</p>
+              <p className="text-xs text-afrocat-muted">{userRoles.join(" · ")}</p>
             </div>
           </div>
           <button

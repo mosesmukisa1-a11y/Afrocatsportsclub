@@ -7,6 +7,8 @@ interface AuthUser {
   fullName: string;
   email: string;
   role: string;
+  roles?: string[];
+  isSuperAdmin?: boolean;
   playerId?: string;
   mustChangePassword?: boolean;
 }

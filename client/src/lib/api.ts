@@ -214,6 +214,6 @@ export const api = {
 
   adminCreateUser: (data: { fullName: string; email: string; password: string; role: string }) =>
     apiFetch<any>("/admin/users", { method: "POST", body: JSON.stringify(data) }),
-  adminUpdateRole: (userId: string, role: string) =>
-    apiFetch<any>(`/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ role }) }),
+  adminUpdateRole: (userId: string, roles: string[]) =>
+    apiFetch<any>(`/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roles }) }),
 };

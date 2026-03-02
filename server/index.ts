@@ -71,9 +71,9 @@ app.use((req, res, next) => {
       const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, adminEmail));
       const passwordHash = await bcrypt.hash(adminPass, 10);
       if (existing) {
-        await db.update(schema.users).set({ passwordHash, role: "ADMIN", accountStatus: "ACTIVE", emailVerified: true, mustChangePassword: false }).where(eq(schema.users.id, existing.id));
+        await db.update(schema.users).set({ passwordHash, role: "ADMIN", accountStatus: "ACTIVE", emailVerified: true, mustChangePassword: false, isSuperAdmin: true, roles: ["ADMIN"] }).where(eq(schema.users.id, existing.id));
       } else {
-        await db.insert(schema.users).values({ fullName: "System Admin", email: adminEmail, passwordHash, role: "ADMIN", accountStatus: "ACTIVE", emailVerified: true, mustChangePassword: false });
+        await db.insert(schema.users).values({ fullName: "System Admin", email: adminEmail, passwordHash, role: "ADMIN", accountStatus: "ACTIVE", emailVerified: true, mustChangePassword: false, isSuperAdmin: true, roles: ["ADMIN"] });
       }
       log(`Admin provisioned: ${adminEmail}`);
     } catch (e: any) {

@@ -222,10 +222,10 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Your registration is awaiting approval by Afrocat management.", code: "PENDING_APPROVAL" });
       }
 
-      const token = signToken({ userId: user.id, email: user.email, role: user.role });
+      const token = signToken({ userId: user.id, email: user.email, role: user.role, roles: user.roles || [user.role] });
       return res.json({
         token,
-        user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId, accountStatus: user.accountStatus },
+        user: { id: user.id, fullName: user.fullName, email: user.email, role: user.role, roles: user.roles || [], isSuperAdmin: !!user.isSuperAdmin, playerId: user.playerId, accountStatus: user.accountStatus },
         mustChangePassword: user.mustChangePassword || false,
       });
     } catch (e: any) {
@@ -238,7 +238,7 @@ export async function registerRoutes(
     try {
       const user = await storage.getUser(req.user!.userId);
       if (!user) return res.status(404).json({ message: "User not found" });
-      return res.json({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, playerId: user.playerId, accountStatus: user.accountStatus, mustChangePassword: !!user.mustChangePassword });
+      return res.json({ id: user.id, fullName: user.fullName, email: user.email, role: user.role, roles: user.roles || [], isSuperAdmin: !!user.isSuperAdmin, playerId: user.playerId, accountStatus: user.accountStatus, mustChangePassword: !!user.mustChangePassword });
     } catch (e) { next(e); }
   });
 
@@ -315,6 +315,8 @@ export async function registerRoutes(
         fullName: u.fullName,
         email: u.email,
         role: u.role,
+        roles: u.roles || [],
+        isSuperAdmin: !!u.isSuperAdmin,
         accountStatus: u.accountStatus,
         emailVerified: u.emailVerified,
         mustChangePassword: u.mustChangePassword,
@@ -726,10 +728,19 @@ export async function registerRoutes(
 
   app.put("/api/admin/users/:id/role", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
     try {
-      const body = z.object({ role: z.enum(["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL","PLAYER"]) }).parse(req.body);
+      const currentUser = await storage.getUser(req.user!.userId);
+      if (!currentUser) return res.status(401).json({ message: "Unauthorized" });
+      if (!currentUser.isSuperAdmin) return res.status(403).json({ message: "Only the Super Admin can assign roles" });
+
+      const body = z.object({
+        roles: z.array(z.enum(["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE","MEDICAL","PLAYER"])).min(1),
+      }).parse(req.body);
+
       const user = await storage.getUser(req.params.id);
       if (!user) return res.status(404).json({ message: "User not found" });
-      const updated = await storage.updateUser(req.params.id, { role: body.role } as any);
+
+      const primaryRole = body.roles.includes(user.role as any) ? user.role : body.roles[0];
+      const updated = await storage.updateUser(req.params.id, { role: primaryRole, roles: body.roles } as any);
       res.json(updated);
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });

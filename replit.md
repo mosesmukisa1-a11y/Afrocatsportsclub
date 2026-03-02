@@ -36,6 +36,8 @@ A full-stack management portal for the Afrocat Volleyball Club. Manages match st
 Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, ContractIssuedItems, ContractTransportBenefits, NvfTransferFeeSchedules, PlayerTransferCases, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments, ShopItems, MediaPosts, MediaTags, MediaTagRequests
 
 ## RBAC Roles
+- **Super Admin**: mosesmukisa1@gmail.com — only user who can assign roles to others. Flagged via `isSuperAdmin` in DB.
+- **Multi-Role Support**: Users can have multiple roles (stored in `roles` text[] column). The `role` column holds the primary role. JWT includes `roles[]`. Sidebar, `requireRole` middleware, and route guards check the full `roles` array.
 - **Admin/Manager**: Full access to all modules, add/edit/delete players, generate profile PDFs, manage shop/media
 - **Coach**: Teams, players, matches, attendance, stats, awards, contracts (read), documents
 - **Statistician**: Matches, stats entry, reports
@@ -44,8 +46,8 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Player**: Self-registration, own profile (GET/PUT /api/players/me), own player dashboard, profile PDF for self
 
 ## Admin Account
-- **Permanent Admin**: mosesmukisa1@gmail.com (uses ADMIN_PASSWORD secret)
-- **Provisioning**: `npx tsx server/scripts/ensureAdmin.ts`
+- **Super Admin**: mosesmukisa1@gmail.com (uses ADMIN_PASSWORD secret, `isSuperAdmin: true`)
+- **Provisioning**: Auto-provisioned on every server startup via `server/index.ts`
 
 ## Running
 - `npm run dev` — starts both server and client on port 5000

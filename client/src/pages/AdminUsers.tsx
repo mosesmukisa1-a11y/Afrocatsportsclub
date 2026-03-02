@@ -7,13 +7,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Search, KeyRound, Shield, Copy, Check, Users, Loader2, UserCog } from "lucide-react";
+import { Search, KeyRound, Shield, Copy, Check, Users, Loader2, UserCog, Crown } from "lucide-react";
 
 const ALL_ROLES = ["ADMIN", "MANAGER", "COACH", "STATISTICIAN", "FINANCE", "MEDICAL", "PLAYER"] as const;
 
 export default function AdminUsers() {
+  const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
@@ -24,7 +26,9 @@ export default function AdminUsers() {
   const [generatedLink, setGeneratedLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [roleDialog, setRoleDialog] = useState<any>(null);
-  const [selectedRole, setSelectedRole] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+
+  const isSuperAdmin = !!currentUser?.isSuperAdmin;
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["/api/admin/users", debouncedQuery],
@@ -50,12 +54,12 @@ export default function AdminUsers() {
   });
 
   const roleMut = useMutation({
-    mutationFn: (data: { userId: string; role: string }) => api.adminUpdateRole(data.userId, data.role),
+    mutationFn: (data: { userId: string; roles: string[] }) => api.adminUpdateRole(data.userId, data.roles),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      toast({ title: "Role updated", description: `User role changed to ${selectedRole}.` });
+      toast({ title: "Roles updated", description: `User roles have been updated.` });
       setRoleDialog(null);
-      setSelectedRole("");
+      setSelectedRoles([]);
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -78,8 +82,17 @@ export default function AdminUsers() {
   };
 
   const handleRoleChange = () => {
-    if (!roleDialog || !selectedRole) return;
-    roleMut.mutate({ userId: roleDialog.id, role: selectedRole });
+    if (!roleDialog || selectedRoles.length === 0) {
+      toast({ title: "Error", description: "Select at least one role", variant: "destructive" });
+      return;
+    }
+    roleMut.mutate({ userId: roleDialog.id, roles: selectedRoles });
+  };
+
+  const toggleRole = (role: string) => {
+    setSelectedRoles(prev =>
+      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+    );
   };
 
   const handleCopy = async () => {
@@ -147,39 +160,51 @@ export default function AdminUsers() {
               <div className="py-8 text-center text-afrocat-muted" data-testid="text-no-users">No users found.</div>
             ) : (
               <div className="space-y-2">
-                {users.map((u: any) => (
-                  <div key={u.id} className="flex items-center justify-between p-4 border border-afrocat-border rounded-lg hover:bg-afrocat-white-3 transition-colors" data-testid={`row-user-${u.id}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-afrocat-text" data-testid={`text-user-name-${u.id}`}>{u.fullName}</span>
-                        <Badge className={`text-[10px] border-0 ${roleColor(u.role)}`} data-testid={`badge-role-${u.id}`}>{u.role}</Badge>
-                        <Badge className={`text-[10px] border-0 ${statusColor(u.accountStatus)}`}>{u.accountStatus}</Badge>
-                        {u.mustChangePassword && <Badge className="text-[10px] bg-afrocat-gold-soft text-afrocat-gold border-0">Must Change Password</Badge>}
+                {users.map((u: any) => {
+                  const userRoles: string[] = u.roles && u.roles.length > 0 ? u.roles : [u.role];
+                  return (
+                    <div key={u.id} className="flex items-center justify-between p-4 border border-afrocat-border rounded-lg hover:bg-afrocat-white-3 transition-colors" data-testid={`row-user-${u.id}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm text-afrocat-text" data-testid={`text-user-name-${u.id}`}>{u.fullName}</span>
+                          {u.isSuperAdmin && (
+                            <Badge className="text-[10px] border-0 bg-gradient-to-r from-afrocat-gold/20 to-afrocat-red/20 text-afrocat-gold" data-testid={`badge-super-admin-${u.id}`}>
+                              <Crown className="h-3 w-3 mr-0.5" /> Super Admin
+                            </Badge>
+                          )}
+                          {userRoles.map((r: string) => (
+                            <Badge key={r} className={`text-[10px] border-0 ${roleColor(r)}`} data-testid={`badge-role-${u.id}-${r}`}>{r}</Badge>
+                          ))}
+                          <Badge className={`text-[10px] border-0 ${statusColor(u.accountStatus)}`}>{u.accountStatus}</Badge>
+                          {u.mustChangePassword && <Badge className="text-[10px] bg-afrocat-gold-soft text-afrocat-gold border-0">Must Change Password</Badge>}
+                        </div>
+                        <p className="text-xs text-afrocat-muted mt-1" data-testid={`text-user-email-${u.id}`}>{u.email}</p>
                       </div>
-                      <p className="text-xs text-afrocat-muted mt-1" data-testid={`text-user-email-${u.id}`}>{u.email}</p>
+                      <div className="flex items-center gap-2">
+                        {isSuperAdmin && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setRoleDialog(u); setSelectedRoles(u.roles && u.roles.length > 0 ? [...u.roles] : [u.role]); }}
+                            className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
+                            data-testid={`button-role-${u.id}`}
+                          >
+                            <UserCog className="h-4 w-4 mr-1" /> Roles
+                          </Button>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => { setResetDialog(u); setResetMethod("TEMP_PASSWORD"); setTempPassword(""); setGeneratedLink(""); }}
+                          className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
+                          data-testid={`button-reset-${u.id}`}
+                        >
+                          <KeyRound className="h-4 w-4 mr-1" /> Reset
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => { setRoleDialog(u); setSelectedRole(u.role); }}
-                        className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
-                        data-testid={`button-role-${u.id}`}
-                      >
-                        <UserCog className="h-4 w-4 mr-1" /> Role
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => { setResetDialog(u); setResetMethod("TEMP_PASSWORD"); setTempPassword(""); setGeneratedLink(""); }}
-                        className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
-                        data-testid={`button-reset-${u.id}`}
-                      >
-                        <KeyRound className="h-4 w-4 mr-1" /> Reset
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -190,7 +215,7 @@ export default function AdminUsers() {
         <DialogContent className="max-w-md bg-afrocat-card border-afrocat-border text-afrocat-text">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-afrocat-text">
-              <UserCog className="h-5 w-5 text-afrocat-teal" /> Assign Role
+              <UserCog className="h-5 w-5 text-afrocat-teal" /> Assign Roles
             </DialogTitle>
           </DialogHeader>
           {roleDialog && (
@@ -198,29 +223,49 @@ export default function AdminUsers() {
               <div className="p-3 bg-afrocat-white-5 rounded-lg">
                 <p className="font-semibold text-sm text-afrocat-text">{roleDialog.fullName}</p>
                 <p className="text-xs text-afrocat-muted">{roleDialog.email}</p>
-                <div className="mt-1">
-                  <Badge className={`text-[10px] border-0 ${roleColor(roleDialog.role)}`}>Current: {roleDialog.role}</Badge>
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {(roleDialog.roles && roleDialog.roles.length > 0 ? roleDialog.roles : [roleDialog.role]).map((r: string) => (
+                    <Badge key={r} className={`text-[10px] border-0 ${roleColor(r)}`}>Current: {r}</Badge>
+                  ))}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-afrocat-text">New Role</Label>
-                <Select value={selectedRole} onValueChange={setSelectedRole}>
-                  <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="select-new-role">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ALL_ROLES.map(r => (
-                      <SelectItem key={r} value={r} data-testid={`select-role-option-${r}`}>{r}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-afrocat-text text-sm">Select Roles (multiple allowed)</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {ALL_ROLES.map(role => {
+                    const isSelected = selectedRoles.includes(role);
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => toggleRole(role)}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all cursor-pointer text-left ${
+                          isSelected
+                            ? "border-afrocat-teal bg-afrocat-teal/15 text-afrocat-teal"
+                            : "border-afrocat-border bg-afrocat-white-5 text-afrocat-muted hover:border-afrocat-teal/30"
+                        }`}
+                        data-testid={`checkbox-role-${role.toLowerCase()}`}
+                      >
+                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                          isSelected ? "border-afrocat-teal bg-afrocat-teal" : "border-afrocat-border"
+                        }`}>
+                          {isSelected && <Check className="h-3 w-3 text-white" />}
+                        </div>
+                        <span className="text-sm font-medium">{role}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[11px] text-afrocat-muted mt-1">
+                  {selectedRoles.length === 0 ? "Select at least one role" : `${selectedRoles.length} role${selectedRoles.length > 1 ? 's' : ''} selected`}
+                </p>
               </div>
 
-              {selectedRole === "ADMIN" && selectedRole !== roleDialog.role && (
+              {selectedRoles.includes("ADMIN") && !(roleDialog.roles || [roleDialog.role]).includes("ADMIN") && (
                 <div className="flex items-start gap-2 p-3 rounded-lg bg-afrocat-red-soft">
                   <Shield className="h-4 w-4 text-afrocat-red mt-0.5 shrink-0" />
-                  <p className="text-xs text-afrocat-red">This will give the user full admin access including the ability to manage all users, roles, and system settings.</p>
+                  <p className="text-xs text-afrocat-red">This will give the user admin access including the ability to manage users and system settings.</p>
                 </div>
               )}
             </div>
@@ -229,10 +274,10 @@ export default function AdminUsers() {
             <Button variant="outline" onClick={() => setRoleDialog(null)} className="border-afrocat-border text-afrocat-muted">Cancel</Button>
             <Button
               onClick={handleRoleChange}
-              disabled={roleMut.isPending || selectedRole === roleDialog?.role}
+              disabled={roleMut.isPending || selectedRoles.length === 0}
               data-testid="button-confirm-role"
             >
-              {roleMut.isPending ? "Updating..." : "Update Role"}
+              {roleMut.isPending ? "Updating..." : "Update Roles"}
             </Button>
           </DialogFooter>
         </DialogContent>
