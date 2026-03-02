@@ -23,7 +23,10 @@ import type {
   MediaPost, InsertMediaPost,
   MediaTag, InsertMediaTag,
   MediaTagRequest, InsertMediaTagRequest,
-  Notification, InsertNotification
+  Notification, InsertNotification,
+  ContractContribution, InsertContractContribution,
+  FundRaisingActivity, InsertFundRaisingActivity,
+  PlayerFundRaisingContribution, InsertPlayerFundRaisingContribution
 } from "@shared/schema";
 
 export interface IStorage {
@@ -155,6 +158,20 @@ export interface IStorage {
   createNotification(notif: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string): Promise<void>;
   markAllNotificationsRead(userId: string): Promise<void>;
+  getContractContributions(contractId: string): Promise<ContractContribution[]>;
+  getContractContributionsByPlayer(playerId: string): Promise<ContractContribution[]>;
+  createContractContribution(c: InsertContractContribution): Promise<ContractContribution>;
+  updateContractContribution(id: string, data: Partial<InsertContractContribution>): Promise<ContractContribution | undefined>;
+  deleteContractContribution(id: string): Promise<void>;
+  getFundRaisingActivities(): Promise<FundRaisingActivity[]>;
+  createFundRaisingActivity(a: InsertFundRaisingActivity): Promise<FundRaisingActivity>;
+  updateFundRaisingActivity(id: string, data: Partial<InsertFundRaisingActivity>): Promise<FundRaisingActivity | undefined>;
+  deleteFundRaisingActivity(id: string): Promise<void>;
+  getPlayerFundRaisingContributions(activityId?: string, playerId?: string): Promise<PlayerFundRaisingContribution[]>;
+  createPlayerFundRaisingContribution(c: InsertPlayerFundRaisingContribution): Promise<PlayerFundRaisingContribution>;
+  updatePlayerFundRaisingContribution(id: string, data: Partial<InsertPlayerFundRaisingContribution>): Promise<PlayerFundRaisingContribution | undefined>;
+  deletePlayerFundRaisingContribution(id: string): Promise<void>;
+  getNextMembershipNo(): Promise<string>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -737,6 +754,69 @@ export class DatabaseStorage implements IStorage {
   }
   async markAllNotificationsRead(userId: string) {
     await db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.userId, userId));
+  }
+  async getContractContributions(contractId: string) {
+    return db.select().from(schema.contractContributions).where(eq(schema.contractContributions.contractId, contractId));
+  }
+  async getContractContributionsByPlayer(playerId: string) {
+    return db.select().from(schema.contractContributions).where(eq(schema.contractContributions.playerId, playerId));
+  }
+  async createContractContribution(c: InsertContractContribution) {
+    const [created] = await db.insert(schema.contractContributions).values(c).returning();
+    return created;
+  }
+  async updateContractContribution(id: string, data: Partial<InsertContractContribution>) {
+    const [updated] = await db.update(schema.contractContributions).set(data).where(eq(schema.contractContributions.id, id)).returning();
+    return updated;
+  }
+  async deleteContractContribution(id: string) {
+    await db.delete(schema.contractContributions).where(eq(schema.contractContributions.id, id));
+  }
+  async getFundRaisingActivities() {
+    return db.select().from(schema.fundRaisingActivities).orderBy(desc(schema.fundRaisingActivities.createdAt));
+  }
+  async createFundRaisingActivity(a: InsertFundRaisingActivity) {
+    const [created] = await db.insert(schema.fundRaisingActivities).values(a).returning();
+    return created;
+  }
+  async updateFundRaisingActivity(id: string, data: Partial<InsertFundRaisingActivity>) {
+    const [updated] = await db.update(schema.fundRaisingActivities).set(data).where(eq(schema.fundRaisingActivities.id, id)).returning();
+    return updated;
+  }
+  async deleteFundRaisingActivity(id: string) {
+    await db.delete(schema.fundRaisingActivities).where(eq(schema.fundRaisingActivities.id, id));
+  }
+  async getPlayerFundRaisingContributions(activityId?: string, playerId?: string) {
+    if (activityId && playerId) {
+      return db.select().from(schema.playerFundRaisingContributions).where(
+        and(eq(schema.playerFundRaisingContributions.activityId, activityId), eq(schema.playerFundRaisingContributions.playerId, playerId))
+      );
+    }
+    if (activityId) {
+      return db.select().from(schema.playerFundRaisingContributions).where(eq(schema.playerFundRaisingContributions.activityId, activityId));
+    }
+    if (playerId) {
+      return db.select().from(schema.playerFundRaisingContributions).where(eq(schema.playerFundRaisingContributions.playerId, playerId));
+    }
+    return db.select().from(schema.playerFundRaisingContributions);
+  }
+  async createPlayerFundRaisingContribution(c: InsertPlayerFundRaisingContribution) {
+    const [created] = await db.insert(schema.playerFundRaisingContributions).values(c).returning();
+    return created;
+  }
+  async updatePlayerFundRaisingContribution(id: string, data: Partial<InsertPlayerFundRaisingContribution>) {
+    const [updated] = await db.update(schema.playerFundRaisingContributions).set(data).where(eq(schema.playerFundRaisingContributions.id, id)).returning();
+    return updated;
+  }
+  async deletePlayerFundRaisingContribution(id: string) {
+    await db.delete(schema.playerFundRaisingContributions).where(eq(schema.playerFundRaisingContributions.id, id));
+  }
+  async getNextMembershipNo(): Promise<string> {
+    const allPlayers = await db.select({ membershipNo: schema.players.membershipNo }).from(schema.players);
+    const usedNos = allPlayers.map(p => parseInt(p.membershipNo || "0")).filter(n => !isNaN(n) && n > 0);
+    let next = 21;
+    while (usedNos.includes(next)) next++;
+    return String(next).padStart(3, "0");
   }
 }
 

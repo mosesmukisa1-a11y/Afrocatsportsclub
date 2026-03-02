@@ -1540,6 +1540,213 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     }
   });
 
+  // ─── CONTRACT CONTRIBUTIONS ────────────────────────────
+  app.get("/api/contracts/:id/contributions", requireAuth, async (req, res, next) => {
+    try { res.json(await storage.getContractContributions(req.params.id)); } catch (e) { next(e); }
+  });
+
+  app.get("/api/contributions/player/:playerId", requireAuth, async (req, res, next) => {
+    try { res.json(await storage.getContractContributionsByPlayer(req.params.playerId)); } catch (e) { next(e); }
+  });
+
+  app.post("/api/contracts/:id/contributions", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        playerId: z.string(),
+        itemName: z.string(),
+        amount: z.number().min(0),
+        status: z.enum(["PAID","DUE","PARTIAL"]).optional(),
+        dueDate: z.string().optional().nullable(),
+        paidDate: z.string().optional().nullable(),
+        notes: z.string().optional().nullable(),
+      }).parse(req.body);
+      const created = await storage.createContractContribution({ ...body, contractId: req.params.id });
+
+      const contract = await storage.getPlayerContract(req.params.id);
+      if (contract) {
+        const allUsers = await storage.getAllUsers();
+        const playerUser = allUsers.find((u: any) => u.playerId === contract.playerId);
+        if (playerUser) {
+          const statusLabel = body.status === "PAID" ? "marked as PAID" : `due ${body.dueDate || "soon"}`;
+          await storage.createNotification({
+            userId: playerUser.id,
+            playerId: contract.playerId,
+            type: "CONTRIBUTION_UPDATE",
+            title: `Contribution: ${body.itemName}`,
+            message: `${body.itemName} — N$${body.amount.toFixed(2)} ${statusLabel}`,
+            metadata: { contractId: req.params.id, contributionId: created.id },
+          });
+        }
+      }
+      res.status(201).json(created);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/contributions/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        status: z.enum(["PAID","DUE","PARTIAL"]).optional(),
+        paidDate: z.string().optional().nullable(),
+        amount: z.number().min(0).optional(),
+        notes: z.string().optional().nullable(),
+        dueDate: z.string().optional().nullable(),
+      }).parse(req.body);
+      const updated = await storage.updateContractContribution(req.params.id, body);
+      if (!updated) return res.status(404).json({ message: "Contribution not found" });
+
+      if (body.status && updated.playerId) {
+        const allUsers = await storage.getAllUsers();
+        const playerUser = allUsers.find((u: any) => u.playerId === updated.playerId);
+        if (playerUser) {
+          const statusLabel = body.status === "PAID" ? "has been marked as PAID" : body.status === "DUE" ? `is DUE` : "is PARTIALLY paid";
+          await storage.createNotification({
+            userId: playerUser.id,
+            playerId: updated.playerId,
+            type: "CONTRIBUTION_STATUS",
+            title: `Payment Update: ${updated.itemName}`,
+            message: `${updated.itemName} — N$${updated.amount?.toFixed(2)} ${statusLabel}`,
+            metadata: { contributionId: updated.id },
+          });
+        }
+      }
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.delete("/api/contributions/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try { await storage.deleteContractContribution(req.params.id); res.status(204).end(); } catch (e) { next(e); }
+  });
+
+  // ─── FUND RAISING ────────────────────────────
+  app.get("/api/fundraising/activities", requireAuth, async (req, res, next) => {
+    try { res.json(await storage.getFundRaisingActivities()); } catch (e) { next(e); }
+  });
+
+  app.post("/api/fundraising/activities", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        name: z.string(),
+        targetAmount: z.number().min(0),
+        season: z.string().optional().nullable(),
+      }).parse(req.body);
+      res.status(201).json(await storage.createFundRaisingActivity({ ...body, createdByUserId: req.user!.userId }));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/fundraising/activities/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updateFundRaisingActivity(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ message: "Activity not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/fundraising/activities/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try { await storage.deleteFundRaisingActivity(req.params.id); res.status(204).end(); } catch (e) { next(e); }
+  });
+
+  app.get("/api/fundraising/contributions", requireAuth, async (req, res, next) => {
+    try {
+      const activityId = req.query.activityId as string | undefined;
+      const playerId = req.query.playerId as string | undefined;
+      res.json(await storage.getPlayerFundRaisingContributions(activityId, playerId));
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/fundraising/contributions", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        activityId: z.string(),
+        playerId: z.string(),
+        amount: z.number().min(0),
+        contributionDate: z.string(),
+        notes: z.string().optional().nullable(),
+      }).parse(req.body);
+      res.status(201).json(await storage.createPlayerFundRaisingContribution(body));
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.put("/api/fundraising/contributions/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerFundRaisingContribution(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ message: "Contribution not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/fundraising/contributions/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try { await storage.deletePlayerFundRaisingContribution(req.params.id); res.status(204).end(); } catch (e) { next(e); }
+  });
+
+  // ─── MEMBERSHIP NUMBER ────────────────────────────
+  app.get("/api/membership/next", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try { res.json({ membershipNo: await storage.getNextMembershipNo() }); } catch (e) { next(e); }
+  });
+
+  app.post("/api/membership/assign/:playerId", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      if (player.membershipNo) return res.json({ membershipNo: player.membershipNo });
+      const membershipNo = await storage.getNextMembershipNo();
+      const updated = await storage.updatePlayer(req.params.playerId, { membershipNo } as any);
+      res.json({ membershipNo, player: updated });
+    } catch (e) { next(e); }
+  });
+
+  // ─── PLAYER VALUE CALCULATION ────────────────────────────
+  app.get("/api/player-value/:playerId", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.params.playerId;
+      const contracts = await storage.getPlayerContracts(playerId);
+      const contributions = await storage.getContractContributionsByPlayer(playerId);
+      const fundraisingContribs = await storage.getPlayerFundRaisingContributions(undefined, playerId);
+
+      let signOnFees = 0;
+      let developmentFees = 0;
+      let itemsValue = 0;
+      let transportValue = 0;
+
+      for (const c of contracts) {
+        signOnFees += c.signOnFee || 0;
+        developmentFees += (c.developmentFeeRequired || 0);
+        const items = await storage.getContractItems(c.id);
+        itemsValue += items.reduce((s, i) => s + (i.totalValue || 0), 0);
+        const transport = await storage.getContractTransportBenefits(c.id);
+        transportValue += computeTransportValue(transport, new Date().toISOString().split("T")[0]);
+      }
+
+      const contributionsPaid = contributions.filter(c => c.status === "PAID").reduce((s, c) => s + (c.amount || 0), 0);
+      const contributionsDue = contributions.filter(c => c.status !== "PAID").reduce((s, c) => s + (c.amount || 0), 0);
+      const fundraisingTotal = fundraisingContribs.reduce((s, c) => s + (c.amount || 0), 0);
+
+      const totalValue = signOnFees + developmentFees + itemsValue + transportValue + contributionsDue;
+
+      res.json({
+        signOnFees,
+        developmentFees,
+        itemsValue,
+        transportValue,
+        contributionsPaid,
+        contributionsDue,
+        fundraisingTotal,
+        totalValue,
+      });
+    } catch (e) { next(e); }
+  });
+
   // ─── NVF FEE CONFIG ────────────────────────────
   app.get("/api/nvf/fees", requireAuth, async (req, res, next) => {
     try {

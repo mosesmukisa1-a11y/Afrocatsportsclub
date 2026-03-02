@@ -105,6 +105,9 @@ export const players = pgTable("players", {
   approvedAt: timestamp("approved_at"),
   registrationStatus: registrationStatusEnum("registration_status").notNull().default("PENDING_APPROVAL"),
   registrationNotes: text("registration_notes"),
+  membershipNo: text("membership_no"),
+  maritalStatus: text("marital_status"),
+  facebookName: text("facebook_name"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -276,6 +279,7 @@ export const contractIssuedItems = pgTable("contract_issued_items", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   contractId: varchar("contract_id", { length: 36 }).notNull(),
   itemName: text("item_name").notNull(),
+  size: text("size"),
   quantity: integer("quantity").notNull().default(1),
   unitValue: real("unit_value").notNull().default(0),
   totalValue: real("total_value").notNull().default(0),
@@ -528,6 +532,52 @@ export type InsertMediaTag = z.infer<typeof insertMediaTagSchema>;
 export type MediaTag = typeof mediaTags.$inferSelect;
 export type InsertMediaTagRequest = z.infer<typeof insertMediaTagRequestSchema>;
 export type MediaTagRequest = typeof mediaTagRequests.$inferSelect;
+
+export const contributionStatusEnum = pgEnum("contribution_status", ["PAID", "DUE", "PARTIAL"]);
+
+export const contractContributions = pgTable("contract_contributions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  contractId: varchar("contract_id", { length: 36 }).notNull(),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  itemName: text("item_name").notNull(),
+  amount: real("amount").notNull().default(0),
+  status: contributionStatusEnum("status").notNull().default("DUE"),
+  dueDate: text("due_date"),
+  paidDate: text("paid_date"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const fundRaisingActivities = pgTable("fund_raising_activities", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  targetAmount: real("target_amount").notNull().default(0),
+  season: text("season"),
+  active: boolean("active").notNull().default(true),
+  createdByUserId: varchar("created_by_user_id", { length: 36 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const playerFundRaisingContributions = pgTable("player_fund_raising_contributions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  activityId: varchar("activity_id", { length: 36 }).notNull(),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  amount: real("amount").notNull().default(0),
+  contributionDate: text("contribution_date").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertContractContributionSchema = createInsertSchema(contractContributions).omit({ id: true, createdAt: true });
+export const insertFundRaisingActivitySchema = createInsertSchema(fundRaisingActivities).omit({ id: true, createdAt: true });
+export const insertPlayerFundRaisingContributionSchema = createInsertSchema(playerFundRaisingContributions).omit({ id: true, createdAt: true });
+
+export type InsertContractContribution = z.infer<typeof insertContractContributionSchema>;
+export type ContractContribution = typeof contractContributions.$inferSelect;
+export type InsertFundRaisingActivity = z.infer<typeof insertFundRaisingActivitySchema>;
+export type FundRaisingActivity = typeof fundRaisingActivities.$inferSelect;
+export type InsertPlayerFundRaisingContribution = z.infer<typeof insertPlayerFundRaisingContributionSchema>;
+export type PlayerFundRaisingContribution = typeof playerFundRaisingContributions.$inferSelect;
 
 export const notifications = pgTable("notifications", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
