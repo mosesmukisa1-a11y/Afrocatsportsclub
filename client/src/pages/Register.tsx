@@ -4,11 +4,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Mail, Clock } from "lucide-react";
+import { CheckCircle, Mail, Clock, Camera, RotateCcw, X } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
 const POSITIONS = ["SETTER", "LIBERO", "MIDDLE", "OUTSIDE", "OPPOSITE"];
@@ -20,21 +20,142 @@ const ROLES = [
   { value: "FINANCE", label: "Finance", desc: "Manage club finances" },
 ];
 
+function calculateAge(dob: string): number {
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+  return age;
+}
+
+function CameraCapture({ onCapture, onClose, currentPhoto }: { onCapture: (dataUrl: string) => void; onClose: () => void; currentPhoto: string | null }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [cameraActive, setCameraActive] = useState(false);
+  const [error, setError] = useState("");
+
+  const startCamera = useCallback(async () => {
+    try {
+      setError("");
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      setStream(mediaStream);
+      setCameraActive(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch {
+      setError("Could not access camera. Please allow camera permissions.");
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      setStream(null);
+    }
+    setCameraActive(false);
+  }, [stream]);
+
+  useEffect(() => {
+    return () => {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+    };
+  }, [stream]);
+
+  const takePhoto = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    canvas.width = 400;
+    canvas.height = 400;
+    const ctx = canvas.getContext("2d")!;
+    const sx = (video.videoWidth - size) / 2;
+    const sy = (video.videoHeight - size) / 2;
+    ctx.drawImage(video, sx, sy, size, size, 0, 0, 400, 400);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    onCapture(dataUrl);
+    stopCamera();
+  };
+
+  return (
+    <div className="space-y-3">
+      {currentPhoto && !cameraActive && (
+        <div className="flex flex-col items-center gap-2">
+          <img src={currentPhoto} alt="Captured" className="w-28 h-28 rounded-full object-cover border-2 border-afrocat-teal" data-testid="img-captured-photo" />
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={startCamera} className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5 text-xs" data-testid="button-retake-photo">
+              <RotateCcw className="h-3 w-3 mr-1" /> Retake
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { onCapture(""); onClose(); }} className="border-afrocat-border text-afrocat-red hover:bg-afrocat-red-soft text-xs" data-testid="button-remove-photo">
+              <X className="h-3 w-3 mr-1" /> Remove
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!currentPhoto && !cameraActive && (
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-28 h-28 rounded-full bg-afrocat-white-5 border-2 border-dashed border-afrocat-border flex items-center justify-center">
+            <Camera className="h-8 w-8 text-afrocat-muted" />
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={startCamera} className="border-afrocat-teal text-afrocat-teal hover:bg-afrocat-teal-soft text-xs" data-testid="button-open-camera">
+            <Camera className="h-3 w-3 mr-1" /> Take Photo
+          </Button>
+        </div>
+      )}
+
+      {cameraActive && (
+        <div className="flex flex-col items-center gap-2">
+          <div className="relative w-48 h-48 rounded-full overflow-hidden border-2 border-afrocat-teal">
+            <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" data-testid="video-camera" />
+          </div>
+          {error && <p className="text-xs text-afrocat-red">{error}</p>}
+          <div className="flex gap-2">
+            <Button type="button" size="sm" onClick={takePhoto} className="bg-afrocat-teal hover:bg-afrocat-teal-dark text-white text-xs" data-testid="button-capture-photo">
+              <Camera className="h-3 w-3 mr-1" /> Capture
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={() => { stopCamera(); onClose(); }} className="border-afrocat-border text-afrocat-muted text-xs" data-testid="button-cancel-camera">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+      <canvas ref={canvasRef} className="hidden" />
+    </div>
+  );
+}
+
 export default function Register() {
   const [, setLocation] = useLocation();
   const { register, user } = useAuth();
   const { toast } = useToast();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [dob, setDob] = useState("");
+  const [nationality, setNationality] = useState("");
+  const [idNumber, setIdNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [selectedRole, setSelectedRole] = useState("PLAYER");
   const [requestedTeamId, setRequestedTeamId] = useState("");
   const [requestedPosition, setRequestedPosition] = useState("");
   const [requestedJerseyNo, setRequestedJerseyNo] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
+
+  const age = dob ? calculateAge(dob) : null;
+  const isMinor = age !== null && age < 17;
+  const idRequired = !isMinor;
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/public/teams"],
@@ -50,17 +171,33 @@ export default function Register() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) {
-      toast({ title: "Passwords don't match", variant: "destructive" });
-      return;
+
+    if (!fullName.trim()) { toast({ title: "Full name is required", variant: "destructive" }); return; }
+    if (!email.trim()) { toast({ title: "Email is required", variant: "destructive" }); return; }
+    if (!phone.trim()) { toast({ title: "Phone number is required", variant: "destructive" }); return; }
+    if (!dob) { toast({ title: "Date of birth is required", variant: "destructive" }); return; }
+    if (!nationality.trim()) { toast({ title: "Nationality is required", variant: "destructive" }); return; }
+    if (idRequired && !idNumber.trim()) { toast({ title: "ID/Passport number is required for ages 17+", variant: "destructive" }); return; }
+    if (!photo) { toast({ title: "Photo is required. Please take a photo with your camera.", variant: "destructive" }); return; }
+    if (password !== confirmPassword) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
+    if (password.length < 6) { toast({ title: "Password must be at least 6 characters", variant: "destructive" }); return; }
+
+    if (selectedRole === "PLAYER") {
+      if (!requestedTeamId) { toast({ title: "Please select a team", variant: "destructive" }); return; }
+      if (!requestedPosition) { toast({ title: "Please select a position", variant: "destructive" }); return; }
+      if (!requestedJerseyNo) { toast({ title: "Please enter a jersey number", variant: "destructive" }); return; }
     }
-    if (password.length < 6) {
-      toast({ title: "Password must be at least 6 characters", variant: "destructive" });
-      return;
-    }
+
     setLoading(true);
     try {
-      const extra: any = { role: selectedRole };
+      const extra: any = {
+        role: selectedRole,
+        phone,
+        dob,
+        nationality,
+        idNumber: idRequired ? idNumber : undefined,
+        photo,
+      };
       if (selectedRole === "PLAYER") {
         if (requestedTeamId) extra.requestedTeamId = requestedTeamId;
         if (requestedPosition) extra.requestedPosition = requestedPosition;
@@ -120,7 +257,7 @@ export default function Register() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-afrocat-glow p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-lg">
         <div className="flex flex-col items-center mb-8">
           <img src={logo} alt="Afrocat Logo" className="w-28 h-28 object-contain mb-4 animate-in zoom-in-50 duration-500" />
           <h2 className="text-2xl font-display font-bold text-afrocat-teal tracking-tight">Afrocat Volleyball Club</h2>
@@ -149,24 +286,66 @@ export default function Register() {
                   ))}
                 </div>
               </div>
+
+              <div className="border-t border-afrocat-border pt-4">
+                <Label className="text-afrocat-muted text-sm mb-2 block">Profile Photo <span className="text-afrocat-red">*</span></Label>
+                <CameraCapture
+                  onCapture={(dataUrl) => { setPhoto(dataUrl || null); setCameraOpen(false); }}
+                  onClose={() => setCameraOpen(false)}
+                  currentPhoto={photo}
+                />
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-afrocat-muted text-sm">Full Name</Label>
+                <Label htmlFor="fullName" className="text-afrocat-muted text-sm">Full Name <span className="text-afrocat-red">*</span></Label>
                 <Input id="fullName" value={fullName} onChange={e => setFullName(e.target.value)} required placeholder="e.g. John Doe" data-testid="input-fullname"
                   className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-afrocat-muted text-sm">Email</Label>
+                <Label htmlFor="email" className="text-afrocat-muted text-sm">Email <span className="text-afrocat-red">*</span></Label>
                 <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required placeholder="you@example.com" data-testid="input-email"
                   className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone" className="text-afrocat-muted text-sm">Phone Number <span className="text-afrocat-red">*</span></Label>
+                <Input id="phone" type="tel" value={phone} onChange={e => setPhone(e.target.value)} required placeholder="+264 81 000 0000" data-testid="input-phone"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-afrocat-muted text-sm">Password</Label>
+                  <Label htmlFor="dob" className="text-afrocat-muted text-sm">Date of Birth <span className="text-afrocat-red">*</span></Label>
+                  <Input id="dob" type="date" value={dob} onChange={e => setDob(e.target.value)} required data-testid="input-dob"
+                    className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" />
+                  {age !== null && (
+                    <p className="text-[10px] text-afrocat-muted">Age: {age} years {isMinor && <span className="text-afrocat-gold">(Minor — ID not required)</span>}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nationality" className="text-afrocat-muted text-sm">Nationality <span className="text-afrocat-red">*</span></Label>
+                  <Input id="nationality" value={nationality} onChange={e => setNationality(e.target.value)} required placeholder="e.g. Namibian" data-testid="input-nationality"
+                    className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="idNumber" className="text-afrocat-muted text-sm">
+                  ID / Passport Number {idRequired ? <span className="text-afrocat-red">*</span> : <span className="text-afrocat-muted text-[10px]">(optional for under 17)</span>}
+                </Label>
+                <Input id="idNumber" value={idNumber} onChange={e => setIdNumber(e.target.value)} required={idRequired} placeholder="National ID or Passport number" data-testid="input-id-number"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-afrocat-muted text-sm">Password <span className="text-afrocat-red">*</span></Label>
                   <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="Min. 6 chars" data-testid="input-password"
                     className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword" className="text-afrocat-muted text-sm">Confirm</Label>
+                  <Label htmlFor="confirmPassword" className="text-afrocat-muted text-sm">Confirm <span className="text-afrocat-red">*</span></Label>
                   <Input id="confirmPassword" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required data-testid="input-confirm-password"
                     className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
                 </div>
@@ -174,10 +353,10 @@ export default function Register() {
 
               {selectedRole === "PLAYER" && (
                 <div className="border-t border-afrocat-border pt-4 mt-2">
-                  <p className="text-xs text-afrocat-muted mb-3">Team & position preferences (final approval by Admin/Coach)</p>
+                  <p className="text-xs text-afrocat-muted mb-3">Team & position preferences <span className="text-afrocat-red">*</span></p>
                   <div className="space-y-3">
                     <div className="space-y-2">
-                      <Label className="text-afrocat-muted text-sm">Preferred Team</Label>
+                      <Label className="text-afrocat-muted text-sm">Preferred Team <span className="text-afrocat-red">*</span></Label>
                       <Select value={requestedTeamId} onValueChange={setRequestedTeamId}>
                         <SelectTrigger data-testid="select-team" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
                           <SelectValue placeholder="Select team" />
@@ -191,7 +370,7 @@ export default function Register() {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
-                        <Label className="text-afrocat-muted text-sm">Position</Label>
+                        <Label className="text-afrocat-muted text-sm">Position <span className="text-afrocat-red">*</span></Label>
                         <Select value={requestedPosition} onValueChange={setRequestedPosition}>
                           <SelectTrigger data-testid="select-position" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
                             <SelectValue placeholder="Position" />
@@ -204,8 +383,8 @@ export default function Register() {
                         </Select>
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-afrocat-muted text-sm">Jersey #</Label>
-                        <Input type="number" min={1} max={99} value={requestedJerseyNo} onChange={e => setRequestedJerseyNo(e.target.value)} placeholder="1-99" data-testid="input-jersey"
+                        <Label className="text-afrocat-muted text-sm">Jersey # <span className="text-afrocat-red">*</span></Label>
+                        <Input type="number" min={1} max={99} value={requestedJerseyNo} onChange={e => setRequestedJerseyNo(e.target.value)} required placeholder="1-99" data-testid="input-jersey"
                           className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
                       </div>
                     </div>

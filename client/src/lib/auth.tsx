@@ -26,7 +26,7 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<LoginResult>;
-  register: (fullName: string, email: string, password: string, extra?: { role?: string; requestedTeamId?: string; requestedPosition?: string; requestedJerseyNo?: number }) => Promise<RegisterResult>;
+  register: (fullName: string, email: string, password: string, extra?: Record<string, any>) => Promise<RegisterResult>;
   logout: () => void;
 }
 
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { mustChangePassword: res.mustChangePassword };
   };
 
-  const register = async (fullName: string, email: string, password: string, extra?: { role?: string; requestedTeamId?: string; requestedPosition?: string; requestedJerseyNo?: number }): Promise<RegisterResult> => {
+  const register = async (fullName: string, email: string, password: string, extra?: Record<string, any>): Promise<RegisterResult> => {
     const res = await api.register({ fullName, email, password, ...extra });
     return res as RegisterResult;
   };
