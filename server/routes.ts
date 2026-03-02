@@ -1886,6 +1886,28 @@ th{background:#0d7377;color:white}
     }
   });
 
+  function calculateAge(dob: string): number {
+    if (!dob) return 0;
+    const birth = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age;
+  }
+
+  async function getCaptainPlayerIds(): Promise<Set<string>> {
+    const allUsers = await db.select().from(schema.users);
+    const captainIds = new Set<string>();
+    for (const u of allUsers) {
+      const roles: string[] = (u as any).roles || [];
+      if (roles.includes("CAPTAIN") && (u as any).playerId) {
+        captainIds.add((u as any).playerId);
+      }
+    }
+    return captainIds;
+  }
+
   // ─── O-2BIS GENERATION ─────────────────────────
   app.post("/api/o2bis/generate", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
     try {
@@ -1919,24 +1941,53 @@ th{background:#0d7377;color:white}
         playerList = allPlayers.filter(p => p.status === "ACTIVE");
       }
 
+      const captainIds = await getCaptainPlayerIds();
       const officials = await storage.getTeamOfficials(body.teamId);
+
+      const coachAssignments = await storage.getCoachAssignmentsByTeam(body.teamId);
+      const activeCoaches = coachAssignments.filter(a => a.active);
+      let headCoachName = body.coachName || "";
+      let assistantCoaches: string[] = [];
+      for (const a of activeCoaches) {
+        const coachUser = await storage.getUser(a.coachUserId);
+        if (coachUser) {
+          if (a.role === "HEAD_COACH" && !headCoachName) headCoachName = coachUser.fullName;
+          else assistantCoaches.push(coachUser.fullName);
+        }
+      }
+
+      const sortedPlayers = [...playerList].sort((a, b) => (b.jerseyNo || 0) - (a.jerseyNo || 0));
+
+      const teamGender = team.gender || (sortedPlayers.length > 0 ? sortedPlayers[0].gender : "");
+      const teamCountry = sortedPlayers.length > 0 ? (sortedPlayers[0].nationality || "Namibia") : "Namibia";
 
       const o2bisData = {
         clubName: "AFROCAT VOLLEYBALL CLUB",
+        motto: "One Team One Dream — Passion Discipline Victory",
         teamName: team.name,
+        gender: teamGender || "",
+        country: teamCountry,
+        code: team.code || "",
         opponent: body.opponent,
         matchDate: body.matchDate,
         matchTime: body.matchTime || "",
         venue: body.venue,
         competition: body.competition,
-        coachName: body.coachName || "",
-        players: playerList.map(p => ({
+        headCoach: headCoachName,
+        assistantCoaches,
+        players: sortedPlayers.map(p => ({
           jerseyNo: p.jerseyNo,
-          name: `${p.lastName} ${p.firstName}`,
+          name: `${(p.lastName || "").toUpperCase()} ${p.firstName}`,
           position: p.position,
           dob: p.dob || "",
+          age: calculateAge(p.dob || ""),
+          isCaptain: captainIds.has(p.id),
+          nationality: p.nationality || "Namibia",
         })),
         officials: officials.map(o => ({ role: o.role, name: o.name })),
+        teamManager: officials.find(o => o.role === "TEAM_MANAGER")?.name || "",
+        therapist: officials.find(o => o.role === "THERAPIST")?.name || "",
+        doctor: officials.find(o => o.role === "DOCTOR")?.name || "",
       };
 
       const docRecord = await storage.createMatchDocument({
@@ -1948,6 +1999,71 @@ th{background:#0d7377;color:white}
       });
 
       res.status(201).json({ documentId: docRecord.id, fileUrl: docRecord.fileUrl, data: o2bisData });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── TEAM LIST GENERATION ─────────────────────────
+  app.post("/api/team-list/generate", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({ teamId: z.string() }).parse(req.body);
+
+      const team = await storage.getTeam(body.teamId);
+      if (!team) return res.status(404).json({ message: "Team not found" });
+
+      const allPlayers = await storage.getPlayersByTeam(body.teamId);
+      const activePlayers = allPlayers.filter(p => p.status === "ACTIVE");
+      const captainIds = await getCaptainPlayerIds();
+
+      const coachAssignments = await storage.getCoachAssignmentsByTeam(body.teamId);
+      const activeCoaches = coachAssignments.filter(a => a.active);
+      let headCoachName = "";
+      let assistantCoaches: string[] = [];
+      for (const a of activeCoaches) {
+        const coachUser = await storage.getUser(a.coachUserId);
+        if (coachUser) {
+          if (a.role === "HEAD_COACH") headCoachName = coachUser.fullName;
+          else assistantCoaches.push(coachUser.fullName);
+        }
+      }
+
+      const officials = await storage.getTeamOfficials(body.teamId);
+
+      const sortedPlayers = [...activePlayers].sort((a, b) => (b.jerseyNo || 0) - (a.jerseyNo || 0));
+
+      const data = {
+        clubName: "AFROCAT VOLLEYBALL CLUB",
+        motto: "One Team One Dream — Passion Discipline Victory",
+        teamName: team.name,
+        gender: team.gender || "",
+        generatedDate: new Date().toISOString().split("T")[0],
+        headCoach: headCoachName,
+        assistantCoaches,
+        players: sortedPlayers.map(p => ({
+          jerseyNo: p.jerseyNo,
+          name: `${(p.lastName || "").toUpperCase()} ${p.firstName}`,
+          position: p.position,
+          dob: p.dob || "",
+          age: calculateAge(p.dob || ""),
+          isCaptain: captainIds.has(p.id),
+          nationality: p.nationality || "Namibia",
+          phone: p.phone || "",
+        })),
+        officials: officials.map(o => ({ role: o.role, name: o.name })),
+        teamManager: officials.find(o => o.role === "TEAM_MANAGER")?.name || "",
+      };
+
+      const docRecord = await storage.createMatchDocument({
+        matchId: null,
+        teamId: body.teamId,
+        documentType: "TEAM_LIST",
+        fileUrl: `/api/team-list/view/${Date.now()}`,
+        metadata: data,
+      });
+
+      res.status(201).json({ documentId: docRecord.id, data });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);

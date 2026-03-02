@@ -172,6 +172,7 @@ export const api = {
   },
   createMatchDocument: (data: any) => apiFetch<any>("/match-documents", { method: "POST", body: JSON.stringify(data) }),
   generateO2bis: (data: any) => apiFetch<any>("/o2bis/generate", { method: "POST", body: JSON.stringify(data) }),
+  generateTeamList: (data: any) => apiFetch<any>("/team-list/generate", { method: "POST", body: JSON.stringify(data) }),
 
   generateMatchReport: (matchId: string, teamId?: string) =>
     apiFetch<any>("/reports/match/" + matchId + "/pdf", { method: "POST", body: JSON.stringify({ teamId }) }),
