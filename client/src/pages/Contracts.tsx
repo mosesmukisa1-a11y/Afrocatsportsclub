@@ -420,7 +420,7 @@ function ContractContributions({ contract, isAdmin }: { contract: any; isAdmin: 
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="font-semibold text-sm text-afrocat-text">For Office Use — Contributions ({contributions.length})</h4>
+          <h4 className="font-semibold text-sm text-afrocat-text">Contributions ({contributions.length})</h4>
           <div className="flex gap-4 mt-1 text-xs">
             <span className="text-afrocat-green font-bold">Paid: N$ {totalPaid.toFixed(2)}</span>
             <span className="text-afrocat-red font-bold">Due: N$ {totalDue.toFixed(2)}</span>
