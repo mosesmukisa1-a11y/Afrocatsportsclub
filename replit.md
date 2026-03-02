@@ -61,6 +61,8 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Coach Performance & Stars**: Auto-computed from match results for assigned HEAD_COACHes
 - **Player Contracts**: Full lifecycle — DRAFT → ACTIVE → EXPIRED/TERMINATED
 - **Player Delete (Admin)**: Cascade deletes stats, attendance, injuries, awards, contracts, smart focus
+- **Forgot Password**: Self-service forgot password flow — generates reset link (no email service). `POST /api/auth/forgot-password` → token-based reset via `/reset-password`
+- **Camera Capture**: Shared `CameraCapture` component (`client/src/components/CameraCapture.tsx`) used in both Registration and Admin Add Player forms. Captures photo via device camera with preview.
 - **Motivational Messages**: Player dashboard shows auto-generated coaching tips based on attendance rate, performance trend, and error analysis
 - **Media System**: Upload → PENDING_REVIEW → Admin approves. Player tag requests with admin approval workflow
 - **Shop System**: Admin CRUD for merchandise, public display

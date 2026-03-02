@@ -11,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { CameraCapture } from "@/components/CameraCapture";
 import { useState } from "react";
 
 const POSITIONS = ["Setter", "Outside Hitter", "Opposite", "Middle Blocker", "Libero"];
@@ -138,7 +139,14 @@ export default function Players() {
           <div><Label className="text-afrocat-muted text-sm">Nationality</Label><Input value={form.nationality} onChange={e => set("nationality", e.target.value)} data-testid="input-nationality" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
           <div><Label className="text-afrocat-muted text-sm">ID/Passport</Label><Input value={form.idNumber} onChange={e => set("idNumber", e.target.value)} data-testid="input-idNumber" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
         </div>
-        <div><Label className="text-afrocat-muted text-sm">Photo URL</Label><Input value={form.photoUrl} onChange={e => set("photoUrl", e.target.value)} placeholder="https://..." data-testid="input-photoUrl" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" /></div>
+        <div>
+          <Label className="text-afrocat-muted text-sm mb-2 block">Player Photo</Label>
+          <CameraCapture
+            onCapture={(dataUrl) => set("photoUrl", dataUrl)}
+            onClose={() => {}}
+            currentPhoto={form.photoUrl || null}
+          />
+        </div>
       </TabsContent>
       <TabsContent value="contact" className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
