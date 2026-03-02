@@ -32,6 +32,13 @@ A full-stack management portal for the Afrocat Volleyball Club. Manages match st
 └── drizzle.config.ts     # Drizzle Kit configuration
 ```
 
+## Camera / Photo Upload
+- **CameraCapture component** (`client/src/components/CameraCapture.tsx`): Shared component for photo capture with three options:
+  - Front camera (selfie mode, `facingMode: "user"`)
+  - Back camera (`facingMode: "environment"`) with switch toggle
+  - Gallery upload (file picker, image cropped to 400x400 square, JPEG 80% quality, max 5MB)
+- Used in: Register.tsx (required photo), Players.tsx (player photo), ProfileSetup.tsx (profile photo)
+
 ## Key Entities
 Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, ContractIssuedItems, ContractTransportBenefits, NvfTransferFeeSchedules, PlayerTransferCases, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments, ShopItems, MediaPosts, MediaTags, MediaTagRequests
 

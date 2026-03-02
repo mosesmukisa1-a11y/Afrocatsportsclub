@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
 import { User, Phone, MapPin, Heart, Shield, Camera, CheckCircle } from "lucide-react";
+import { CameraCapture } from "@/components/CameraCapture";
 
 export default function ProfileSetup() {
   const { user } = useAuth();
@@ -102,9 +103,12 @@ export default function ProfileSetup() {
                 <div><Label>ID/Passport Number</Label><Input value={form.idNumber} onChange={e => set("idNumber", e.target.value)} data-testid="input-idNumber" /></div>
               </div>
               <div className="mt-4">
-                <Label className="flex items-center gap-1"><Camera className="h-3 w-3" /> Photo URL</Label>
-                <Input value={form.photoUrl || ""} onChange={e => set("photoUrl", e.target.value)} placeholder="https://... (paste your photo URL)" data-testid="input-photoUrl" />
-                <p className="text-xs text-muted-foreground mt-1">Paste a URL to your profile photo</p>
+                <Label className="flex items-center gap-1 mb-2"><Camera className="h-3 w-3" /> Profile Photo</Label>
+                <CameraCapture
+                  onCapture={(dataUrl) => set("photoUrl", dataUrl)}
+                  onClose={() => {}}
+                  currentPhoto={form.photoUrl || null}
+                />
               </div>
             </CardContent>
           </Card>

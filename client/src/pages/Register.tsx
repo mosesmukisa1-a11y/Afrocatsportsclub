@@ -76,7 +76,7 @@ export default function Register() {
     if (!dob) { toast({ title: "Date of birth is required", variant: "destructive" }); return; }
     if (!nationality.trim()) { toast({ title: "Nationality is required", variant: "destructive" }); return; }
     if (idRequired && !idNumber.trim()) { toast({ title: "ID/Passport number is required for ages 17+", variant: "destructive" }); return; }
-    if (!photo) { toast({ title: "Photo is required. Please take a photo with your camera.", variant: "destructive" }); return; }
+    if (!photo) { toast({ title: "Photo is required. Please take a photo or upload from gallery.", variant: "destructive" }); return; }
     if (password !== confirmPassword) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
     if (password.length < 6) { toast({ title: "Password must be at least 6 characters", variant: "destructive" }); return; }
 
