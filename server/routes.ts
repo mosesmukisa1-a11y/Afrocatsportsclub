@@ -2202,6 +2202,10 @@ th{background:#0d7377;color:white}
         competition: z.string(),
         coachName: z.string().optional(),
         selectedPlayerIds: z.array(z.string()).optional(),
+        playerOverrides: z.record(z.string(), z.object({
+          position: z.string().optional(),
+          jerseyNo: z.number().optional(),
+        })).optional(),
       }).parse(req.body);
 
       const team = await storage.getTeam(body.teamId);
@@ -2237,7 +2241,12 @@ th{background:#0d7377;color:white}
         }
       }
 
-      const sortedPlayers = [...playerList].sort((a, b) => (a.jerseyNo || 0) - (b.jerseyNo || 0));
+      const overrides = body.playerOverrides || {};
+      const sortedPlayers = [...playerList].sort((a, b) => {
+        const jA = overrides[a.id]?.jerseyNo ?? a.jerseyNo ?? 0;
+        const jB = overrides[b.id]?.jerseyNo ?? b.jerseyNo ?? 0;
+        return jA - jB;
+      });
 
       const teamGender = team.gender || (sortedPlayers.length > 0 ? sortedPlayers[0].gender : "");
       const teamCountry = sortedPlayers.length > 0 ? (sortedPlayers[0].nationality || "Namibia") : "Namibia";
@@ -2257,9 +2266,9 @@ th{background:#0d7377;color:white}
         headCoach: headCoachName,
         assistantCoaches,
         players: sortedPlayers.map(p => ({
-          jerseyNo: p.jerseyNo,
+          jerseyNo: overrides[p.id]?.jerseyNo ?? p.jerseyNo,
           name: `${(p.lastName || "").toUpperCase()} ${p.firstName}`,
-          position: p.position,
+          position: overrides[p.id]?.position || p.position,
           dob: p.dob || "",
           age: calculateAge(p.dob || ""),
           isCaptain: captainIds.has(p.id),
