@@ -1,0 +1,1302 @@
+/* =====================================================================
+AFROCAT APP – ONE “REPLIT SCRIPT PACK” (PASTE INTO REPLIT)
+Includes:
+1) MATCH RULES (Upcoming vs Played, score from stats, manual score only if no stats)
+2) UPCOMING MATCH REMINDERS (in-app notifications via cron)
+3) ATTENDANCE LOCKING (auto-close after save; only SUPER_ADMIN can edit closed)
+4) DOCUMENT CENTRE PDFs:
+   - Team List PDF (club letterhead; Name, DOB, Jersey, Age)
+   - O2BIS PDF (works for upcoming + completed matches; uses scheduling + registration)
+5) CONTRACT SECTION:
+   - serve official PDF
+   - link for all players
+   - confirm form (minors require guardian name + ID + phone)
+6) “SOLOSTATS TOUCH-LIKE” ENTER STATS UI (tap player + action + outcome)
+   - keeps player photo + name + jersey number
+   - saves events; supports Undo; blocks edits when locked
+
+IMPORTANT:
+- This is a multi-file “pack” in ONE code block.
+- Create files EXACTLY as labeled: // FILE: path
+- Install deps shown at the top.
+===================================================================== */
+
+
+/* =========================
+0) INSTALL DEPENDENCIES (run in Replit Shell)
+========================= */
+// npm i express cors multer node-cron puppeteer
+// (If puppeteer fails in your Replit environment, tell me—I'll swap to pdfkit/playwright.)
+
+
+
+/* =========================
+1) FILE: server/index.js
+========================= */
+import express from "express";
+import cors from "cors";
+import cron from "node-cron";
+import path from "path";
+
+import attendanceRouter from "./routes/attendance.js";
+import matchRouter from "./routes/matches.js";
+import docsRouter from "./routes/docs.js";
+import contractRouter from "./routes/contract.js";
+import statsTouchRouter from "./routes/statsTouch.js";
+import notificationRouter from "./routes/notifications.js";
+
+import { createUpcomingMatchRemindersJob } from "./jobs/upcomingReminders.js";
+import { db } from "./store/db.js"; // CHANGE THIS: connect your Prisma/db here OR use JSON store below.
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true }));
+
+// Serve public assets (contract PDF, etc.)
+app.use(express.static(path.resolve("public")));
+
+// Attach DB client / storage to req
+app.use((req, _res, next) => {
+  req.db = db;
+  // If you have auth, attach req.user here. For now we allow role in header for testing.
+  // Set header: x-role: SUPER_ADMIN / ADMIN / COACH / PLAYER
+  req.user = { id: "demo-user", role: (req.headers["x-role"] || "ADMIN").toUpperCase() };
+  next();
+});
+
+// Routes
+app.use("/api/attendance", attendanceRouter);
+app.use("/api", matchRouter);
+app.use("/api/docs", docsRouter);
+app.use("/api/contract", contractRouter);
+app.use("/api", statsTouchRouter);
+app.use("/api/notifications", notificationRouter);
+
+// Health
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
+// Cron jobs
+createUpcomingMatchRemindersJob(cron, db);
+
+app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+
+
+
+/* =========================
+2) FILE: server/store/db.js
+Simple JSON store (works without Prisma).
+If you already have Prisma: replace this file to export your prisma client as `db`.
+========================= */
+import fs from "fs";
+import path from "path";
+
+const dataDir = path.resolve("data");
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+function readJson(name, fallback) {
+  const p = path.join(dataDir, name);
+  if (!fs.existsSync(p)) return fallback;
+  try { return JSON.parse(fs.readFileSync(p, "utf-8") || ""); } catch { return fallback; }
+}
+function writeJson(name, value) {
+  const p = path.join(dataDir, name);
+  fs.writeFileSync(p, JSON.stringify(value, null, 2), "utf-8");
+}
+function uid(prefix="ID") {
+  return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+let state = {
+  players: readJson("players.json", []),          // {id, firstName,lastName,dob,jerseyNumber,teamId,photoUrl}
+  teams: readJson("teams.json", []),              // {id,name}
+  matches: readJson("matches.json", []),          // see match fields in routes
+  matchEvents: readJson("matchEvents.json", []),  // {id,matchId,teamId,playerId,action,outcome,createdAt,createdBy}
+  matchStats: readJson("matchStats.json", []),    // {matchId,sets,enteredBy,enteredAt}
+  notifications: readJson("notifications.json", []), // {id,targetUserId|null,title,message,type,dateKey,matchId,reminderType,createdAt}
+  attendanceSessions: readJson("attendanceSessions.json", []), // {id,teamId,sessionDate,sessionType,status,lockedAt,lockedBy,createdBy,createdAt}
+  attendanceLines: readJson("attendanceLines.json", []), // {id,attendanceSessionId,playerId,present,note}
+  contractAcceptances: readJson("contractAcceptances.json", []), // see contract route
+};
+
+function persist() {
+  writeJson("players.json", state.players);
+  writeJson("teams.json", state.teams);
+  writeJson("matches.json", state.matches);
+  writeJson("matchEvents.json", state.matchEvents);
+  writeJson("matchStats.json", state.matchStats);
+  writeJson("notifications.json", state.notifications);
+  writeJson("attendanceSessions.json", state.attendanceSessions);
+  writeJson("attendanceLines.json", state.attendanceLines);
+  writeJson("contractAcceptances.json", state.contractAcceptances);
+}
+
+export const db = {
+  // TEAM
+  team: {
+    findUnique: async ({ where: { id } }) => state.teams.find(t => t.id === id) || null,
+  },
+  // PLAYER
+  player: {
+    findMany: async ({ where = {}, select, orderBy } = {}) => {
+      let rows = [...state.players];
+      if (where.teamId) rows = rows.filter(p => p.teamId === where.teamId);
+      if (orderBy?.length) {
+        for (const ob of orderBy.reverse()) {
+          const [k, dir] = Object.entries(ob)[0];
+          rows.sort((a,b) => (a[k] ?? "").toString().localeCompare((b[k] ?? "").toString()) * (dir === "desc" ? -1 : 1));
+        }
+      }
+      if (select) {
+        rows = rows.map(r => {
+          const o = {};
+          Object.keys(select).forEach(k => { if (select[k]) o[k] = r[k]; });
+          return o;
+        });
+      }
+      return rows;
+    },
+    findUnique: async ({ where: { id } }) => state.players.find(p => p.id === id) || null,
+  },
+  // MATCH
+  match: {
+    findUnique: async ({ where: { id } }) => state.matches.find(m => m.id === id) || null,
+    findMany: async ({ where = {}, include } = {}) => {
+      let rows = [...state.matches];
+      if (where.status) rows = rows.filter(m => m.status === where.status);
+      if (where.startTime?.gte) rows = rows.filter(m => new Date(m.startTime) >= new Date(where.startTime.gte));
+      if (where.startTime?.lte) rows = rows.filter(m => new Date(m.startTime) <= new Date(where.startTime.lte));
+      if (include?.homeTeam || include?.awayTeam) {
+        rows = rows.map(m => ({
+          ...m,
+          homeTeam: state.teams.find(t => t.id === m.homeTeamId) || null,
+          awayTeam: state.teams.find(t => t.id === m.awayTeamId) || null,
+        }));
+      }
+      return rows;
+    },
+    create: async ({ data }) => {
+      const row = { id: uid("MATCH"), ...data };
+      state.matches.unshift(row); persist(); return row;
+    },
+    update: async ({ where: { id }, data }) => {
+      const idx = state.matches.findIndex(m => m.id === id);
+      if (idx < 0) return null;
+      state.matches[idx] = { ...state.matches[idx], ...data };
+      persist(); return state.matches[idx];
+    },
+  },
+  // MATCH STATS
+  matchStats: {
+    upsert: async ({ where: { matchId }, update, create }) => {
+      const idx = state.matchStats.findIndex(s => s.matchId === matchId);
+      if (idx >= 0) {
+        state.matchStats[idx] = { ...state.matchStats[idx], ...update };
+        persist(); return state.matchStats[idx];
+      }
+      state.matchStats.unshift({ ...create });
+      persist(); return state.matchStats[0];
+    },
+    findUnique: async ({ where: { matchId } }) => state.matchStats.find(s => s.matchId === matchId) || null,
+  },
+  // MATCH EVENTS
+  matchEvent: {
+    create: async ({ data }) => {
+      const row = { id: uid("EVT"), ...data };
+      state.matchEvents.unshift(row); persist(); return row;
+    },
+    delete: async ({ where: { id } }) => {
+      state.matchEvents = state.matchEvents.filter(e => e.id !== id);
+      persist(); return true;
+    },
+  },
+  // NOTIFICATIONS
+  notification: {
+    create: async ({ data }) => {
+      const row = { id: uid("NTF"), createdAt: new Date().toISOString(), ...data };
+      state.notifications.unshift(row); persist(); return row;
+    },
+    findMany: async ({ where = {}, orderBy, take } = {}) => {
+      let rows = [...state.notifications];
+      if (where.targetUserId === null) rows = rows.filter(n => n.targetUserId === null);
+      if (where.type) rows = rows.filter(n => n.type === where.type);
+      if (where.matchId) rows = rows.filter(n => n.matchId === where.matchId);
+      if (where.reminderType) rows = rows.filter(n => n.reminderType === where.reminderType);
+      if (where.dateKey) rows = rows.filter(n => n.dateKey === where.dateKey);
+      if (orderBy?.createdAt === "desc") rows.sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
+      if (typeof take === "number") rows = rows.slice(0, take);
+      return rows;
+    },
+    findFirst: async ({ where = {} }) => {
+      const rows = await db.notification.findMany({ where, take: 1 });
+      return rows[0] || null;
+    },
+  },
+  // ATTENDANCE
+  attendanceSession: {
+    findUnique: async ({ where: { id } }) => state.attendanceSessions.find(s => s.id === id) || null,
+    update: async ({ where: { id }, data }) => {
+      const idx = state.attendanceSessions.findIndex(s => s.id === id);
+      if (idx < 0) return null;
+      state.attendanceSessions[idx] = { ...state.attendanceSessions[idx], ...data };
+      persist(); return state.attendanceSessions[idx];
+    },
+  },
+  attendanceLine: {
+    upsert: async ({ where: { attendanceSessionId_playerId }, update, create }) => {
+      const { attendanceSessionId, playerId } = attendanceSessionId_playerId;
+      const idx = state.attendanceLines.findIndex(l => l.attendanceSessionId === attendanceSessionId && l.playerId === playerId);
+      if (idx >= 0) {
+        state.attendanceLines[idx] = { ...state.attendanceLines[idx], ...update };
+        persist(); return state.attendanceLines[idx];
+      }
+      const row = { id: uid("ATL"), ...create };
+      state.attendanceLines.unshift(row);
+      persist(); return row;
+    },
+  },
+  // CONTRACT
+  contractAcceptance: {
+    findFirst: async ({ where: { userId, contractKey } }) =>
+      state.contractAcceptances.find(a => a.userId === userId && a.contractKey === contractKey) || null,
+    upsert: async ({ where: { userId_contractKey }, update, create }) => {
+      const { userId, contractKey } = userId_contractKey;
+      const idx = state.contractAcceptances.findIndex(a => a.userId === userId && a.contractKey === contractKey);
+      if (idx >= 0) {
+        state.contractAcceptances[idx] = { ...state.contractAcceptances[idx], ...update };
+        persist(); return state.contractAcceptances[idx];
+      }
+      const row = { id: uid("CTA"), ...create };
+      state.contractAcceptances.unshift(row);
+      persist(); return row;
+    },
+  },
+};
+
+
+
+/* =========================
+3) FILE: server/utils/date.js
+========================= */
+export function calcAge(dobISO) {
+  if (!dobISO) return null;
+  const dob = new Date(dobISO);
+  if (Number.isNaN(dob.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+export function fmtDate(dateISO) {
+  if (!dateISO) return "";
+  const d = new Date(dateISO);
+  if (Number.isNaN(d.getTime())) return "";
+  const dd = String(d.getDate()).padStart(2,"0");
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const yy = d.getFullYear();
+  return `${dd}/${mm}/${yy}`;
+}
+export function fmtDateTime(dateISO) {
+  if (!dateISO) return "";
+  const d = new Date(dateISO);
+  if (Number.isNaN(d.getTime())) return "";
+  const dd = String(d.getDate()).padStart(2,"0");
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const yy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2,"0");
+  const mi = String(d.getMinutes()).padStart(2,"0");
+  return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+}
+
+
+
+/* =========================
+4) FILE: server/utils/roles.js
+========================= */
+export function requireRole(roles) {
+  return (req, res, next) => {
+    const role = (req.user?.role || "").toUpperCase();
+    if (!roles.includes(role)) return res.status(403).json({ ok:false, error:"Forbidden" });
+    next();
+  };
+}
+
+
+
+/* =========================
+5) FILE: server/routes/matches.js
+MATCH RULES + STATS->SCORE LOCK + MANUAL SCORE RULE
+========================= */
+import express from "express";
+import { requireRole } from "../utils/roles.js";
+
+const router = express.Router();
+
+function getMatchStatus(startTime) {
+  const now = new Date();
+  return new Date(startTime) > now ? "UPCOMING" : "SCHEDULED";
+}
+function isMatchLocked(match) {
+  return !!match.statsEntered || !!match.scoreLocked || match.scoreSource === "STATS";
+}
+function computeScoreFromStats(sets) {
+  let homeSets = 0, awaySets = 0;
+  for (const s of sets) {
+    if (s.homePoints > s.awayPoints) homeSets++;
+    else if (s.awayPoints > s.homePoints) awaySets++;
+  }
+  return { homeScore: homeSets, awayScore: awaySets };
+}
+
+// CREATE MATCH (score NOT required for upcoming)
+router.post("/matches", requireRole(["ADMIN","COACH","SUPER_ADMIN"]), async (req, res) => {
+  const { startTime, homeTeamId, awayTeamId, venue = "" } = req.body;
+  if (!startTime || !homeTeamId || !awayTeamId) {
+    return res.status(400).json({ ok:false, error:"Missing required fields" });
+  }
+
+  const status = getMatchStatus(startTime);
+
+  const match = await req.db.match.create({
+    data: {
+      startTime: new Date(startTime).toISOString(),
+      homeTeamId,
+      awayTeamId,
+      venue,
+      status,
+      homeScore: null,
+      awayScore: null,
+      scoreSource: "NONE",
+      scoreLocked: false,
+      statsEntered: false,
+      lastScoreUpdatedBy: null,
+      lastScoreUpdatedAt: null,
+    },
+  });
+
+  return res.json({ ok:true, match });
+});
+
+// ENTER SET STATS (locks score, marks PLAYED)
+router.post("/matches/:id/stats", requireRole(["ADMIN","COACH","SUPER_ADMIN"]), async (req, res) => {
+  const matchId = req.params.id;
+  const { sets } = req.body;
+
+  if (!Array.isArray(sets) || sets.length === 0) {
+    return res.status(400).json({ ok:false, error:"Sets stats required" });
+  }
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+
+  if (isMatchLocked(match)) {
+    return res.status(403).json({ ok:false, error:"Stats locked: already submitted." });
+  }
+
+  await req.db.matchStats.upsert({
+    where: { matchId },
+    update: { sets, enteredBy: req.user.id, enteredAt: new Date().toISOString() },
+    create: { matchId, sets, enteredBy: req.user.id, enteredAt: new Date().toISOString() },
+  });
+
+  const { homeScore, awayScore } = computeScoreFromStats(sets);
+
+  const updated = await req.db.match.update({
+    where: { id: matchId },
+    data: {
+      homeScore,
+      awayScore,
+      scoreSource: "STATS",
+      scoreLocked: true,
+      statsEntered: true,
+      status: "PLAYED",
+      lastScoreUpdatedBy: req.user.id,
+      lastScoreUpdatedAt: new Date().toISOString(),
+    },
+  });
+
+  return res.json({ ok:true, match: updated });
+});
+
+// MANUAL SCORE (only if past AND no stats)
+router.patch("/matches/:id/score", requireRole(["ADMIN","COACH","SUPER_ADMIN"]), async (req, res) => {
+  const matchId = req.params.id;
+  const { homeScore, awayScore } = req.body;
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+
+  const now = new Date();
+  if (new Date(match.startTime) > now) {
+    return res.status(400).json({ ok:false, error:"Cannot set score for an upcoming match" });
+  }
+
+  if (match.statsEntered || match.scoreSource === "STATS" || match.scoreLocked) {
+    return res.status(403).json({ ok:false, error:"Score locked: stats already entered" });
+  }
+
+  if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore)) {
+    return res.status(400).json({ ok:false, error:"Scores must be integers" });
+  }
+
+  const updated = await req.db.match.update({
+    where: { id: matchId },
+    data: {
+      homeScore,
+      awayScore,
+      scoreSource: "MANUAL",
+      scoreLocked: true,
+      status: "PLAYED",
+      lastScoreUpdatedBy: req.user.id,
+      lastScoreUpdatedAt: new Date().toISOString(),
+    },
+  });
+
+  return res.json({ ok:true, match: updated });
+});
+
+export default router;
+
+
+
+/* =========================
+6) FILE: server/jobs/upcomingReminders.js
+In-app reminders: 48h, 24h, 2h, TODAY
+========================= */
+export function createUpcomingMatchRemindersJob(cron, db) {
+  async function createReminderIfMissing(match, reminderType, title, message, dateKey) {
+    const existing = await db.notification.findFirst({
+      where: { type: "MATCH_REMINDER", matchId: match.id, reminderType, dateKey },
+    });
+    if (existing) return;
+
+    // targetUserId = null means "ALL relevant users" in this simple store
+    await db.notification.create({
+      data: {
+        targetUserId: null,
+        type: "MATCH_REMINDER",
+        title,
+        message,
+        matchId: match.id,
+        reminderType,
+        dateKey,
+      },
+    });
+  }
+
+  function dayKey(d) {
+    const dt = new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return `${y}-${m}-${dd}`;
+  }
+
+  cron.schedule("*/15 * * * *", async () => {
+    const now = new Date();
+    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+    const matches = await db.match.findMany({
+      where: { status: "UPCOMING", startTime: { gte: now.toISOString(), lte: in48h.toISOString() } },
+      include: { homeTeam: true, awayTeam: true },
+    });
+
+    for (const m of matches) {
+      const start = new Date(m.startTime);
+      const diffMs = start.getTime() - now.getTime();
+      const diffH = diffMs / (60 * 60 * 1000);
+
+      const dk = dayKey(now);
+
+      const base = `${m.homeTeam?.name || "Home"} vs ${m.awayTeam?.name || "Away"} @ ${m.venue || "TBA"}`;
+      if (diffH <= 48 && diffH > 24) {
+        await createReminderIfMissing(m, "48H", "⏳ Match in 48 Hours", `${base}`, dk);
+      } else if (diffH <= 24 && diffH > 2) {
+        await createReminderIfMissing(m, "24H", "📣 Match Tomorrow", `${base}`, dk);
+      } else if (diffH <= 2 && diffH > 0) {
+        await createReminderIfMissing(m, "2H", "🚨 Match Soon (2 Hours)", `${base}`, dk);
+      }
+
+      // TODAY reminder (same date)
+      if (dayKey(start) === dayKey(now)) {
+        await createReminderIfMissing(m, "TODAY", "🏐 Match Today", `${base}`, dk);
+      }
+    }
+  });
+}
+
+
+
+/* =========================
+7) FILE: server/routes/notifications.js
+Dashboard fetch
+========================= */
+import express from "express";
+const router = express.Router();
+
+router.get("/", async (req, res) => {
+  const notifications = await req.db.notification.findMany({
+    where: { targetUserId: null },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  res.json({ ok:true, notifications });
+});
+
+export default router;
+
+
+
+/* =========================
+8) FILE: server/routes/attendance.js
+ATTENDANCE: auto-close after save; only SUPER_ADMIN can edit after closed
+========================= */
+import express from "express";
+import { requireRole } from "../utils/roles.js";
+
+const router = express.Router();
+
+// SAVE attendance lines + CLOSE
+router.post("/sessions/:id/save", requireRole(["ADMIN","COACH","SUPER_ADMIN"]), async (req, res) => {
+  const id = req.params.id;
+  const { lines } = req.body; // [{playerId, present, note?}]
+
+  const session = await req.db.attendanceSession.findUnique({ where: { id } });
+  if (!session) return res.status(404).json({ ok:false, error:"Session not found" });
+
+  if (session.status === "CLOSED") {
+    return res.status(403).json({ ok:false, error:"Attendance closed" });
+  }
+
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return res.status(400).json({ ok:false, error:"Attendance lines required" });
+  }
+
+  for (const l of lines) {
+    await req.db.attendanceLine.upsert({
+      where: { attendanceSessionId_playerId: { attendanceSessionId: id, playerId: l.playerId } },
+      update: { present: !!l.present, note: l.note || null },
+      create: { attendanceSessionId: id, playerId: l.playerId, present: !!l.present, note: l.note || null },
+    });
+  }
+
+  const updatedSession = await req.db.attendanceSession.update({
+    where: { id },
+    data: { status: "CLOSED", lockedAt: new Date().toISOString(), lockedBy: req.user.id },
+  });
+
+  res.json({ ok:true, session: updatedSession });
+});
+
+// EDIT session/lines: only SUPER_ADMIN if CLOSED
+router.patch("/sessions/:id", requireRole(["ADMIN","COACH","SUPER_ADMIN"]), async (req, res) => {
+  const id = req.params.id;
+  const session = await req.db.attendanceSession.findUnique({ where: { id } });
+  if (!session) return res.status(404).json({ ok:false, error:"Session not found" });
+
+  if (session.status === "CLOSED" && req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ ok:false, error:"Attendance closed" });
+  }
+
+  // For JSON store demo, only updates session meta here.
+  // If you need line editing, reuse the same upsert logic from /save.
+  const updated = await req.db.attendanceSession.update({
+    where: { id },
+    data: { ...req.body },
+  });
+
+  res.json({ ok:true, session: updated });
+});
+
+export default router;
+
+
+
+/* =========================
+9) FILE: server/utils/pdf.js
+========================= */
+import puppeteer from "puppeteer";
+
+export async function htmlToPdfBuffer(html) {
+  const browser = await puppeteer.launch({
+    args: ["--no-sandbox","--disable-setuid-sandbox"],
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "14mm", right: "12mm", bottom: "14mm", left: "12mm" },
+    });
+    return pdf;
+  } finally {
+    await browser.close();
+  }
+}
+
+
+
+/* =========================
+10) FILE: server/templates/letterhead.js
+========================= */
+export const baseCss = `
+<style>
+  body { font-family: Arial, sans-serif; color:#111; }
+  .lh{ display:flex; align-items:center; gap:12px; }
+  .logo{ width:68px; height:68px; object-fit:contain; }
+  .logo-box{ width:68px; height:68px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center; font-size:11px; }
+  .club{ font-size:18px; font-weight:800; letter-spacing:0.3px; }
+  .sub{ font-size:12px; opacity:0.8; margin-top:2px; }
+  .small{ font-size:10px; opacity:0.75; text-align:right; }
+  .hr{ border:none; border-top:2px solid #111; margin:10px 0 14px; }
+  h1{ font-size:16px; margin:0 0 10px; }
+  .meta{ font-size:12px; margin-bottom:12px; display:flex; gap:14px; flex-wrap:wrap; }
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  th, td{ border:1px solid #333; padding:6px; }
+  th{ background:#f2f2f2; text-align:left; }
+  .foot{ margin-top:14px; font-size:11px; opacity:0.85; }
+  .sig{ margin-top:18px; display:flex; justify-content:space-between; gap:20px; }
+  .sigbox{ width:48%; border-top:1px solid #111; padding-top:6px; font-size:11px; }
+  .badge{ display:inline-block; padding:2px 8px; border:1px solid #111; border-radius:999px; font-size:11px; }
+</style>
+`;
+
+export function letterhead({ clubName, subline, logoDataUrl }) {
+  return `
+  <div class="lh">
+    <div class="lh-left">
+      ${logoDataUrl ? `<img class="logo" src="${logoDataUrl}" />` : `<div class="logo-box">LOGO</div>`}
+    </div>
+    <div class="lh-mid">
+      <div class="club">${clubName || "AFROCAT VOLLEYBALL CLUB"}</div>
+      <div class="sub">${subline || "Official Club Document"}</div>
+    </div>
+    <div class="lh-right">
+      <div class="small">Generated: ${new Date().toLocaleString()}</div>
+    </div>
+  </div>
+  <hr class="hr"/>
+  `;
+}
+
+
+
+/* =========================
+11) FILE: server/templates/teamListHtml.js
+========================= */
+import { baseCss, letterhead } from "./letterhead.js";
+import { calcAge, fmtDate } from "../utils/date.js";
+
+export function teamListHtml({ team, players, logoDataUrl }) {
+  const rows = players.map((p, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${(p.firstName || "").toUpperCase()} ${(p.lastName || "").toUpperCase()}</td>
+      <td>${fmtDate(p.dob)}</td>
+      <td>${p.jerseyNumber ?? ""}</td>
+      <td>${calcAge(p.dob) ?? ""}</td>
+    </tr>
+  `).join("");
+
+  return `
+  <html>
+    <head>${baseCss}</head>
+    <body>
+      ${letterhead({ clubName: "AFROCAT VOLLEYBALL CLUB", subline: "TEAM LIST (Players Registered)", logoDataUrl })}
+      <h1>TEAM LIST</h1>
+      <div class="meta">
+        <div><b>Team:</b> ${team?.name || ""}</div>
+        <div><b>Total Players:</b> ${players.length}</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px;">#</th>
+            <th>Player Name</th>
+            <th style="width:110px;">DOB</th>
+            <th style="width:90px;">Jersey No.</th>
+            <th style="width:60px;">Age</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="foot">
+        Generated automatically from Registration data. Ages are calculated from DOB.
+      </div>
+      <div class="sig">
+        <div class="sigbox"><b>Coach / Team Manager</b></div>
+        <div class="sigbox"><b>Club Secretary / Admin</b></div>
+      </div>
+    </body>
+  </html>
+  `;
+}
+
+
+
+/* =========================
+12) FILE: server/templates/o2bisHtml.js
+========================= */
+import { baseCss, letterhead } from "./letterhead.js";
+import { calcAge, fmtDate, fmtDateTime } from "../utils/date.js";
+
+export function o2bisHtml({ match, homeTeam, awayTeam, homePlayers, awayPlayers, logoDataUrl }) {
+  const isUpcoming = match.status === "UPCOMING" || new Date(match.startTime) > new Date();
+  const scoreText = isUpcoming
+    ? `<span class="badge">UPCOMING (Score will come from stats)</span>`
+    : `<span class="badge">FINAL SCORE: ${match.homeScore ?? "-"} - ${match.awayScore ?? "-"}</span>`;
+
+  function playerTable(players) {
+    const rows = players.map((p, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${(p.firstName || "").toUpperCase()} ${(p.lastName || "").toUpperCase()}</td>
+        <td>${fmtDate(p.dob)}</td>
+        <td>${p.jerseyNumber ?? ""}</td>
+        <td>${calcAge(p.dob) ?? ""}</td>
+      </tr>
+    `).join("");
+
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px;">#</th>
+            <th>Player Name</th>
+            <th style="width:110px;">DOB</th>
+            <th style="width:90px;">Jersey No.</th>
+            <th style="width:60px;">Age</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  return `
+  <html>
+    <head>${baseCss}</head>
+    <body>
+      ${letterhead({ clubName: "AFROCAT VOLLEYBALL CLUB", subline: "O-2BIS PLAYER LIST", logoDataUrl })}
+      <h1>O-2BIS FORM (Auto-Generated)</h1>
+
+      <div class="meta">
+        <div><b>Match Date & Time:</b> ${fmtDateTime(match.startTime)}</div>
+        <div><b>Venue:</b> ${match.venue || ""}</div>
+        <div><b>Home:</b> ${homeTeam?.name || ""}</div>
+        <div><b>Away:</b> ${awayTeam?.name || ""}</div>
+        <div>${scoreText}</div>
+      </div>
+
+      <h1 style="margin-top:6px;">HOME TEAM PLAYERS: ${homeTeam?.name || ""}</h1>
+      ${playerTable(homePlayers)}
+
+      <h1 style="margin-top:14px;">AWAY TEAM PLAYERS: ${awayTeam?.name || ""}</h1>
+      ${playerTable(awayPlayers)}
+
+      <div class="foot">
+        Generated from Match Scheduling + Player Registration data. 
+        If stats are entered, score is locked and cannot be edited manually.
+      </div>
+
+      <div class="sig">
+        <div class="sigbox"><b>Home Coach / Manager</b></div>
+        <div class="sigbox"><b>Away Coach / Manager</b></div>
+      </div>
+    </body>
+  </html>
+  `;
+}
+
+
+
+/* =========================
+13) FILE: server/routes/docs.js
+TEAM LIST PDF + O2BIS PDF
+========================= */
+import express from "express";
+import { htmlToPdfBuffer } from "../utils/pdf.js";
+import { teamListHtml } from "../templates/teamListHtml.js";
+import { o2bisHtml } from "../templates/o2bisHtml.js";
+
+const router = express.Router();
+const LOGO_DATA_URL = process.env.CLUB_LOGO_DATA_URL || "";
+
+// TEAM LIST PDF
+router.get("/team-list/:teamId.pdf", async (req, res) => {
+  const teamId = req.params.teamId;
+
+  const team = await req.db.team.findUnique({ where: { id: teamId } });
+  if (!team) return res.status(404).send("Team not found");
+
+  const players = await req.db.player.findMany({
+    where: { teamId },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+  });
+
+  const html = teamListHtml({ team, players, logoDataUrl: LOGO_DATA_URL });
+  const pdf = await htmlToPdfBuffer(html);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="TEAM_LIST_${team.name || teamId}.pdf"`);
+  return res.send(pdf);
+});
+
+// O2BIS PDF
+router.get("/o2bis/:matchId.pdf", async (req, res) => {
+  const matchId = req.params.matchId;
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).send("Match not found");
+
+  const homeTeam = await req.db.team.findUnique({ where: { id: match.homeTeamId } });
+  const awayTeam = await req.db.team.findUnique({ where: { id: match.awayTeamId } });
+
+  const homePlayers = await req.db.player.findMany({ where: { teamId: match.homeTeamId }, orderBy: [{ lastName: "asc" }] });
+  const awayPlayers = await req.db.player.findMany({ where: { teamId: match.awayTeamId }, orderBy: [{ lastName: "asc" }] });
+
+  const html = o2bisHtml({ match, homeTeam, awayTeam, homePlayers, awayPlayers, logoDataUrl: LOGO_DATA_URL });
+  const pdf = await htmlToPdfBuffer(html);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="O2BIS_${matchId}.pdf"`);
+  return res.send(pdf);
+});
+
+export default router;
+
+
+
+/* =========================
+14) FILE: server/routes/contract.js
+SERVE CONTRACT PDF + ACCEPTANCE (minors require guardian)
+========================= */
+import express from "express";
+import { calcAge } from "../utils/date.js";
+
+const router = express.Router();
+
+const CONTRACT_KEY = "AFROCAT_CONTRACT_2024_2026";
+const CONTRACT_VERSION_HASH = "PDF_v1_2024_2026"; // update if you replace PDF
+const SPORT = "VOLLEYBALL";
+
+// NOTE:
+// Put your contract PDF here:
+// public/contracts/afrocat-volleyball-contract.pdf
+// It will be accessible at:
+// /contracts/afrocat-volleyball-contract.pdf
+
+router.get("/status", async (req, res) => {
+  const userId = req.user.id;
+  const existing = await req.db.contractAcceptance.findFirst({ where: { userId, contractKey: CONTRACT_KEY } });
+  res.json({
+    ok: true,
+    required: true,
+    accepted: !!existing,
+    acceptedAt: existing?.acceptedAt || null,
+    acceptedBy: existing?.acceptedBy || null,
+    contractKey: CONTRACT_KEY,
+  });
+});
+
+router.post("/accept", async (req, res) => {
+  const userId = req.user.id;
+  const { accepterFullName, acceptedBy, guardianIdNumber, guardianPhoneNumber } = req.body || {};
+
+  // find player profile (in this demo, userId == playerId is not implemented; adjust to your auth)
+  // For now: if you store DOB on a user record, replace this lookup.
+  // We'll try to find a player with id=userId; otherwise reject.
+  const player = await req.db.player.findUnique({ where: { id: userId } });
+  if (!player?.dob) return res.status(400).json({ ok:false, error:"Player DOB not found for age check." });
+
+  const age = calcAge(player.dob);
+  if (age === null) return res.status(400).json({ ok:false, error:"Invalid DOB" });
+
+  const isMinor = age < 18;
+
+  if (!accepterFullName || !String(accepterFullName).trim()) {
+    return res.status(400).json({ ok:false, error:"Full name is required" });
+  }
+
+  if (isMinor) {
+    if (acceptedBy !== "GUARDIAN") return res.status(400).json({ ok:false, error:"Minor requires guardian confirmation" });
+    if (!guardianIdNumber || !guardianPhoneNumber) {
+      return res.status(400).json({ ok:false, error:"Guardian ID number and phone number are required for minors" });
+    }
+  } else {
+    if (acceptedBy !== "SELF") return res.status(400).json({ ok:false, error:"Adult must confirm as SELF" });
+  }
+
+  const saved = await req.db.contractAcceptance.upsert({
+    where: { userId_contractKey: { userId, contractKey: CONTRACT_KEY } },
+    update: {
+      contractVersionHash: CONTRACT_VERSION_HASH,
+      sport: SPORT,
+      isMinor,
+      acceptedBy,
+      accepterFullName: String(accepterFullName).trim(),
+      guardianIdNumber: isMinor ? String(guardianIdNumber).trim() : null,
+      guardianPhoneNumber: isMinor ? String(guardianPhoneNumber).trim() : null,
+      acceptedAt: new Date().toISOString(),
+    },
+    create: {
+      userId,
+      contractKey: CONTRACT_KEY,
+      contractVersionHash: CONTRACT_VERSION_HASH,
+      sport: SPORT,
+      isMinor,
+      acceptedBy,
+      accepterFullName: String(accepterFullName).trim(),
+      guardianIdNumber: isMinor ? String(guardianIdNumber).trim() : null,
+      guardianPhoneNumber: isMinor ? String(guardianPhoneNumber).trim() : null,
+      acceptedAt: new Date().toISOString(),
+    },
+  });
+
+  res.json({ ok:true, acceptance: saved });
+});
+
+export default router;
+
+
+
+/* =========================
+15) FILE: server/routes/statsTouch.js
+TOUCH-LIKE STAT EVENTS + INIT + UNDO
+========================= */
+import express from "express";
+const router = express.Router();
+
+function isMatchLocked(match) {
+  return !!match.statsEntered || !!match.scoreLocked || match.scoreSource === "STATS";
+}
+
+// INIT: match + roster (photo/name/jersey)
+router.get("/matches/:matchId/stats-touch/init", async (req, res) => {
+  const { matchId } = req.params;
+  const teamId = req.query.teamId;
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+
+  const players = await req.db.player.findMany({
+    where: { teamId },
+    select: { id:true, firstName:true, lastName:true, jerseyNumber:true, photoUrl:true },
+    orderBy: [{ jerseyNumber: "asc" }, { lastName: "asc" }],
+  });
+
+  res.json({ ok:true, match, players });
+});
+
+// POST EVENT
+router.post("/matches/:matchId/events", async (req, res) => {
+  const { matchId } = req.params;
+  const { playerId, action, outcome, teamId } = req.body || {};
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+  if (isMatchLocked(match)) return res.status(403).json({ ok:false, error:"Stats locked: already submitted." });
+
+  if (!playerId || !action || !outcome) {
+    return res.status(400).json({ ok:false, error:"Missing playerId/action/outcome" });
+  }
+
+  const event = await req.db.matchEvent.create({
+    data: {
+      matchId,
+      teamId,
+      playerId,
+      action,
+      outcome,
+      createdAt: new Date().toISOString(),
+      createdBy: req.user?.id || null,
+    },
+  });
+
+  res.json({ ok:true, event, match });
+});
+
+// DELETE EVENT (UNDO)
+router.delete("/matches/:matchId/events/:eventId", async (req, res) => {
+  const { matchId, eventId } = req.params;
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+  if (isMatchLocked(match)) return res.status(403).json({ ok:false, error:"Stats locked: already submitted." });
+
+  await req.db.matchEvent.delete({ where: { id: eventId } });
+  res.json({ ok:true, match });
+});
+
+export default router;
+
+
+
+/* =========================
+16) FRONTEND FILE: src/components/TouchStatsEntry.jsx
+(If your frontend path differs, paste into your React components folder)
+========================= */
+import React, { useEffect, useMemo, useState } from "react";
+
+const ACTIONS = [
+  { key: "SERVE", label: "Serve" },
+  { key: "RECEIVE", label: "Receive" },
+  { key: "SET", label: "Set" },
+  { key: "ATTACK", label: "Attack" },
+  { key: "BLOCK", label: "Block" },
+  { key: "DIG", label: "Dig" },
+  { key: "FREEBALL", label: "Free Ball" },
+];
+
+const OUTCOMES = [
+  { key: "PLUS", label: "+ (Win)", hint: "Point / Success" },
+  { key: "ZERO", label: "0 (OK)", hint: "Neutral" },
+  { key: "MINUS", label: "- (Err)", hint: "Error / Lost point" },
+];
+
+export default function TouchStatsEntry({ matchId, teamId }) {
+  const [loading, setLoading] = useState(true);
+  const [match, setMatch] = useState(null);
+  const [players, setPlayers] = useState([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState(null);
+  const [selectedAction, setSelectedAction] = useState(null);
+  const [recent, setRecent] = useState([]);
+
+  const selectedPlayer = useMemo(
+    () => players.find((p) => p.id === selectedPlayerId),
+    [players, selectedPlayerId]
+  );
+
+  const isLocked = !!match?.statsEntered || !!match?.scoreLocked || match?.scoreSource === "STATS";
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const r = await fetch(`/api/matches/${matchId}/stats-touch/init?teamId=${teamId}`);
+        const data = await r.json();
+        if (data?.ok) {
+          setMatch(data.match);
+          setPlayers(data.players || []);
+          if (data.players?.[0]?.id) setSelectedPlayerId(data.players[0].id);
+        }
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [matchId, teamId]);
+
+  async function postEvent({ playerId, action, outcome }) {
+    const tempId = `temp_${Date.now()}`;
+    const uiItem = {
+      id: tempId,
+      at: new Date().toISOString(),
+      playerId,
+      playerName: `${selectedPlayer?.firstName || ""} ${selectedPlayer?.lastName || ""}`.trim(),
+      jerseyNumber: selectedPlayer?.jerseyNumber ?? "",
+      action,
+      outcome,
+    };
+
+    setRecent((prev) => [uiItem, ...prev].slice(0, 12));
+
+    const res = await fetch(`/api/matches/${matchId}/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId, action, outcome, teamId }),
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.ok) {
+      setRecent((prev) => prev.filter((x) => x.id !== tempId));
+      alert(data?.error || "Failed to save event.");
+      return;
+    }
+
+    setRecent((prev) => prev.map((x) => (x.id === tempId ? { ...x, id: data.event.id } : x)));
+    if (data.match) setMatch(data.match);
+  }
+
+  async function undoLast() {
+    const last = recent[0];
+    if (!last) return;
+
+    const res = await fetch(`/api/matches/${matchId}/events/${last.id}`, { method: "DELETE" });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.ok) {
+      alert(data?.error || "Undo failed.");
+      return;
+    }
+
+    setRecent((prev) => prev.slice(1));
+    if (data.match) setMatch(data.match);
+  }
+
+  function outcomePill(outcome) {
+    if (outcome === "PLUS") return "✅ +";
+    if (outcome === "MINUS") return "❌ -";
+    return "➖ 0";
+  }
+
+  if (loading) return <div style={S.wrap}>Loading stats...</div>;
+  if (!match) return <div style={S.wrap}>Match not found.</div>;
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.headerRow}>
+        <div>
+          <div style={S.title}>Enter Stats (Touch)</div>
+          <div style={S.sub}>
+            Match: <b>{matchId}</b>{" "}
+            {isLocked ? <span style={S.locked}>LOCKED</span> : <span style={S.open}>OPEN</span>}
+          </div>
+        </div>
+
+        <button style={{ ...S.undoBtn, opacity: recent.length ? 1 : 0.4 }} disabled={!recent.length || isLocked} onClick={undoLast}>
+          Undo Last
+        </button>
+      </div>
+
+      <div style={S.playerGrid}>
+        {players.map((p) => {
+          const active = p.id === selectedPlayerId;
+          return (
+            <button key={p.id} style={{ ...S.playerCard, borderColor: active ? "#111" : "#ddd" }} onClick={() => setSelectedPlayerId(p.id)}>
+              <img src={p.photoUrl || "/default-avatar.png"} alt="player" style={S.playerPhoto} />
+              <div style={S.playerInfo}>
+                <div style={S.playerName}>{(p.firstName || "").toUpperCase()} {(p.lastName || "").toUpperCase()}</div>
+                <div style={S.playerMeta}>Jersey: <b>{p.jerseyNumber ?? "-"}</b></div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={S.padWrap}>
+        <div style={S.padTitle}>1) Choose Action</div>
+        <div style={S.actionGrid}>
+          {ACTIONS.map((a) => (
+            <button
+              key={a.key}
+              style={{ ...S.actionBtn, background: selectedAction === a.key ? "#111" : "#fff", color: selectedAction === a.key ? "#fff" : "#111" }}
+              disabled={isLocked}
+              onClick={() => setSelectedAction(a.key)}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <div style={S.padTitle}>2) Choose Outcome</div>
+        <div style={S.outcomeRow}>
+          {OUTCOMES.map((o) => (
+            <button
+              key={o.key}
+              style={S.outcomeBtn}
+              disabled={isLocked || !selectedPlayerId || !selectedAction}
+              onClick={() => postEvent({ playerId: selectedPlayerId, action: selectedAction, outcome: o.key })}
+            >
+              <div style={S.outcomeBig}>{o.label}</div>
+              <div style={S.outcomeHint}>{o.hint}</div>
+            </button>
+          ))}
+        </div>
+
+        <div style={S.tip}>Tap <b>Player</b> → <b>Action</b> → <b>Outcome</b>. Fast during rallies.</div>
+      </div>
+
+      <div style={S.recentWrap}>
+        <div style={S.padTitle}>Recent</div>
+        {recent.length === 0 ? (
+          <div style={{ opacity: 0.7 }}>No events yet.</div>
+        ) : (
+          <div style={S.recentList}>
+            {recent.map((e) => (
+              <div key={e.id} style={S.recentItem}>
+                <div style={S.recentLeft}>
+                  <div style={S.recentName}>{e.playerName} <span style={{ opacity: 0.7 }}>#{e.jerseyNumber}</span></div>
+                  <div style={S.recentMeta}>{e.action} • {new Date(e.at).toLocaleTimeString()}</div>
+                </div>
+                <div style={S.recentRight}>{outcomePill(e.outcome)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const S = {
+  wrap: { maxWidth: 1100, margin: "16px auto", padding: 12, fontFamily: "Arial" },
+  headerRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 },
+  title: { fontSize: 18, fontWeight: 800 },
+  sub: { fontSize: 12, opacity: 0.85, marginTop: 4 },
+  locked: { marginLeft: 8, padding: "2px 8px", border: "1px solid #111", borderRadius: 999 },
+  open: { marginLeft: 8, padding: "2px 8px", border: "1px solid #111", borderRadius: 999 },
+  undoBtn: { padding: "10px 14px", borderRadius: 10, border: "1px solid #111", background: "#fff", fontWeight: 700, cursor: "pointer" },
+  playerGrid: { marginTop: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 },
+  playerCard: { display: "flex", gap: 10, border: "2px solid #ddd", borderRadius: 14, padding: 10, background: "#fff", textAlign: "left", cursor: "pointer" },
+  playerPhoto: { width: 62, height: 62, borderRadius: 12, objectFit: "cover", border: "1px solid #ddd" },
+  playerInfo: { display: "grid", gap: 4, alignContent: "center" },
+  playerName: { fontWeight: 900, fontSize: 13 },
+  playerMeta: { fontSize: 12, opacity: 0.85 },
+  padWrap: { marginTop: 14, border: "1px solid #ddd", borderRadius: 14, padding: 12 },
+  padTitle: { fontWeight: 900, marginBottom: 8 },
+  actionGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 },
+  actionBtn: { padding: "16px 12px", borderRadius: 14, border: "2px solid #111", fontWeight: 900, fontSize: 14, cursor: "pointer" },
+  outcomeRow: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 },
+  outcomeBtn: { padding: "18px 12px", borderRadius: 14, border: "2px solid #111", background: "#fff", cursor: "pointer" },
+  outcomeBig: { fontSize: 16, fontWeight: 900 },
+  outcomeHint: { fontSize: 12, opacity: 0.8, marginTop: 4 },
+  tip: { marginTop: 10, fontSize: 12, opacity: 0.8 },
+  recentWrap: { marginTop: 14, border: "1px solid #ddd", borderRadius: 14, padding: 12 },
+  recentList: { display: "grid", gap: 8 },
+  recentItem: { display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid #eee", borderRadius: 12, padding: 10, background: "#fafafa" },
+  recentLeft: { display: "grid", gap: 2 },
+  recentName: { fontWeight: 900, fontSize: 13 },
+  recentMeta: { fontSize: 12, opacity: 0.75 },
+  recentRight: { fontWeight: 900, fontSize: 14 },
+};
+
+
+
+/* =========================
+17) FINAL SETUP NOTES (DO THIS IN REPLIT)
+========================= */
+/*
+A) Create folders:
+- server/routes
+- server/templates
+- server/utils
+- server/jobs
+- server/store
+- public/contracts
+- data
+
+B) Put your official contract PDF here:
+public/contracts/afrocat-volleyball-contract.pdf
+
+C) Start command (Replit “Run”):
+node server/index.js
+
+D) Dashboard links you can use:
+- Contract PDF: /contracts/afrocat-volleyball-contract.pdf
+- Contract page (if you build one in frontend): /contract
+- Team List PDF: /api/docs/team-list/<TEAM_ID>.pdf
+- O2BIS PDF: /api/docs/o2bis/<MATCH_ID>.pdf
+- Notifications feed: /api/notifications
+- Touch stats init: /api/matches/<MATCH_ID>/stats-touch/init?teamId=<TEAM_ID>
+
+E) If you already have Prisma:
+- Replace server/store/db.js with your Prisma client export:
+  export const db = prisma;
+- Then adjust JSON-store methods to Prisma queries (I can do that instantly if you paste your schema).
+*/
