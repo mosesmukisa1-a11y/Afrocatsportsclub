@@ -309,4 +309,16 @@ export const api = {
   getChatMessages: (roomId: string) => apiFetch<any[]>(`/chat/messages/${encodeURIComponent(roomId)}`),
   sendChatMessage: (data: { roomId: string; message: string }) =>
     apiFetch<any>("/chat/messages", { method: "POST", body: JSON.stringify(data) }),
+
+  getStaffEligibleUsers: () => apiFetch<any[]>("/staff-eligible-users"),
+  editMatch: (id: string, data: any) =>
+    apiFetch<any>(`/matches/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  getMatchStaff: (matchId: string) =>
+    apiFetch<any>(`/matches/${matchId}/staff`),
+  saveMatchStaff: (matchId: string, data: any) =>
+    apiFetch<any>(`/matches/${matchId}/staff`, { method: "POST", body: JSON.stringify(data) }),
+  checkO2bis: (matchId: string) =>
+    apiFetch<any>(`/docs/o2bis/${matchId}/check`),
+  getO2bisPdfUrl: (matchId: string, skipMissing: boolean) =>
+    `/api/docs/o2bis/${matchId}.pdf?skipMissing=${skipMissing}`,
 };

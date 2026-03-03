@@ -1,0 +1,201 @@
+```text
+REPLIT – MATCH SCHEDULING UPGRADE (ADMIN EDITS + O2BIS COMPLETE DATA + PLAYER SELECTION NOTIFICATIONS + DOWNLOAD/SAVE + “SKIP IF MISSING” PROMPT)
+
+========================================================
+1) ALLOW ADMINS TO EDIT SCHEDULED/UPCOMING MATCHES
+========================================================
+
+RULE:
+- Admins can edit any match that is not PLAYED/CANCELLED.
+- Coaches can edit only if match is UPCOMING and statsEntered=false and scoreLocked=false (optional).
+- If match is PLAYED (statsEntered=true OR scoreLocked=true OR scoreSource=STATS/MANUAL): editing scheduling fields must be blocked.
+
+Backend check for edit:
+IF match.status IN ("UPCOMING","SCHEDULED","LIVE") AND match.statsEntered=false AND match.scoreLocked=false:
+  allow ADMIN edit
+ELSE:
+  reject
+
+Fields editable by ADMIN:
+- startTime
+- venue
+- officials (referees etc)
+- assigned staff (head coach, assistant coach, medic)
+- selected squad list (players selected)
+- notes
+
+========================================================
+2) ENSURE SYSTEM STORES ALL INFO NEEDED FOR O2BIS
+========================================================
+
+Add/ensure these entities exist:
+
+A) MatchStaffAssignments
+- matchId
+- headCoachUserId (required)
+- assistantCoachUserId (optional)
+- medicUserId (optional)
+- teamManagerUserId (optional)
+
+B) MatchOfficials
+- matchId
+- firstRefereeUserId or name
+- secondRefereeUserId or name
+- scorerUserId or name
+- lineJudges (array) or 2 fields
+- optional: commissioner
+
+C) MatchDetails (on Match)
+- competitionName (optional)
+- round (optional)
+- venue (required)
+- startTime (required)
+
+D) MatchSquad (players selected for match)
+- matchId
+- teamId
+- playerId
+- role (STARTER | SUB | RESERVE) optional
+- selectedAt
+- selectedBy
+
+O2BIS must pull:
+- Match: startTime, venue, competitionName/round (if present)
+- Teams: home/away names
+- Squad players: names, DOB, jersey numbers, age
+- Staff: head coach, assistant, medic, manager
+- Officials: ref/scorer etc
+
+========================================================
+3) SCHEDULING FORM: REQUIRED FIELDS FOR O2BIS
+========================================================
+
+When scheduling a match, show sections:
+1) Match Info (required): date/time, venue, home team, away team
+2) Staff Assignment (required head coach; others optional)
+3) Officials (optional, but recommended)
+4) Squad Selection (optional at scheduling, can be done later)
+
+Validation:
+- DO NOT block scheduling if optional fields missing.
+- BUT when generating O2BIS:
+   - if missing required-by-user fields, PROMPT: “Information missing: X. Skip and generate anyway?”
+   - if user chooses skip => print blanks on PDF.
+
+========================================================
+4) “ASK TO SKIP” MISSING INFO PROMPT (O2BIS)
+========================================================
+
+When user clicks “Generate O2BIS”:
+
+Backend runs a completeness check and returns:
+
+{
+  ok:true,
+  canGenerate:true,
+  missing:[
+    "Assistant Coach",
+    "Medic",
+    "First Referee"
+  ]
+}
+
+Frontend shows modal:
+- Missing: list
+- Buttons:
+  - “Go Back & Fill”
+  - “Skip & Generate”
+
+If “Skip & Generate” => call:
+POST /api/docs/o2bis/:matchId.pdf?skipMissing=true
+
+PDF should print blank lines for missing fields.
+
+========================================================
+5) NOTIFY PLAYERS WHEN SELECTED FOR THE MATCH
+========================================================
+
+On squad selection change:
+- For each newly added playerId:
+  create Notification:
+   type="MATCH_SELECTION"
+   targetUserId = player.userId (or playerId if you use that)
+   title="🏐 You’ve been selected!"
+   message="You are selected for: Home vs Away on DATE at VENUE."
+   matchId
+
+Avoid duplicates:
+- unique(matchId + playerId)
+
+Also notify:
+- head coach
+- assistant
+- medic
+- admins (optional)
+
+========================================================
+6) DOCUMENT DOWNLOAD & SAVE ON DEVICE
+========================================================
+
+For PDF buttons (Team List / O2BIS):
+Use direct link to PDF endpoint so the browser downloads and user can save.
+
+Example:
+<a href={`/api/docs/o2bis/${matchId}.pdf`} download>Download O2BIS</a>
+
+Server headers MUST include:
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="O2BIS_<matchId>.pdf"
+
+This enables “Save to device”.
+
+========================================================
+7) O2BIS TEMPLATE UPDATE (ADD STAFF + OFFICIALS)
+========================================================
+
+Update O2BIS PDF template to include sections:
+
+- Match Info: date/time, venue, competition (optional)
+- Staff:
+   Head Coach: ________
+   Assistant Coach: ________
+   Medic: ________
+   Team Manager: ________
+- Officials:
+   1st Referee: ________
+   2nd Referee: ________
+   Scorer: ________
+   Line Judges: ________ ________
+
+If skipMissing=true and a field is missing => show blank line.
+If available => show name from system.
+
+========================================================
+8) IMPLEMENTATION ENDPOINTS (REQUIRED)
+========================================================
+
+A) Edit match (ADMIN):
+PATCH /api/matches/:id
+- validates lock rules
+- updates match fields + staff + officials
+
+B) Squad selection:
+POST /api/matches/:id/squad
+Body:
+{ teamId, playerIds:[...], roleMap(optional) }
+
+On save:
+- write MatchSquad rows
+- detect newly added players -> send notifications
+
+C) O2BIS missing check:
+GET /api/docs/o2bis/:matchId/check
+returns missing[] based on staff/officials presence
+
+D) O2BIS download:
+GET /api/docs/o2bis/:matchId.pdf?skipMissing=true/false
+
+========================================================
+END – PLEASE IMPLEMENT EXACTLY
+========================================================
+```

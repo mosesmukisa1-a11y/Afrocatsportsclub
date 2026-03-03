@@ -90,7 +90,17 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - Club: AFROCAT VOLLEYBALL CLUB — One Team One Dream — Passion Discipline Victory
 - **Global Dark Theme**: Full `afrocat-*` token system. `.afrocat-card` CSS class for card components.
 
-## New Features (Latest)
+## Match Scheduling Upgrade (Latest)
+- **Admin Match Editing**: `PATCH /api/matches/:id` — admins can edit UPCOMING matches (not PLAYED/CANCELLED, not stats-entered/score-locked). Editable: startTime, venue, competition, round, notes, opponent.
+- **Match Staff Assignments**: `matchStaffAssignments` table (headCoachUserId required, assistantCoachUserId, medicUserId, teamManagerUserId optional). `POST /api/matches/:id/staff` upsert, `GET /api/matches/:id/staff` retrieve.
+- **Squad Selection Notifications**: When players are newly added to a match squad, they get a `MATCH_SELECTION` notification. Admins also notified of squad changes.
+- **O2BIS Completeness Check**: `GET /api/docs/o2bis/:matchId/check` returns `{ok, canGenerate, missing[]}` — checks staff, squad, venue, startTime, competition.
+- **O2BIS PDF Download**: `GET /api/docs/o2bis/:matchId.pdf?skipMissing=true/false` — proper pdf-lib generated PDF with match info, staff section, player list, signatures. Missing fields shown as blanks when skipMissing=true. Proper Content-Type/Content-Disposition headers for download.
+- **O2BIS Skip Modal**: Frontend shows missing info list with "Go Back & Fill" / "Skip & Generate" buttons. PDF downloaded via fetch+blob for JWT auth compatibility.
+- **Staff-Eligible Users Endpoint**: `GET /api/staff-eligible-users` for ADMIN/MANAGER/COACH to populate staff assignment dropdowns.
+- **Matches.tsx UI**: Edit button (ADMIN), Staff Assignment button, O2BIS generation button on upcoming match cards.
+
+## New Features
 - **Stats Comparison** (`/stats-comparison`): Side-by-side player stat comparison with visual bars. Select two players, compare kills/aces/blocks/digs/assists/points/errors/matches + awards count. Uses `GET /api/stats/compare?player1=ID&player2=ID`.
 - **Real-Time Chat** (`/chat`): Room-based messaging (General + per-team rooms). REST-based with 3s auto-refresh via react-query. Role badges (ADMIN=gold, COACH=teal, PLAYER=muted). `chatMessages` table with `sentAt` timestamp. Endpoints: `GET /api/chat/rooms`, `GET /api/chat/messages/:roomId`, `POST /api/chat/messages`.
 - **Match Simulation** (`/match-simulation`): Coaches build Starting 6 lineups from team roster. Shows per-player avg stats (kills/aces/blocks/digs/assists/points/efficiency). Team Strength Score = sum of efficiency. Save/load presets via localStorage. Compare mode for lineup testing. `GET /api/simulation/team-stats/:teamId`.

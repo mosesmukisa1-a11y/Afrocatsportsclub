@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar, MapPin, Users, Clock, Lock, Loader2, Trophy, AlertTriangle } from "lucide-react";
+import { Plus, Calendar, MapPin, Users, Clock, Lock, Loader2, Trophy, AlertTriangle, Pencil, Download, FileText, UserCheck } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -44,6 +44,14 @@ export default function Matches() {
     { homePoints: 0, awayPoints: 0 },
     { homePoints: 0, awayPoints: 0 },
   ]);
+
+  const [editModal, setEditModal] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({ startTime: "", venue: "", competition: "", round: "", notes: "", opponent: "" });
+  const [staffModal, setStaffModal] = useState<string | null>(null);
+  const [staffForm, setStaffForm] = useState({ headCoachUserId: "", assistantCoachUserId: "", medicUserId: "", teamManagerUserId: "" });
+  const [o2bisModal, setO2bisModal] = useState<{ matchId: string; missing: string[] } | null>(null);
+  const canManageStaff = user && ["ADMIN", "MANAGER", "COACH"].includes(user.role);
+  const { data: allUsers = [] } = useQuery({ queryKey: ["/api/staff-eligible-users"], queryFn: api.getStaffEligibleUsers, enabled: !!canManageStaff });
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/matches/upcoming"] });
@@ -98,9 +106,74 @@ export default function Matches() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const editMut = useMutation({
+    mutationFn: () => api.editMatch(editModal.id, {
+      startTime: editForm.startTime ? new Date(`${editModal.matchDate}T${editForm.startTime}`).toISOString() : undefined,
+      venue: editForm.venue || undefined,
+      competition: editForm.competition || undefined,
+      round: editForm.round || undefined,
+      notes: editForm.notes || undefined,
+      opponent: editForm.opponent || undefined,
+    }),
+    onSuccess: () => {
+      invalidateAll();
+      setEditModal(null);
+      toast({ title: "Match updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const staffMut = useMutation({
+    mutationFn: () => api.saveMatchStaff(staffModal!, staffForm),
+    onSuccess: () => {
+      invalidateAll();
+      setStaffModal(null);
+      toast({ title: "Staff assigned" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const downloadO2bisPdf = async (matchId: string, skipMissing: boolean) => {
+    try {
+      const token = localStorage.getItem("token");
+      const resp = await fetch(`/api/docs/o2bis/${matchId}.pdf?skipMissing=${skipMissing}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!resp.ok) throw new Error("Failed to generate O2BIS PDF");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `O2BIS_${matchId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "O2BIS PDF downloaded" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleO2bisCheck = async (matchId: string) => {
+    try {
+      const result = await api.checkO2bis(matchId);
+      if (result.missing && result.missing.length > 0) {
+        setO2bisModal({ matchId, missing: result.missing });
+      } else {
+        await downloadO2bisPdf(matchId, false);
+      }
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
   const canCreate = user && ["ADMIN", "MANAGER", "COACH", "STATISTICIAN"].includes(user.role);
   const canSelectSquad = user && ["ADMIN", "MANAGER", "COACH"].includes(user.role);
   const canScore = user && ["ADMIN", "MANAGER", "COACH", "STATISTICIAN"].includes(user.role);
+  const isAdmin = user?.role === "ADMIN";
+  const canAssignStaff = user && ["ADMIN", "MANAGER", "COACH"].includes(user.role);
+  const canGenerateO2bis = user && ["ADMIN", "MANAGER", "COACH"].includes(user.role);
 
   const formIsFuture = form.startTime
     ? new Date(`${form.matchDate}T${form.startTime}`) > new Date()
@@ -218,6 +291,65 @@ export default function Matches() {
                     data-testid={`button-squad-${match.id}`}
                   >
                     <Users className="h-4 w-4 mr-1" /> Starting 12
+                  </Button>
+                )}
+                {isAdmin && isUpcoming && !match.statsEntered && !match.scoreLocked && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
+                    onClick={() => {
+                      setEditModal(match);
+                      const t = match.startTime ? new Date(match.startTime) : null;
+                      setEditForm({
+                        startTime: t ? `${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}` : "",
+                        venue: match.venue || "",
+                        competition: match.competition || "",
+                        round: match.round || "",
+                        notes: match.notes || "",
+                        opponent: match.opponent || "",
+                      });
+                    }}
+                    data-testid={`button-edit-match-${match.id}`}
+                  >
+                    <Pencil className="h-4 w-4 mr-1" /> Edit
+                  </Button>
+                )}
+                {canAssignStaff && isUpcoming && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
+                    onClick={async () => {
+                      setStaffModal(match.id);
+                      try {
+                        const existing = await api.getMatchStaff(match.id);
+                        if (existing) {
+                          setStaffForm({
+                            headCoachUserId: existing.headCoachUserId || "",
+                            assistantCoachUserId: existing.assistantCoachUserId || "",
+                            medicUserId: existing.medicUserId || "",
+                            teamManagerUserId: existing.teamManagerUserId || "",
+                          });
+                        } else {
+                          setStaffForm({ headCoachUserId: "", assistantCoachUserId: "", medicUserId: "", teamManagerUserId: "" });
+                        }
+                      } catch { setStaffForm({ headCoachUserId: "", assistantCoachUserId: "", medicUserId: "", teamManagerUserId: "" }); }
+                    }}
+                    data-testid={`button-staff-${match.id}`}
+                  >
+                    <UserCheck className="h-4 w-4 mr-1" /> Staff
+                  </Button>
+                )}
+                {canGenerateO2bis && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-afrocat-teal text-afrocat-teal hover:bg-afrocat-teal/10"
+                    onClick={() => handleO2bisCheck(match.id)}
+                    data-testid={`button-o2bis-${match.id}`}
+                  >
+                    <FileText className="h-4 w-4 mr-1" /> O2BIS
                   </Button>
                 )}
               </div>
@@ -464,6 +596,132 @@ export default function Matches() {
               >
                 {setStatsMut.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save Sets & Lock Score"}
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!editModal} onOpenChange={(v) => { if (!v) setEditModal(null); }}>
+          <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text">
+            <DialogHeader><DialogTitle className="text-afrocat-text font-display">Edit Match</DialogTitle></DialogHeader>
+            <form onSubmit={e => { e.preventDefault(); editMut.mutate(); }} className="space-y-3">
+              <div>
+                <Label className="text-afrocat-muted text-xs uppercase">Opponent</Label>
+                <Input value={editForm.opponent} onChange={e => setEditForm({ ...editForm, opponent: e.target.value })} className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-edit-opponent" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-afrocat-muted text-xs uppercase">Start Time</Label>
+                  <Input type="time" value={editForm.startTime} onChange={e => setEditForm({ ...editForm, startTime: e.target.value })} className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-edit-time" />
+                </div>
+                <div>
+                  <Label className="text-afrocat-muted text-xs uppercase">Venue</Label>
+                  <Input value={editForm.venue} onChange={e => setEditForm({ ...editForm, venue: e.target.value })} className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-edit-venue" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-afrocat-muted text-xs uppercase">Competition</Label>
+                  <Input value={editForm.competition} onChange={e => setEditForm({ ...editForm, competition: e.target.value })} className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-edit-competition" />
+                </div>
+                <div>
+                  <Label className="text-afrocat-muted text-xs uppercase">Round</Label>
+                  <Input value={editForm.round} onChange={e => setEditForm({ ...editForm, round: e.target.value })} className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-edit-round" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-afrocat-muted text-xs uppercase">Notes</Label>
+                <Input value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-edit-notes" />
+              </div>
+              <Button type="submit" disabled={editMut.isPending} className="w-full bg-afrocat-teal hover:bg-afrocat-teal/80" data-testid="button-submit-edit">
+                {editMut.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save Changes"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!staffModal} onOpenChange={(v) => { if (!v) setStaffModal(null); }}>
+          <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text">
+            <DialogHeader><DialogTitle className="text-afrocat-text font-display">Assign Match Staff</DialogTitle></DialogHeader>
+            <form onSubmit={e => { e.preventDefault(); staffMut.mutate(); }} className="space-y-3">
+              <div>
+                <Label className="text-afrocat-muted text-xs uppercase">Head Coach *</Label>
+                <select value={staffForm.headCoachUserId} onChange={e => setStaffForm({ ...staffForm, headCoachUserId: e.target.value })} required className="w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border text-afrocat-text" data-testid="select-staff-headcoach">
+                  <option value="">Select Head Coach</option>
+                  {allUsers.filter((u: any) => u.role === "COACH" || u.roles?.includes("COACH") || u.role === "ADMIN").map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-afrocat-muted text-xs uppercase">Assistant Coach</Label>
+                <select value={staffForm.assistantCoachUserId} onChange={e => setStaffForm({ ...staffForm, assistantCoachUserId: e.target.value })} className="w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border text-afrocat-text" data-testid="select-staff-assistant">
+                  <option value="">None</option>
+                  {allUsers.filter((u: any) => u.role === "COACH" || u.roles?.includes("COACH") || u.role === "ADMIN").map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.fullName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-afrocat-muted text-xs uppercase">Medic</Label>
+                <select value={staffForm.medicUserId} onChange={e => setStaffForm({ ...staffForm, medicUserId: e.target.value })} className="w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border text-afrocat-text" data-testid="select-staff-medic">
+                  <option value="">None</option>
+                  {allUsers.filter((u: any) => u.role === "MEDICAL" || u.roles?.includes("MEDICAL") || u.role === "ADMIN").map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.fullName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-afrocat-muted text-xs uppercase">Team Manager</Label>
+                <select value={staffForm.teamManagerUserId} onChange={e => setStaffForm({ ...staffForm, teamManagerUserId: e.target.value })} className="w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border text-afrocat-text" data-testid="select-staff-manager">
+                  <option value="">None</option>
+                  {allUsers.filter((u: any) => u.role === "MANAGER" || u.roles?.includes("MANAGER") || u.role === "ADMIN").map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.fullName}</option>
+                  ))}
+                </select>
+              </div>
+              <Button type="submit" disabled={staffMut.isPending} className="w-full bg-afrocat-teal hover:bg-afrocat-teal/80" data-testid="button-submit-staff">
+                {staffMut.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save Staff Assignment"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!o2bisModal} onOpenChange={(v) => { if (!v) setO2bisModal(null); }}>
+          <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text">
+            <DialogHeader><DialogTitle className="text-afrocat-text font-display">O2BIS — Missing Information</DialogTitle></DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 p-4 rounded-lg bg-afrocat-gold-soft text-afrocat-gold">
+                <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm mb-2">The following information is missing:</p>
+                  <ul className="list-disc list-inside text-sm space-y-1">
+                    {o2bisModal?.missing.map((m, i) => <li key={i}>{m}</li>)}
+                  </ul>
+                </div>
+              </div>
+              <p className="text-sm text-afrocat-muted">You can go back and fill in the missing information, or skip and generate the O2BIS with blank fields.</p>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
+                  onClick={() => setO2bisModal(null)}
+                  data-testid="button-o2bis-goback"
+                >
+                  Go Back & Fill
+                </Button>
+                <Button
+                  className="flex-1 bg-afrocat-teal hover:bg-afrocat-teal/80"
+                  onClick={async () => {
+                    if (o2bisModal) {
+                      await downloadO2bisPdf(o2bisModal.matchId, true);
+                      setO2bisModal(null);
+                    }
+                  }}
+                  data-testid="button-o2bis-skip"
+                >
+                  <Download className="h-4 w-4 mr-1" /> Skip & Generate
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

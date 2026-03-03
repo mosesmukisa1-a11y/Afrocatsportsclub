@@ -1277,6 +1277,124 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     }
   });
 
+  // ─── STAFF-ELIGIBLE USERS (for match staff dropdown) ────────────────────
+  app.get("/api/staff-eligible-users", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (_req, res, next) => {
+    try {
+      const users = await storage.getUsers();
+      const eligible = users.map((u: any) => ({
+        id: u.id,
+        fullName: u.fullName,
+        role: u.role,
+        roles: u.roles,
+      }));
+      res.json(eligible);
+    } catch (e) { next(e); }
+  });
+
+  // ─── ADMIN EDIT MATCH (with lock validation) ────────────────────
+  app.patch("/api/matches/:id", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const match = await storage.getMatch(req.params.id);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      if (match.status === "PLAYED" || match.status === "CANCELLED") {
+        return res.status(400).json({ message: "Cannot edit a played or cancelled match" });
+      }
+      if (match.statsEntered || match.scoreLocked) {
+        return res.status(400).json({ message: "Cannot edit — stats already entered or score locked" });
+      }
+
+      const body = z.object({
+        startTime: z.string().optional().nullable(),
+        venue: z.string().optional(),
+        competition: z.string().optional(),
+        round: z.string().optional().nullable(),
+        notes: z.string().optional().nullable(),
+        opponent: z.string().optional(),
+      }).parse(req.body);
+
+      const updateData: any = {};
+      if (body.startTime !== undefined) updateData.startTime = body.startTime ? new Date(body.startTime) : null;
+      if (body.venue !== undefined) updateData.venue = body.venue;
+      if (body.competition !== undefined) updateData.competition = body.competition;
+      if (body.round !== undefined) updateData.round = body.round;
+      if (body.notes !== undefined) updateData.notes = body.notes;
+      if (body.opponent !== undefined) updateData.opponent = body.opponent;
+
+      const updated = await storage.updateMatch(req.params.id, updateData);
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── MATCH STAFF ASSIGNMENTS ────────────────────
+  app.get("/api/matches/:id/staff", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const staffRows = await db.select().from(schema.matchStaffAssignments)
+        .where(eq(schema.matchStaffAssignments.matchId, req.params.id));
+      const staff = staffRows[0] || null;
+      if (!staff) return res.json(null);
+
+      const resolve = async (uid: string | null) => {
+        if (!uid) return null;
+        const u = await storage.getUser(uid);
+        return u ? { id: u.id, fullName: u.fullName } : null;
+      };
+      const [headCoach, assistantCoach, medic, teamManager] = await Promise.all([
+        resolve(staff.headCoachUserId),
+        resolve(staff.assistantCoachUserId),
+        resolve(staff.medicUserId),
+        resolve(staff.teamManagerUserId),
+      ]);
+      res.json({ ...staff, headCoach, assistantCoach, medic, teamManager });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/matches/:id/staff", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const match = await storage.getMatch(req.params.id);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      const body = z.object({
+        headCoachUserId: z.string().min(1),
+        assistantCoachUserId: z.string().optional().nullable(),
+        medicUserId: z.string().optional().nullable(),
+        teamManagerUserId: z.string().optional().nullable(),
+      }).parse(req.body);
+
+      const existing = await db.select().from(schema.matchStaffAssignments)
+        .where(eq(schema.matchStaffAssignments.matchId, req.params.id));
+
+      let result;
+      if (existing.length > 0) {
+        [result] = await db.update(schema.matchStaffAssignments)
+          .set({
+            headCoachUserId: body.headCoachUserId,
+            assistantCoachUserId: body.assistantCoachUserId || null,
+            medicUserId: body.medicUserId || null,
+            teamManagerUserId: body.teamManagerUserId || null,
+          })
+          .where(eq(schema.matchStaffAssignments.matchId, req.params.id))
+          .returning();
+      } else {
+        [result] = await db.insert(schema.matchStaffAssignments).values({
+          matchId: req.params.id,
+          headCoachUserId: body.headCoachUserId,
+          assistantCoachUserId: body.assistantCoachUserId || null,
+          medicUserId: body.medicUserId || null,
+          teamManagerUserId: body.teamManagerUserId || null,
+        }).returning();
+      }
+
+      res.json(result);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
   app.post("/api/matches/:id/score", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
       const match = await storage.getMatch(req.params.id);
@@ -2686,6 +2804,197 @@ th{background:#0d7377;color:white}
     }
   });
 
+  // ─── O2BIS COMPLETENESS CHECK ────────────────────
+  app.get("/api/docs/o2bis/:matchId/check", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const match = await storage.getMatch(req.params.matchId);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      const missing: string[] = [];
+      if (!match.venue) missing.push("Venue");
+      if (!match.startTime) missing.push("Start Time");
+      if (!match.competition) missing.push("Competition");
+
+      const staffRows = await db.select().from(schema.matchStaffAssignments)
+        .where(eq(schema.matchStaffAssignments.matchId, req.params.matchId));
+      const staff = staffRows[0];
+      if (!staff) {
+        missing.push("Head Coach", "Assistant Coach", "Medic", "Team Manager");
+      } else {
+        if (!staff.headCoachUserId) missing.push("Head Coach");
+        if (!staff.assistantCoachUserId) missing.push("Assistant Coach");
+        if (!staff.medicUserId) missing.push("Medic");
+        if (!staff.teamManagerUserId) missing.push("Team Manager");
+      }
+
+      const squad = await storage.getMatchSquad(req.params.matchId, match.teamId);
+      if (!squad) {
+        missing.push("Squad Selection");
+      } else {
+        const entries = await storage.getMatchSquadEntries(squad.id);
+        if (entries.length === 0) missing.push("Squad Selection");
+      }
+
+      res.json({ ok: true, canGenerate: true, missing });
+    } catch (e) { next(e); }
+  });
+
+  // ─── O2BIS PDF DOWNLOAD ────────────────────
+  app.get("/api/docs/o2bis/:matchId.pdf", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+      const match = await storage.getMatch(req.params.matchId);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      const skipMissing = req.query.skipMissing === "true";
+      const team = await storage.getTeam(match.teamId);
+      if (!team) return res.status(404).json({ message: "Team not found" });
+
+      const staffRows = await db.select().from(schema.matchStaffAssignments)
+        .where(eq(schema.matchStaffAssignments.matchId, req.params.matchId));
+      const staff = staffRows[0] || null;
+
+      const resolveUserName = async (uid: string | null) => {
+        if (!uid) return skipMissing ? "________________" : "";
+        const u = await storage.getUser(uid);
+        return u?.fullName || (skipMissing ? "________________" : "");
+      };
+
+      const headCoachName = staff ? await resolveUserName(staff.headCoachUserId) : (skipMissing ? "________________" : "");
+      const assistantCoachName = staff ? await resolveUserName(staff.assistantCoachUserId) : (skipMissing ? "________________" : "");
+      const medicName = staff ? await resolveUserName(staff.medicUserId) : (skipMissing ? "________________" : "");
+      const teamManagerName = staff ? await resolveUserName(staff.teamManagerUserId) : (skipMissing ? "________________" : "");
+
+      let players: any[] = [];
+      const squad = await storage.getMatchSquad(req.params.matchId, match.teamId);
+      if (squad) {
+        const entries = await storage.getMatchSquadEntries(squad.id);
+        const allPlayers = await storage.getPlayersByTeam(match.teamId);
+        const captainIds = await getCaptainPlayerIds();
+        players = entries.map((e: any) => {
+          const p = allPlayers.find(pl => pl.id === e.playerId);
+          return p ? {
+            jerseyNo: e.jerseyNo ?? p.jerseyNo ?? "",
+            name: `${(p.lastName || "").toUpperCase()} ${p.firstName}`,
+            position: p.position || "",
+            dob: p.dob || "",
+            age: calculateAge(p.dob || ""),
+            isCaptain: captainIds.has(p.id),
+          } : null;
+        }).filter(Boolean).sort((a: any, b: any) => (a.jerseyNo || 99) - (b.jerseyNo || 99));
+      }
+
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      let page = pdfDoc.addPage([595, 842]);
+      let y = 800;
+      const black = rgb(0, 0, 0);
+      const teal = rgb(0.06, 0.55, 0.49);
+      const lineH = 16;
+
+      const drawText = (text: string, x: number, yPos: number, size = 10, f = font, color = black) => {
+        page.drawText(text, { x, y: yPos, size, font: f, color });
+      };
+
+      drawText("O-2 Bis — OFFICIAL TEAM COMPOSITION FORM", 120, y, 14, fontBold, teal);
+      y -= 25;
+      drawText("AFROCAT VOLLEYBALL CLUB", 200, y, 12, fontBold);
+      y -= 20;
+      drawText("One Team One Dream — Passion Discipline Victory", 170, y, 9, font, rgb(0.4, 0.4, 0.4));
+      y -= 30;
+
+      drawText("MATCH INFORMATION", 40, y, 11, fontBold, teal);
+      y -= lineH;
+      drawText(`Competition: ${match.competition || (skipMissing ? "________________" : "")}`, 40, y, 10);
+      if (match.round) drawText(`Round: ${match.round}`, 350, y, 10);
+      y -= lineH;
+      drawText(`Date: ${match.matchDate}`, 40, y, 10);
+      drawText(`Time: ${match.startTime ? new Date(match.startTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : (skipMissing ? "____" : "")}`, 200, y, 10);
+      y -= lineH;
+      drawText(`Venue: ${match.venue || (skipMissing ? "________________" : "")}`, 40, y, 10);
+      y -= lineH;
+      drawText(`Home Team: ${team.name}`, 40, y, 10);
+      drawText(`Away Team: ${match.opponent}`, 300, y, 10);
+      y -= 25;
+
+      drawText("STAFF", 40, y, 11, fontBold, teal);
+      y -= lineH;
+      drawText(`Head Coach: ${headCoachName}`, 40, y, 10);
+      y -= lineH;
+      drawText(`Assistant Coach: ${assistantCoachName}`, 40, y, 10);
+      y -= lineH;
+      drawText(`Medic: ${medicName}`, 40, y, 10);
+      y -= lineH;
+      drawText(`Team Manager: ${teamManagerName}`, 40, y, 10);
+      y -= 25;
+
+      drawText("PLAYER LIST", 40, y, 11, fontBold, teal);
+      y -= lineH;
+
+      const colX = [40, 80, 250, 340, 410, 475];
+      drawText("#", colX[0], y, 9, fontBold);
+      drawText("Name", colX[1], y, 9, fontBold);
+      drawText("Position", colX[2], y, 9, fontBold);
+      drawText("DOB", colX[3], y, 9, fontBold);
+      drawText("Age", colX[4], y, 9, fontBold);
+      drawText("Captain", colX[5], y, 9, fontBold);
+      y -= 3;
+      page.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 0.5, color: black });
+      y -= lineH;
+
+      for (const p of players) {
+        if (y < 60) {
+          page = pdfDoc.addPage([595, 842]);
+          y = 800;
+        }
+        drawText(String(p.jerseyNo || "—"), colX[0], y, 9);
+        drawText(p.name, colX[1], y, 9);
+        drawText(p.position, colX[2], y, 9);
+        drawText(p.dob, colX[3], y, 9);
+        drawText(String(p.age || "—"), colX[4], y, 9);
+        if (p.isCaptain) drawText("(C)", colX[5], y, 9, fontBold, teal);
+        y -= lineH;
+      }
+
+      if (players.length === 0) {
+        drawText(skipMissing ? "(No players selected)" : "No players in squad", 40, y, 9, font, rgb(0.5, 0.5, 0.5));
+        y -= lineH;
+      }
+
+      y -= 20;
+      if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
+
+      const officials = await storage.getTeamOfficials(match.teamId);
+      if (officials.length > 0) {
+        drawText("TEAM OFFICIALS", 40, y, 11, fontBold, teal);
+        y -= lineH;
+        for (const o of officials) {
+          if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
+          drawText(`${o.role}: ${o.name}`, 40, y, 10);
+          y -= lineH;
+        }
+        y -= 10;
+      }
+
+      if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
+      drawText("SIGNATURES", 40, y, 11, fontBold, teal);
+      y -= 25;
+      drawText("Head Coach: ___________________________", 40, y, 10);
+      drawText("Team Manager: ___________________________", 300, y, 10);
+      y -= 25;
+      drawText("Match Commissioner: ___________________________", 40, y, 10);
+      y -= 30;
+      drawText(`Generated: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`, 40, y, 8, font, rgb(0.5, 0.5, 0.5));
+
+      const pdfBytes = await pdfDoc.save();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="O2BIS_${req.params.matchId}.pdf"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (e) { next(e); }
+  });
+
   // ─── TEAM LIST GENERATION ─────────────────────────
   app.post("/api/team-list/generate", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
     try {
@@ -2960,7 +3269,10 @@ th{background:#0d7377;color:white}
       }
 
       const existing = await storage.getMatchSquad(body.matchId, body.teamId);
+      let previousPlayerIds: Set<string> = new Set();
       if (existing) {
+        const prevEntries = await storage.getMatchSquadEntries(existing.id);
+        previousPlayerIds = new Set(prevEntries.map((e: any) => e.playerId));
         await storage.deleteMatchSquad(existing.id);
       }
 
@@ -2979,6 +3291,44 @@ th{background:#0d7377;color:white}
           jerseyNo: player?.jerseyNo || null,
         });
         entries.push(entry);
+      }
+
+      const match = await storage.getMatch(body.matchId);
+      const team = await storage.getTeam(body.teamId);
+      const newlyAdded = body.playerIds.filter(pid => !previousPlayerIds.has(pid));
+
+      if (match && team && newlyAdded.length > 0) {
+        const matchLabel = `${team.name} vs ${match.opponent} on ${match.matchDate}${match.venue ? ` at ${match.venue}` : ""}`;
+        for (const pid of newlyAdded) {
+          const player = teamPlayers.find(p => p.id === pid);
+          if (player?.userId) {
+            try {
+              await storage.createNotification({
+                userId: player.userId,
+                playerId: pid,
+                type: "MATCH_SELECTION",
+                title: "🏐 You've been selected!",
+                message: `You are selected for: ${matchLabel}.`,
+                metadata: { matchId: body.matchId, teamId: body.teamId },
+              });
+            } catch (_) {}
+          }
+        }
+
+        const allUsers = await storage.getUsers();
+        const admins = allUsers.filter((u: any) => u.role === "ADMIN" || (u.roles && u.roles.includes("ADMIN")));
+        for (const admin of admins) {
+          if (admin.id === req.user!.userId) continue;
+          try {
+            await storage.createNotification({
+              userId: admin.id,
+              type: "MATCH_SELECTION",
+              title: "Squad Updated",
+              message: `${newlyAdded.length} player(s) added to squad for ${matchLabel}.`,
+              metadata: { matchId: body.matchId },
+            });
+          } catch (_) {}
+        }
       }
 
       res.status(201).json({ squad, entries });

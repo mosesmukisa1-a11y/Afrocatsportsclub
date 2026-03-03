@@ -146,8 +146,22 @@ export const matches = pgTable("matches", {
   lastScoreUpdatedBy: varchar("last_score_updated_by", { length: 36 }),
   lastScoreUpdatedAt: timestamp("last_score_updated_at"),
   notes: text("notes"),
+  round: text("round"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+export const matchStaffAssignments = pgTable("match_staff_assignments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  matchId: varchar("match_id", { length: 36 }).notNull(),
+  headCoachUserId: varchar("head_coach_user_id", { length: 36 }).notNull(),
+  assistantCoachUserId: varchar("assistant_coach_user_id", { length: 36 }),
+  medicUserId: varchar("medic_user_id", { length: 36 }),
+  teamManagerUserId: varchar("team_manager_user_id", { length: 36 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertMatchStaffAssignmentSchema = createInsertSchema(matchStaffAssignments).omit({ id: true, createdAt: true });
+export type InsertMatchStaffAssignment = z.infer<typeof insertMatchStaffAssignmentSchema>;
+export type MatchStaffAssignment = typeof matchStaffAssignments.$inferSelect;
 
 export const matchSetStats = pgTable("match_set_stats", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
