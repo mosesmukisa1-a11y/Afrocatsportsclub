@@ -111,7 +111,28 @@ export default function Dashboard() {
   const totalIncome = financeTxns.filter((f: any) => f.type === "INCOME").reduce((acc: number, curr: any) => acc + curr.amount, 0);
   const totalExpense = financeTxns.filter((f: any) => f.type === "EXPENSE").reduce((acc: number, curr: any) => acc + curr.amount, 0);
   const openInjuries = injuries.filter((i: any) => i.status === "OPEN").length;
-  const wins = matches.filter((m: any) => m.result === "W").length;
+  const playedMatches = matches.filter((m: any) => m.status === "PLAYED");
+  const wins = playedMatches.filter((m: any) => m.result === "W").length;
+
+  const recentPlayedMatches = [...playedMatches]
+    .sort((a: any, b: any) => new Date(b.startTime || b.matchDate).getTime() - new Date(a.startTime || a.matchDate).getTime())
+    .slice(0, 5);
+
+  const upcomingMatches = matches
+    .filter((m: any) => m.status === "UPCOMING")
+    .sort((a: any, b: any) => new Date(a.startTime || a.matchDate).getTime() - new Date(b.startTime || b.matchDate).getTime())
+    .slice(0, 5);
+
+  const getCountdownLabel = (dateStr: string) => {
+    const now = new Date();
+    const target = new Date(dateStr);
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const targetStart = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+    const diffDays = Math.round((targetStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= 0) return "Today";
+    if (diffDays === 1) return "Tomorrow";
+    return `in ${diffDays} days`;
+  };
 
   return (
     <Layout>
@@ -255,8 +276,8 @@ export default function Dashboard() {
                 <span className="text-sm font-medium text-afrocat-muted">Match Record</span>
                 <Trophy className="h-4 w-4 text-afrocat-teal" />
               </div>
-              <div className="text-2xl font-bold font-display text-afrocat-text" data-testid="text-match-record">{wins} - {matches.length - wins}</div>
-              <p className="text-xs text-afrocat-teal font-medium mt-1">{matches.length > 0 ? (wins / matches.length * 100).toFixed(0) : 0}% Win Rate</p>
+              <div className="text-2xl font-bold font-display text-afrocat-text" data-testid="text-match-record">{wins} - {playedMatches.length - wins}</div>
+              <p className="text-xs text-afrocat-teal font-medium mt-1" data-testid="text-win-rate">{playedMatches.length > 0 ? (wins / playedMatches.length * 100).toFixed(0) : 0}% Win Rate</p>
             </div>
           )}
 
@@ -286,23 +307,58 @@ export default function Dashboard() {
           )}
         </div>
 
-        {user && !["FINANCE","MEDICAL","PLAYER"].includes(user.role) && matches.length > 0 && (
-          <div className="afrocat-card p-5">
-            <h3 className="font-bold text-afrocat-text mb-4">Recent Matches</h3>
+        {user && !["FINANCE","MEDICAL","PLAYER"].includes(user.role) && recentPlayedMatches.length > 0 && (
+          <div className="afrocat-card p-5" data-testid="card-recent-matches">
+            <h3 className="font-bold text-afrocat-text mb-4" data-testid="text-recent-matches-title">Recent Matches</h3>
             <div className="space-y-4">
-              {matches.slice(0, 5).map((match: any) => {
+              {recentPlayedMatches.map((match: any) => {
                 const team = teams.find((t: any) => t.id === match.teamId);
                 return (
                   <div key={match.id} className="flex items-center justify-between border-b border-afrocat-border last:border-0 pb-4 last:pb-0" data-testid={`row-recent-match-${match.id}`}>
                     <div>
-                      <p className="font-semibold text-afrocat-text">{team?.name || "Team"} vs {match.opponent}</p>
-                      <p className="text-sm text-afrocat-muted">{match.matchDate} &bull; {match.competition}</p>
+                      <p className="font-semibold text-afrocat-text" data-testid={`text-recent-match-opponent-${match.id}`}>{team?.name || "Team"} vs {match.opponent}</p>
+                      <p className="text-sm text-afrocat-muted" data-testid={`text-recent-match-date-${match.id}`}>{match.matchDate} &bull; {match.competition}</p>
                     </div>
                     {match.result && (
-                      <div className={`px-3 py-1 rounded-full text-sm font-bold ${match.result === 'W' ? 'bg-afrocat-green-soft text-afrocat-green' : 'bg-afrocat-red-soft text-afrocat-red'}`}>
+                      <div className={`px-3 py-1 rounded-full text-sm font-bold ${match.result === 'W' ? 'bg-afrocat-green-soft text-afrocat-green' : 'bg-afrocat-red-soft text-afrocat-red'}`} data-testid={`badge-recent-match-result-${match.id}`}>
                         {match.result} ({match.setsFor} - {match.setsAgainst})
                       </div>
                     )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {user && !["FINANCE","MEDICAL","PLAYER"].includes(user.role) && upcomingMatches.length > 0 && (
+          <div className="afrocat-card p-5" data-testid="card-upcoming-matches">
+            <h3 className="flex items-center gap-2 font-bold text-afrocat-teal mb-4" data-testid="text-upcoming-matches-title">
+              <Calendar className="h-5 w-5 text-afrocat-teal" /> Upcoming Matches
+            </h3>
+            <div className="space-y-4">
+              {upcomingMatches.map((match: any) => {
+                const team = teams.find((t: any) => t.id === match.teamId);
+                const matchDateTime = new Date(match.startTime || match.matchDate);
+                const dateStr = matchDateTime.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                const timeStr = match.startTime ? matchDateTime.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : "";
+                const countdown = getCountdownLabel(match.startTime || match.matchDate);
+                return (
+                  <div key={match.id} className="flex items-center justify-between border-b border-afrocat-teal/10 last:border-0 pb-4 last:pb-0" data-testid={`row-upcoming-match-${match.id}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-afrocat-teal-soft flex items-center justify-center shrink-0" data-testid={`icon-upcoming-match-${match.id}`}>
+                        <Calendar className="h-5 w-5 text-afrocat-teal" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-afrocat-text" data-testid={`text-upcoming-match-opponent-${match.id}`}>{team?.name || "Team"} vs {match.opponent}</p>
+                        <p className="text-sm text-afrocat-muted" data-testid={`text-upcoming-match-details-${match.id}`}>
+                          {dateStr}{timeStr ? ` • ${timeStr}` : ""} • {match.venue}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge className="bg-afrocat-teal-soft text-afrocat-teal border-0 font-bold text-xs" data-testid={`badge-upcoming-match-countdown-${match.id}`}>
+                      {countdown}
+                    </Badge>
                   </div>
                 );
               })}

@@ -78,6 +78,8 @@ export const api = {
   deletePlayer: (id: string) => apiFetch<void>(`/players/${id}`, { method: "DELETE" }),
 
   getMatches: () => apiFetch<any[]>("/matches"),
+  getUpcomingMatches: () => apiFetch<any[]>("/matches/upcoming"),
+  getPlayedMatches: () => apiFetch<any[]>("/matches/played"),
   getMatch: (id: string) => apiFetch<any>(`/matches/${id}`),
   createMatch: (data: any) => apiFetch<any>("/matches", { method: "POST", body: JSON.stringify(data) }),
   updateMatch: (id: string, data: any) => apiFetch<any>(`/matches/${id}`, { method: "PUT", body: JSON.stringify(data) }),

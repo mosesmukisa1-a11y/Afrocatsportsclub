@@ -15,7 +15,6 @@ import { SquadSelector } from "@/components/SquadSelector";
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   UPCOMING: { bg: "bg-afrocat-teal-soft", text: "text-afrocat-teal", label: "Upcoming" },
-  SCHEDULED: { bg: "bg-afrocat-white-10", text: "text-afrocat-muted", label: "Scheduled" },
   LIVE: { bg: "bg-afrocat-red-soft", text: "text-afrocat-red", label: "Live" },
   PLAYED: { bg: "bg-afrocat-green-soft", text: "text-afrocat-green", label: "Played" },
   CANCELLED: { bg: "bg-afrocat-red-soft", text: "text-afrocat-red", label: "Cancelled" },
@@ -25,7 +24,8 @@ export default function Matches() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: matches = [], isLoading } = useQuery({ queryKey: ["/api/matches"], queryFn: api.getMatches });
+  const { data: upcomingMatches = [], isLoading: loadingUpcoming } = useQuery({ queryKey: ["/api/matches/upcoming"], queryFn: api.getUpcomingMatches });
+  const { data: playedMatches = [], isLoading: loadingPlayed } = useQuery({ queryKey: ["/api/matches/played"], queryFn: api.getPlayedMatches });
   const { data: teams = [] } = useQuery({ queryKey: ["/api/teams"], queryFn: api.getTeams });
 
   const [open, setOpen] = useState(false);
@@ -45,9 +45,10 @@ export default function Matches() {
     { homePoints: 0, awayPoints: 0 },
   ]);
 
-  const isFuture = (dateStr: string, startTimeStr?: string) => {
-    if (startTimeStr) return new Date(startTimeStr) > new Date();
-    return new Date(dateStr) > new Date();
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/matches/upcoming"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/matches/played"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
   };
 
   const createMut = useMutation({
@@ -63,7 +64,7 @@ export default function Matches() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      invalidateAll();
       setOpen(false);
       setForm({ teamId: "", opponent: "", matchDate: "", startTime: "", venue: "Home", competition: "", result: "", setsFor: 0, setsAgainst: 0 });
       toast({ title: "Match created" });
@@ -80,7 +81,7 @@ export default function Matches() {
       setsAgainst: scoreForm.awayScore,
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      invalidateAll();
       setScoreModal(null);
       toast({ title: "Score saved" });
     },
@@ -90,7 +91,7 @@ export default function Matches() {
   const setStatsMut = useMutation({
     mutationFn: () => api.submitMatchSetStats(setStatsModal!, { sets: setsInput }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      invalidateAll();
       setSetStatsModal(null);
       toast({ title: "Set stats & score saved" });
     },
@@ -104,6 +105,134 @@ export default function Matches() {
   const formIsFuture = form.startTime
     ? new Date(`${form.matchDate}T${form.startTime}`) > new Date()
     : form.matchDate ? new Date(form.matchDate) > new Date() : false;
+
+  const isLoading = loadingUpcoming || loadingPlayed;
+
+  const renderMatchCard = (match: any, isUpcoming: boolean) => {
+    const team = teams.find((t: any) => t.id === match.teamId);
+    const isWin = match.result === "W";
+    const showingSquad = squadMatchId === match.id && squadTeamId === match.teamId;
+    const matchIsPast = match.startTime ? new Date(match.startTime) < new Date() : new Date(match.matchDate) < new Date();
+    const canEnterScore = canScore && matchIsPast && !match.statsEntered && !match.scoreLocked;
+    const isScoreLocked = match.scoreLocked || match.statsEntered;
+
+    const statusStyle = isUpcoming
+      ? STATUS_STYLES.UPCOMING
+      : STATUS_STYLES[match.status] || STATUS_STYLES.PLAYED;
+
+    return (
+      <div key={match.id} className="afrocat-card overflow-hidden" data-testid={`card-match-${match.id}`}>
+        <div className="flex flex-col md:flex-row">
+          <div className={`w-full md:w-2 ${isUpcoming ? 'bg-afrocat-teal' : match.result ? (isWin ? 'bg-afrocat-green' : 'bg-afrocat-red') : 'bg-afrocat-white-10'} h-1.5 md:h-auto`} />
+          <div className="flex-1 p-5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="space-y-3 flex-1">
+                <div className="flex items-center gap-3 text-sm text-afrocat-muted flex-wrap">
+                  <Badge className={`${statusStyle.bg} ${statusStyle.text} border-0 font-bold text-xs`} data-testid={`badge-status-${match.id}`}>
+                    {statusStyle.label}
+                  </Badge>
+                  {!isUpcoming && match.statsEntered && (
+                    <Badge className="bg-afrocat-green-soft text-afrocat-green border-0 font-bold text-xs" data-testid={`badge-score-locked-stats-${match.id}`}>
+                      <Lock className="h-3 w-3 mr-1" /> Score Locked (From Stats)
+                    </Badge>
+                  )}
+                  {!isUpcoming && match.scoreLocked && match.scoreSource === "MANUAL" && !match.statsEntered && (
+                    <Badge className="bg-afrocat-gold-soft text-afrocat-gold border-0 font-bold text-xs" data-testid={`badge-final-score-${match.id}`}>
+                      <Trophy className="h-3 w-3 mr-1" /> Final Score
+                    </Badge>
+                  )}
+                  <span className="font-medium px-2 py-0.5 rounded bg-afrocat-teal-soft text-afrocat-teal text-xs">{match.competition}</span>
+                  <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {match.matchDate}</span>
+                  {match.startTime && (
+                    <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  )}
+                  <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {match.venue}</span>
+                </div>
+
+                <div className="flex items-center gap-6">
+                  <div className="flex-1 text-right">
+                    <h3 className="text-xl font-bold font-display text-afrocat-text">{team?.name || "Team"}</h3>
+                  </div>
+                  {isUpcoming ? (
+                    <div className="px-4 py-2 bg-afrocat-white-5 rounded-lg flex items-center justify-center min-w-[100px] border border-afrocat-border">
+                      <span className="text-sm font-medium text-afrocat-muted">vs</span>
+                    </div>
+                  ) : (
+                    <div className="px-4 py-2 bg-afrocat-white-5 rounded-lg flex items-center justify-center min-w-[100px] border border-afrocat-border">
+                      <span className="text-2xl font-bold font-display text-afrocat-text" data-testid={`text-home-score-${match.id}`}>{match.homeScore ?? match.setsFor ?? 0}</span>
+                      <span className="mx-2 text-afrocat-muted">-</span>
+                      <span className="text-2xl font-bold font-display text-afrocat-text" data-testid={`text-away-score-${match.id}`}>{match.awayScore ?? match.setsAgainst ?? 0}</span>
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold font-display text-afrocat-text">{match.opponent}</h3>
+                  </div>
+                </div>
+
+                {!isUpcoming && isScoreLocked && (
+                  <div className="flex items-center gap-2 text-xs text-afrocat-muted">
+                    <Lock className="h-3 w-3" />
+                    <span>Score Locked {match.scoreSource === "STATS" ? "(From Stats)" : match.scoreSource === "MANUAL" ? "(Manual)" : ""}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2 shrink-0">
+                {canEnterScore && (
+                  <>
+                    <Button
+                      size="sm"
+                      className="bg-afrocat-gold hover:bg-afrocat-gold/80 text-black"
+                      onClick={() => { setScoreModal(match.id); setScoreForm({ homeScore: 0, awayScore: 0, result: "" }); }}
+                      data-testid={`button-enter-score-${match.id}`}
+                    >
+                      <Trophy className="h-4 w-4 mr-1" /> Enter Score
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
+                      onClick={() => {
+                        setSetStatsModal(match.id);
+                        setSetsInput([
+                          { homePoints: 0, awayPoints: 0 },
+                          { homePoints: 0, awayPoints: 0 },
+                          { homePoints: 0, awayPoints: 0 },
+                        ]);
+                      }}
+                      data-testid={`button-enter-sets-${match.id}`}
+                    >
+                      Enter Set Stats
+                    </Button>
+                  </>
+                )}
+                {canSelectSquad && (
+                  <Button
+                    variant={showingSquad ? "secondary" : "outline"}
+                    size="sm"
+                    className={showingSquad ? "" : "border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"}
+                    onClick={() => {
+                      if (showingSquad) { setSquadMatchId(null); setSquadTeamId(null); }
+                      else { setSquadMatchId(match.id); setSquadTeamId(match.teamId); }
+                    }}
+                    data-testid={`button-squad-${match.id}`}
+                  >
+                    <Users className="h-4 w-4 mr-1" /> Starting 12
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {showingSquad && (
+              <div className="mt-4 pt-4 border-t border-afrocat-border">
+                <SquadSelector matchId={match.id} teamId={match.teamId} onClose={() => { setSquadMatchId(null); setSquadTeamId(null); }} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <Layout>
@@ -162,7 +291,7 @@ export default function Matches() {
                       <div>
                         <Label className="text-afrocat-muted text-xs uppercase">Result</Label>
                         <Select value={form.result} onValueChange={v => setForm({ ...form, result: v })}>
-                          <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"><SelectValue placeholder="—" /></SelectTrigger>
+                          <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="select-match-result"><SelectValue placeholder="—" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="W">Win</SelectItem>
                             <SelectItem value="L">Loss</SelectItem>
@@ -181,9 +310,9 @@ export default function Matches() {
                   )}
 
                   {formIsFuture && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-afrocat-teal-soft text-afrocat-teal text-sm">
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-afrocat-teal-soft text-afrocat-teal text-sm" data-testid="text-future-match-note">
                       <Clock className="h-4 w-4" />
-                      <span>This match is in the future — it will be marked as <strong>UPCOMING</strong>. Score fields are hidden.</span>
+                      <span>Score will be available after match is played</span>
                     </div>
                   )}
 
@@ -197,117 +326,36 @@ export default function Matches() {
         </div>
 
         {isLoading ? (
-          <div className="text-center py-10 text-afrocat-muted">Loading matches...</div>
-        ) : matches.length === 0 ? (
+          <div className="text-center py-10 text-afrocat-muted" data-testid="text-loading-matches">Loading matches...</div>
+        ) : (upcomingMatches.length === 0 && playedMatches.length === 0) ? (
           <div className="afrocat-card py-10 text-center text-afrocat-muted" data-testid="text-no-matches">No matches scheduled yet.</div>
         ) : (
-          <div className="space-y-4">
-            {matches.map((match: any) => {
-              const team = teams.find((t: any) => t.id === match.teamId);
-              const isWin = match.result === "W";
-              const showingSquad = squadMatchId === match.id && squadTeamId === match.teamId;
-              const statusStyle = STATUS_STYLES[match.status] || STATUS_STYLES.SCHEDULED;
-              const matchIsPast = match.startTime ? new Date(match.startTime) < new Date() : new Date(match.matchDate) < new Date();
-              const canEnterScore = canScore && matchIsPast && !match.statsEntered && !match.scoreLocked;
-              const isScoreLocked = match.scoreLocked || match.statsEntered;
-
-              return (
-                <div key={match.id} className="afrocat-card overflow-hidden" data-testid={`card-match-${match.id}`}>
-                  <div className="flex flex-col md:flex-row">
-                    <div className={`w-full md:w-2 ${match.result ? (isWin ? 'bg-afrocat-green' : 'bg-afrocat-red') : match.status === 'UPCOMING' ? 'bg-afrocat-teal' : 'bg-afrocat-white-10'} h-1.5 md:h-auto`} />
-                    <div className="flex-1 p-5">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="space-y-3 flex-1">
-                          <div className="flex items-center gap-3 text-sm text-afrocat-muted flex-wrap">
-                            <Badge className={`${statusStyle.bg} ${statusStyle.text} border-0 font-bold text-xs`} data-testid={`badge-status-${match.id}`}>
-                              {statusStyle.label}
-                            </Badge>
-                            <span className="font-medium px-2 py-0.5 rounded bg-afrocat-teal-soft text-afrocat-teal text-xs">{match.competition}</span>
-                            <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {match.matchDate}</span>
-                            {match.startTime && (
-                              <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {new Date(match.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                            )}
-                            <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {match.venue}</span>
-                          </div>
-
-                          <div className="flex items-center gap-6">
-                            <div className="flex-1 text-right">
-                              <h3 className="text-xl font-bold font-display text-afrocat-text">{team?.name || "Team"}</h3>
-                            </div>
-                            <div className="px-4 py-2 bg-afrocat-white-5 rounded-lg flex items-center justify-center min-w-[100px] border border-afrocat-border">
-                              <span className="text-2xl font-bold font-display text-afrocat-text">{match.homeScore ?? match.setsFor ?? 0}</span>
-                              <span className="mx-2 text-afrocat-muted">-</span>
-                              <span className="text-2xl font-bold font-display text-afrocat-text">{match.awayScore ?? match.setsAgainst ?? 0}</span>
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="text-xl font-bold font-display text-afrocat-text">{match.opponent}</h3>
-                            </div>
-                          </div>
-
-                          {isScoreLocked && (
-                            <div className="flex items-center gap-2 text-xs text-afrocat-muted">
-                              <Lock className="h-3 w-3" />
-                              <span>Score Locked {match.scoreSource === "STATS" ? "(From Stats)" : match.scoreSource === "MANUAL" ? "(Manual)" : ""}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex flex-col gap-2 shrink-0">
-                          {canEnterScore && (
-                            <>
-                              <Button
-                                size="sm"
-                                className="bg-afrocat-gold hover:bg-afrocat-gold/80 text-black"
-                                onClick={() => { setScoreModal(match.id); setScoreForm({ homeScore: 0, awayScore: 0, result: "" }); }}
-                                data-testid={`button-enter-score-${match.id}`}
-                              >
-                                <Trophy className="h-4 w-4 mr-1" /> Enter Score
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
-                                onClick={() => {
-                                  setSetStatsModal(match.id);
-                                  setSetsInput([
-                                    { homePoints: 0, awayPoints: 0 },
-                                    { homePoints: 0, awayPoints: 0 },
-                                    { homePoints: 0, awayPoints: 0 },
-                                  ]);
-                                }}
-                                data-testid={`button-enter-sets-${match.id}`}
-                              >
-                                Enter Set Stats
-                              </Button>
-                            </>
-                          )}
-                          {canSelectSquad && (
-                            <Button
-                              variant={showingSquad ? "secondary" : "outline"}
-                              size="sm"
-                              className={showingSquad ? "" : "border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"}
-                              onClick={() => {
-                                if (showingSquad) { setSquadMatchId(null); setSquadTeamId(null); }
-                                else { setSquadMatchId(match.id); setSquadTeamId(match.teamId); }
-                              }}
-                              data-testid={`button-squad-${match.id}`}
-                            >
-                              <Users className="h-4 w-4 mr-1" /> Starting 12
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {showingSquad && (
-                        <div className="mt-4 pt-4 border-t border-afrocat-border">
-                          <SquadSelector matchId={match.id} teamId={match.teamId} onClose={() => { setSquadMatchId(null); setSquadTeamId(null); }} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
+          <div className="space-y-8">
+            <div data-testid="section-upcoming-matches">
+              <h2 className="text-xl font-display font-bold text-afrocat-teal mb-4 flex items-center gap-2" data-testid="text-upcoming-title">
+                <Clock className="h-5 w-5" /> Upcoming Matches
+              </h2>
+              {upcomingMatches.length === 0 ? (
+                <div className="afrocat-card py-6 text-center text-afrocat-muted" data-testid="text-no-upcoming">No upcoming matches.</div>
+              ) : (
+                <div className="space-y-4">
+                  {upcomingMatches.map((match: any) => renderMatchCard(match, true))}
                 </div>
-              );
-            })}
+              )}
+            </div>
+
+            <div data-testid="section-played-matches">
+              <h2 className="text-xl font-display font-bold text-afrocat-green mb-4 flex items-center gap-2" data-testid="text-played-title">
+                <Trophy className="h-5 w-5" /> Played Matches
+              </h2>
+              {playedMatches.length === 0 ? (
+                <div className="afrocat-card py-6 text-center text-afrocat-muted" data-testid="text-no-played">No played matches yet.</div>
+              ) : (
+                <div className="space-y-4">
+                  {playedMatches.map((match: any) => renderMatchCard(match, false))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -328,7 +376,7 @@ export default function Matches() {
               <div>
                 <Label className="text-afrocat-muted text-xs uppercase">Result Override (optional)</Label>
                 <Select value={scoreForm.result} onValueChange={v => setScoreForm({ ...scoreForm, result: v })}>
-                  <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"><SelectValue placeholder="Auto-detect from score" /></SelectTrigger>
+                  <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="select-score-result"><SelectValue placeholder="Auto-detect from score" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="W">Win</SelectItem>
                     <SelectItem value="L">Loss</SelectItem>
@@ -389,7 +437,7 @@ export default function Matches() {
                       />
                     </div>
                     {i >= 3 && (
-                      <Button size="sm" variant="ghost" className="text-afrocat-red h-8 w-8 p-0" onClick={() => setSetsInput(setsInput.filter((_, j) => j !== i))}>×</Button>
+                      <Button size="sm" variant="ghost" className="text-afrocat-red h-8 w-8 p-0" onClick={() => setSetsInput(setsInput.filter((_, j) => j !== i))} data-testid={`button-remove-set-${i}`}>×</Button>
                     )}
                   </div>
                 ))}

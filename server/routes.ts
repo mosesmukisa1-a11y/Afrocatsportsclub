@@ -1163,6 +1163,27 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     try { res.json(await storage.getMatches()); } catch (e) { next(e); }
   });
 
+  app.get("/api/matches/upcoming", requireAuth, async (_req, res, next) => {
+    try {
+      const all = await storage.getMatches();
+      const now = new Date();
+      const upcoming = all
+        .filter(m => m.status === "UPCOMING" && m.startTime && new Date(m.startTime) > now)
+        .sort((a, b) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
+      res.json(upcoming);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/matches/played", requireAuth, async (_req, res, next) => {
+    try {
+      const all = await storage.getMatches();
+      const played = all
+        .filter(m => m.status === "PLAYED")
+        .sort((a, b) => new Date(b.startTime || b.matchDate).getTime() - new Date(a.startTime || a.matchDate).getTime());
+      res.json(played);
+    } catch (e) { next(e); }
+  });
+
   app.get("/api/matches/:id", requireAuth, async (req, res, next) => {
     try {
       const match = await storage.getMatch(req.params.id);
@@ -1182,18 +1203,15 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         notes: z.string().optional().nullable(),
       }).parse(req.body);
 
-      let status: "SCHEDULED" | "UPCOMING" = "SCHEDULED";
       const startTimeParsed = body.startTime ? new Date(body.startTime) : null;
-      if (startTimeParsed && startTimeParsed > new Date()) {
-        status = "UPCOMING";
-      }
+      const isFuture = startTimeParsed ? startTimeParsed > new Date() : false;
 
       const matchData: any = {
         ...body,
         startTime: startTimeParsed,
-        status,
-        homeScore: status === "UPCOMING" ? null : (body.setsFor ?? null),
-        awayScore: status === "UPCOMING" ? null : (body.setsAgainst ?? null),
+        status: isFuture ? "UPCOMING" : "UPCOMING",
+        homeScore: isFuture ? null : (body.setsFor ?? null),
+        awayScore: isFuture ? null : (body.setsAgainst ?? null),
         scoreSource: "NONE",
         scoreLocked: false,
         statsEntered: false,
@@ -1231,9 +1249,15 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
       const updateData: any = { ...body };
       if (body.startTime !== undefined) {
         updateData.startTime = body.startTime ? new Date(body.startTime) : null;
-        if (updateData.startTime && updateData.startTime > new Date() && existing.status !== "PLAYED") {
-          updateData.status = "UPCOMING";
-        }
+      }
+      const effectiveStartTime = updateData.startTime !== undefined ? updateData.startTime : existing.startTime;
+      if (effectiveStartTime && new Date(effectiveStartTime) > new Date() && existing.status !== "PLAYED") {
+        updateData.status = "UPCOMING";
+        updateData.homeScore = null;
+        updateData.awayScore = null;
+        updateData.scoreSource = "NONE";
+        updateData.scoreLocked = false;
+        updateData.statsEntered = false;
       }
 
       const updated = await storage.updateMatch(req.params.id, updateData);

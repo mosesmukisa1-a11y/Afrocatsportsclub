@@ -84,6 +84,41 @@ app.use((req, res, next) => {
     }
   }
 
+  try {
+    const allMatches = await db.select().from(schema.matches);
+    const now = new Date();
+    let fixed = 0;
+    for (const match of allMatches) {
+      const updates: Record<string, any> = {};
+      const st = match.startTime ? new Date(match.startTime) : null;
+
+      if (st && st > now) {
+        if (match.status !== "UPCOMING" || match.homeScore !== null || match.awayScore !== null) {
+          updates.status = "UPCOMING";
+          updates.homeScore = null;
+          updates.awayScore = null;
+          updates.scoreSource = "NONE";
+          updates.scoreLocked = false;
+          updates.statsEntered = false;
+        }
+      } else if (match.statsEntered || match.scoreLocked || (match.scoreSource && match.scoreSource !== "NONE")) {
+        if (match.status !== "PLAYED") {
+          updates.status = "PLAYED";
+        }
+      } else if (match.status === "SCHEDULED") {
+        updates.status = st && st <= now ? "PLAYED" : "UPCOMING";
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await db.update(schema.matches).set(updates).where(eq(schema.matches.id, match.id));
+        fixed++;
+      }
+    }
+    if (fixed > 0) log(`Match status normalizer: fixed ${fixed} match(es)`);
+  } catch (e: any) {
+    log(`Match normalizer warning: ${e.message}`);
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
