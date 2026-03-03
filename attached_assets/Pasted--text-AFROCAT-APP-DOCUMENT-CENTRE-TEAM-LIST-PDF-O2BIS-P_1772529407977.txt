@@ -1,0 +1,420 @@
+```text
+AFROCAT APP – DOCUMENT CENTRE: TEAM LIST PDF + O2BIS PDF (AUTO FROM REGISTRATION + MATCH DATA)
+
+IMPLEMENT EXACTLY: 
+1) “TEAM LIST” = all players registered to a team.
+2) Generate TEAM LIST PDF similar to O2Bis style BUT WITHOUT: matches/venues/competition.
+3) Use club letterhead + player: Full Name, DOB, Jersey No, Age (auto from DOB).
+4) O2BIS PDFs must be generatable for BOTH:
+   - UPCOMING matches (from match scheduling data)
+   - COMPLETED matches (from match + stats/locked score)
+5) O2BIS and TEAM LIST must use ONLY:
+   - full player info at registration
+   - match info at scheduling (and score from stats for completed)
+
+========================================================
+A) DATA REQUIREMENTS (MAKE SURE THESE EXIST)
+========================================================
+
+Player (from registration):
+- id
+- firstName
+- lastName
+- dob (Date)
+- jerseyNumber (Int/String)
+- teamId (FK)
+- (optional) gender, idNumber, phone
+
+Team:
+- id
+- name
+- coachName (optional)
+
+Match (from scheduling):
+- id
+- startTime
+- venue
+- competition (optional)
+- status (UPCOMING/PLAYED)
+- homeTeamId
+- awayTeamId
+- homeScore (nullable)
+- awayScore (nullable)
+- scoreSource (NONE/MANUAL/STATS)
+- scoreLocked (Boolean)
+- statsEntered (Boolean)
+
+========================================================
+B) INSTALL PDF ENGINE (RECOMMENDED)
+========================================================
+
+Use Puppeteer (best looking PDFs):
+npm i puppeteer
+
+(If puppeteer fails in your environment, switch to playwright-chromium or pdfkit)
+
+========================================================
+C) UTILS: AGE CALCULATION + DATE FORMAT
+========================================================
+
+Create: server/utils/date.js
+
+export function calcAge(dob) {
+  if (!dob) return "";
+  const d = new Date(dob);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - d.getFullYear();
+  const m = today.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+  return age;
+}
+
+export function fmtDate(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const dd = String(d.getDate()).padStart(2,"0");
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const yy = d.getFullYear();
+  return `${dd}/${mm}/${yy}`;
+}
+
+export function fmtDateTime(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const dd = String(d.getDate()).padStart(2,"0");
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const yy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2,"0");
+  const mi = String(d.getMinutes()).padStart(2,"0");
+  return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+}
+
+========================================================
+D) PDF RENDERER (PUPPETEER)
+========================================================
+
+Create: server/utils/pdf.js
+
+import puppeteer from "puppeteer";
+
+export async function htmlToPdfBuffer(html) {
+  const browser = await puppeteer.launch({
+    args: ["--no-sandbox","--disable-setuid-sandbox"],
+  });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "14mm", right: "12mm", bottom: "14mm", left: "12mm" },
+    });
+    return pdf;
+  } finally {
+    await browser.close();
+  }
+}
+
+========================================================
+E) CLUB LETTERHEAD HTML (REUSABLE)
+========================================================
+
+Create: server/templates/letterhead.js
+
+export function letterhead({ clubName, subline, logoDataUrl }) {
+  // logoDataUrl can be a base64 data URL or empty string
+  return `
+  <div class="lh">
+    <div class="lh-left">
+      ${logoDataUrl ? `<img class="logo" src="${logoDataUrl}" />` : `<div class="logo-box">LOGO</div>`}
+    </div>
+    <div class="lh-mid">
+      <div class="club">${clubName || "AFROCAT VOLLEYBALL CLUB"}</div>
+      <div class="sub">${subline || "Official Club Document"}</div>
+    </div>
+    <div class="lh-right">
+      <div class="small">Generated: ${new Date().toLocaleString()}</div>
+    </div>
+  </div>
+  <hr class="hr"/>
+  `;
+}
+
+export const baseCss = `
+  <style>
+    body { font-family: Arial, sans-serif; color:#111; }
+    .lh{ display:flex; align-items:center; gap:12px; }
+    .logo{ width:68px; height:68px; object-fit:contain; }
+    .logo-box{ width:68px; height:68px; border:1px solid #ccc; display:flex; align-items:center; justify-content:center; font-size:11px; }
+    .club{ font-size:18px; font-weight:800; letter-spacing:0.3px; }
+    .sub{ font-size:12px; opacity:0.8; margin-top:2px; }
+    .small{ font-size:10px; opacity:0.75; text-align:right; }
+    .hr{ border:none; border-top:2px solid #111; margin:10px 0 14px; }
+    h1{ font-size:16px; margin:0 0 10px; }
+    .meta{ font-size:12px; margin-bottom:12px; display:flex; gap:14px; flex-wrap:wrap; }
+    table{ width:100%; border-collapse:collapse; font-size:12px; }
+    th, td{ border:1px solid #333; padding:6px; }
+    th{ background:#f2f2f2; text-align:left; }
+    .foot{ margin-top:14px; font-size:11px; opacity:0.85; }
+    .sig{ margin-top:18px; display:flex; justify-content:space-between; gap:20px; }
+    .sigbox{ width:48%; border-top:1px solid #111; padding-top:6px; font-size:11px; }
+    .badge{ display:inline-block; padding:2px 8px; border:1px solid #111; border-radius:999px; font-size:11px; }
+  </style>
+  `;
+  
+========================================================
+F) TEAM LIST PDF TEMPLATE (O2BIS STYLE WITHOUT MATCH INFO)
+========================================================
+
+Create: server/templates/teamListHtml.js
+
+import { baseCss, letterhead } from "./letterhead.js";
+import { calcAge, fmtDate } from "../utils/date.js";
+
+export function teamListHtml({ team, players, logoDataUrl }) {
+  const rows = players.map((p, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td>${(p.firstName || "").toUpperCase()} ${(p.lastName || "").toUpperCase()}</td>
+      <td>${fmtDate(p.dob)}</td>
+      <td>${p.jerseyNumber ?? ""}</td>
+      <td>${calcAge(p.dob)}</td>
+    </tr>
+  `).join("");
+
+  return `
+  <html>
+    <head>${baseCss}</head>
+    <body>
+      ${letterhead({ clubName: "AFROCAT VOLLEYBALL CLUB", subline: "TEAM LIST (Players Registered)", logoDataUrl })}
+      <h1>TEAM LIST</h1>
+      <div class="meta">
+        <div><b>Team:</b> ${team?.name || ""}</div>
+        <div><b>Total Players:</b> ${players.length}</div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px;">#</th>
+            <th>Player Name</th>
+            <th style="width:110px;">DOB</th>
+            <th style="width:90px;">Jersey No.</th>
+            <th style="width:60px;">Age</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="foot">
+        This list is generated automatically from the Registration Database. Ages are calculated from Date of Birth.
+      </div>
+      <div class="sig">
+        <div class="sigbox"><b>Coach / Team Manager</b></div>
+        <div class="sigbox"><b>Club Secretary / Admin</b></div>
+      </div>
+    </body>
+  </html>
+  `;
+}
+
+========================================================
+G) O2BIS PDF TEMPLATE (UPCOMING + COMPLETED)
+========================================================
+
+Create: server/templates/o2bisHtml.js
+
+import { baseCss, letterhead } from "./letterhead.js";
+import { calcAge, fmtDate, fmtDateTime } from "../utils/date.js";
+
+export function o2bisHtml({ match, homeTeam, awayTeam, homePlayers, awayPlayers, logoDataUrl }) {
+
+  const isUpcoming = match.status === "UPCOMING" || new Date(match.startTime) > new Date();
+  const scoreText = isUpcoming
+    ? `<span class="badge">UPCOMING (Score from stats after match)</span>`
+    : `<span class="badge">FINAL SCORE: ${match.homeScore ?? "-"} - ${match.awayScore ?? "-"}</span>`;
+
+  function playerTable(players) {
+    const rows = players.map((p, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td>${(p.firstName || "").toUpperCase()} ${(p.lastName || "").toUpperCase()}</td>
+        <td>${fmtDate(p.dob)}</td>
+        <td>${p.jerseyNumber ?? ""}</td>
+        <td>${calcAge(p.dob)}</td>
+      </tr>
+    `).join("");
+
+    return `
+      <table>
+        <thead>
+          <tr>
+            <th style="width:40px;">#</th>
+            <th>Player Name</th>
+            <th style="width:110px;">DOB</th>
+            <th style="width:90px;">Jersey No.</th>
+            <th style="width:60px;">Age</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  return `
+  <html>
+    <head>${baseCss}</head>
+    <body>
+      ${letterhead({ clubName: "AFROCAT VOLLEYBALL CLUB", subline: "O-2BIS PLAYER LIST", logoDataUrl })}
+      <h1>O-2BIS FORM (Auto-Generated)</h1>
+
+      <div class="meta">
+        <div><b>Match Date & Time:</b> ${fmtDateTime(match.startTime)}</div>
+        <div><b>Venue:</b> ${match.venue || ""}</div>
+        <div><b>Home:</b> ${homeTeam?.name || ""}</div>
+        <div><b>Away:</b> ${awayTeam?.name || ""}</div>
+        <div>${scoreText}</div>
+      </div>
+
+      <h1 style="margin-top:6px;">HOME TEAM PLAYERS: ${homeTeam?.name || ""}</h1>
+      ${playerTable(homePlayers)}
+
+      <h1 style="margin-top:14px;">AWAY TEAM PLAYERS: ${awayTeam?.name || ""}</h1>
+      ${playerTable(awayPlayers)}
+
+      <div class="foot">
+        This O-2BIS is generated from Match Scheduling + Player Registration data. 
+        If match statistics are entered, the score is locked and cannot be manually edited.
+      </div>
+
+      <div class="sig">
+        <div class="sigbox"><b>Home Coach / Manager</b></div>
+        <div class="sigbox"><b>Away Coach / Manager</b></div>
+      </div>
+    </body>
+  </html>
+  `;
+}
+
+========================================================
+H) API ENDPOINTS (DOCUMENT CENTRE)
+========================================================
+
+Create routes (Express). These return PDF downloads.
+
+1) TEAM LIST PDF:
+GET /api/docs/team-list/:teamId.pdf
+
+2) O2BIS PDF:
+GET /api/docs/o2bis/:matchId.pdf
+
+Create: server/routes/docs.js
+
+import express from "express";
+import { htmlToPdfBuffer } from "../utils/pdf.js";
+import { teamListHtml } from "../templates/teamListHtml.js";
+import { o2bisHtml } from "../templates/o2bisHtml.js";
+
+const router = express.Router();
+
+// OPTIONAL: load logo base64 from env or file.
+// For now: empty string -> placeholder
+const LOGO_DATA_URL = process.env.CLUB_LOGO_DATA_URL || "";
+
+// TEAM LIST
+router.get("/team-list/:teamId.pdf", async (req, res) => {
+  const teamId = req.params.teamId;
+
+  const team = await req.db.team.findUnique({ where: { id: teamId } });
+  if (!team) return res.status(404).send("Team not found");
+
+  const players = await req.db.player.findMany({
+    where: { teamId },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+  });
+
+  const html = teamListHtml({ team, players, logoDataUrl: LOGO_DATA_URL });
+  const pdf = await htmlToPdfBuffer(html);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="TEAM_LIST_${team.name || teamId}.pdf"`);
+  return res.send(pdf);
+});
+
+// O2BIS
+router.get("/o2bis/:matchId.pdf", async (req, res) => {
+  const matchId = req.params.matchId;
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).send("Match not found");
+
+  const [homeTeam, awayTeam] = await Promise.all([
+    req.db.team.findUnique({ where: { id: match.homeTeamId } }),
+    req.db.team.findUnique({ where: { id: match.awayTeamId } }),
+  ]);
+
+  const [homePlayers, awayPlayers] = await Promise.all([
+    req.db.player.findMany({ where: { teamId: match.homeTeamId }, orderBy: [{ lastName: "asc" }] }),
+    req.db.player.findMany({ where: { teamId: match.awayTeamId }, orderBy: [{ lastName: "asc" }] }),
+  ]);
+
+  const html = o2bisHtml({
+    match,
+    homeTeam,
+    awayTeam,
+    homePlayers,
+    awayPlayers,
+    logoDataUrl: LOGO_DATA_URL,
+  });
+
+  const pdf = await htmlToPdfBuffer(html);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="O2BIS_${matchId}.pdf"`);
+  return res.send(pdf);
+});
+
+export default router;
+
+========================================================
+I) WIRE ROUTE + DB INTO SERVER
+========================================================
+
+In server/index.js (or your main server file):
+
+import docsRouter from "./routes/docs.js";
+
+app.use((req, _res, next) => {
+  req.db = db; // attach your prisma/db client here
+  next();
+});
+
+app.use("/api/docs", docsRouter);
+
+========================================================
+J) FRONTEND DOCUMENT CENTRE BUTTONS
+========================================================
+
+TEAM LIST button:
+href = `/api/docs/team-list/${teamId}.pdf`
+
+O2BIS button:
+href = `/api/docs/o2bis/${matchId}.pdf`
+
+Show O2BIS for upcoming matches AND played matches.
+Score shown:
+- UPCOMING: badge shows upcoming (no score)
+- PLAYED: show locked final score (from stats if entered)
+
+========================================================
+K) O2BIS SCORE RULE (MUST MATCH PREVIOUS RULES)
+========================================================
+
+- For UPCOMING matches: homeScore/awayScore can be null and must not be required.
+- For COMPLETED matches:
+  - if statsEntered=true => scoreSource="STATS" and scoreLocked=true (no edit)
+  - if statsEntered=false => allow manual score set once (admin/coach) then lock.
+
+DONE
+```

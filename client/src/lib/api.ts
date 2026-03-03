@@ -94,6 +94,10 @@ export const api = {
   getAttendanceRecords: (sessionId: string) => apiFetch<any[]>(`/attendance/sessions/${sessionId}/records`),
   submitAttendanceRecords: (sessionId: string, data: any[]) =>
     apiFetch<any[]>(`/attendance/sessions/${sessionId}/records`, { method: "POST", body: JSON.stringify(data) }),
+  saveAndCloseAttendance: (sessionId: string, lines: any[]) =>
+    apiFetch<any>(`/attendance/sessions/${sessionId}/save`, { method: "POST", body: JSON.stringify(lines) }),
+  patchAttendanceSession: (sessionId: string, data: any) =>
+    apiFetch<any>(`/attendance/sessions/${sessionId}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   getFinanceTxns: () => apiFetch<any[]>("/finance"),
   createFinanceTxn: (data: any) => apiFetch<any>("/finance", { method: "POST", body: JSON.stringify(data) }),

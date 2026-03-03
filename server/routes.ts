@@ -665,6 +665,7 @@ export async function registerRoutes(
       if (!req.user!.playerId) return res.status(400).json({ message: "No player profile linked" });
       const session = await storage.getAttendanceSession(req.params.id);
       if (!session) return res.status(404).json({ message: "Session not found" });
+      if (session.status === "CLOSED") return res.status(403).json({ message: "Attendance closed" });
 
       const existing = await storage.getAttendanceRecordBySessionAndPlayer(req.params.id, req.user!.playerId);
       if (existing) return res.status(400).json({ message: "Already checked in" });
@@ -1323,7 +1324,7 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         teamId: z.string(), sessionDate: z.string(),
         sessionType: z.enum(["TRAINING","MATCH","GYM"]), notes: z.string().optional().nullable(),
       }).parse(req.body);
-      res.status(201).json(await storage.createAttendanceSession(body));
+      res.status(201).json(await storage.createAttendanceSession({ ...body, createdBy: req.user!.id }));
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
@@ -1337,6 +1338,12 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
   app.post("/api/attendance/sessions/:id/records", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
     try {
       const sessionId = req.params.id;
+      const session = await storage.getAttendanceSession(sessionId);
+      if (!session) return res.status(404).json({ message: "Session not found" });
+      if (session.status === "CLOSED" && !req.user!.isSuperAdmin) {
+        return res.status(403).json({ message: "Attendance closed" });
+      }
+
       const records = z.array(z.object({
         playerId: z.string(),
         status: z.enum(["PRESENT","LATE","ABSENT","EXCUSED"]),
@@ -1366,6 +1373,110 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         }
       }
       res.json(results);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // Save attendance + auto-close (lock)
+  app.post("/api/attendance/sessions/:id/save", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const sessionId = req.params.id;
+      const session = await storage.getAttendanceSession(sessionId);
+      if (!session) return res.status(404).json({ message: "Session not found" });
+      if (session.status === "CLOSED") {
+        return res.status(403).json({ message: "Attendance closed" });
+      }
+
+      const lines = z.array(z.object({
+        playerId: z.string(),
+        status: z.enum(["PRESENT","LATE","ABSENT","EXCUSED"]),
+        reason: z.string().optional().nullable(),
+      })).parse(req.body);
+
+      if (lines.length === 0) return res.status(400).json({ message: "Attendance lines required" });
+
+      for (const rec of lines) {
+        const existing = await storage.getAttendanceRecordBySessionAndPlayer(sessionId, rec.playerId);
+        if (existing) {
+          await storage.updateAttendanceRecord(existing.id, { status: rec.status, reason: rec.reason });
+        } else {
+          await storage.createAttendanceRecord({ ...rec, sessionId });
+        }
+
+        if (rec.status === "ABSENT") {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const sinceStr = thirtyDaysAgo.toISOString().split("T")[0];
+          const absentCount = await storage.getPlayerAbsentCount(rec.playerId, sinceStr);
+          if (absentCount >= 3) {
+            await storage.createDisciplineCase({
+              playerId: rec.playerId,
+              caseType: "Attendance warning",
+              description: `Player has ${absentCount} absences in the last 30 days`,
+              points: absentCount,
+              actionTaken: "Review required by coaching staff",
+              caseDate: new Date().toISOString().split("T")[0],
+            });
+          }
+        }
+      }
+
+      const updated = await storage.updateAttendanceSession(sessionId, {
+        status: "CLOSED",
+        lockedAt: new Date(),
+        lockedBy: req.user!.id,
+      } as any);
+
+      res.json({ ok: true, session: updated });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // Super admin edit after closed
+  app.patch("/api/attendance/sessions/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const sessionId = req.params.id;
+      const session = await storage.getAttendanceSession(sessionId);
+      if (!session) return res.status(404).json({ message: "Session not found" });
+
+      if (session.status === "CLOSED" && !req.user!.isSuperAdmin) {
+        return res.status(403).json({ message: "Attendance closed. Only Super Admin can edit." });
+      }
+
+      const body = z.object({
+        sessionDate: z.string().optional(),
+        sessionType: z.enum(["TRAINING","MATCH","GYM"]).optional(),
+        lines: z.array(z.object({
+          playerId: z.string(),
+          status: z.enum(["PRESENT","LATE","ABSENT","EXCUSED"]),
+          reason: z.string().optional().nullable(),
+        })).optional(),
+      }).parse(req.body);
+
+      const updateData: any = {};
+      if (body.sessionDate) updateData.sessionDate = body.sessionDate;
+      if (body.sessionType) updateData.sessionType = body.sessionType;
+
+      const updated = Object.keys(updateData).length > 0
+        ? await storage.updateAttendanceSession(sessionId, updateData)
+        : session;
+
+      if (body.lines && body.lines.length > 0) {
+        for (const rec of body.lines) {
+          const existing = await storage.getAttendanceRecordBySessionAndPlayer(sessionId, rec.playerId);
+          if (existing) {
+            await storage.updateAttendanceRecord(existing.id, { status: rec.status, reason: rec.reason || null });
+          } else {
+            await storage.createAttendanceRecord({ playerId: rec.playerId, status: rec.status, reason: rec.reason || null, sessionId });
+          }
+        }
+      }
+
+      res.json({ ok: true, session: updated });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);

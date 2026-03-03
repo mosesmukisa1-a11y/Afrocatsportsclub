@@ -10,6 +10,7 @@ export const matchResultEnum = pgEnum("match_result", ["W", "L"]);
 export const matchStatusEnum = pgEnum("match_status", ["SCHEDULED", "UPCOMING", "LIVE", "PLAYED", "CANCELLED"]);
 export const scoreSourceEnum = pgEnum("score_source", ["NONE", "MANUAL", "STATS"]);
 export const sessionTypeEnum = pgEnum("session_type", ["TRAINING", "MATCH", "GYM"]);
+export const attendanceSessionStatusEnum = pgEnum("attendance_session_status", ["OPEN", "CLOSED"]);
 export const attendanceStatusEnum = pgEnum("attendance_status", ["PRESENT", "LATE", "ABSENT", "EXCUSED"]);
 export const txnTypeEnum = pgEnum("txn_type", ["INCOME", "EXPENSE"]);
 export const injurySeverityEnum = pgEnum("injury_severity", ["LOW", "MEDIUM", "HIGH"]);
@@ -186,6 +187,10 @@ export const attendanceSessions = pgTable("attendance_sessions", {
   sessionDate: text("session_date").notNull(),
   sessionType: sessionTypeEnum("session_type").notNull(),
   notes: text("notes"),
+  status: attendanceSessionStatusEnum("session_status").notNull().default("OPEN"),
+  lockedAt: timestamp("locked_at"),
+  lockedBy: varchar("locked_by", { length: 36 }),
+  createdBy: varchar("created_by", { length: 36 }),
 });
 
 export const attendanceRecords = pgTable("attendance_records", {

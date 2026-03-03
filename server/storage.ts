@@ -67,6 +67,7 @@ export interface IStorage {
   getAttendanceSessions(teamId?: string): Promise<AttendanceSession[]>;
   getAttendanceSession(id: string): Promise<AttendanceSession | undefined>;
   createAttendanceSession(session: InsertAttendanceSession): Promise<AttendanceSession>;
+  updateAttendanceSession(id: string, data: Partial<InsertAttendanceSession>): Promise<AttendanceSession | undefined>;
   getAttendanceRecords(sessionId: string): Promise<AttendanceRecord[]>;
   createAttendanceRecord(record: InsertAttendanceRecord): Promise<AttendanceRecord>;
   getPlayerAbsentCount(playerId: string, since: string): Promise<number>;
@@ -338,6 +339,10 @@ export class DatabaseStorage implements IStorage {
   async createAttendanceSession(session: InsertAttendanceSession) {
     const [created] = await db.insert(schema.attendanceSessions).values(session).returning();
     return created;
+  }
+  async updateAttendanceSession(id: string, data: Partial<InsertAttendanceSession>) {
+    const [updated] = await db.update(schema.attendanceSessions).set(data).where(eq(schema.attendanceSessions.id, id)).returning();
+    return updated;
   }
   async getAttendanceRecords(sessionId: string) {
     return db.select().from(schema.attendanceRecords).where(eq(schema.attendanceRecords.sessionId, sessionId));

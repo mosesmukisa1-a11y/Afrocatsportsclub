@@ -75,6 +75,7 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Media System**: Upload → PENDING_REVIEW → Admin approves. Player tag requests with admin approval workflow
 - **Shop System**: Admin CRUD for merchandise, public display
 - **Attendance Self-Check-In**: Players self-mark → coach confirms
+- **Attendance Locking**: Save attendance auto-closes and locks the session (`status: CLOSED`, `lockedAt`, `lockedBy`). Once closed: no edits for coach/admin/players; UI shows "Attendance Closed" badge. Only Super Admin can edit locked sessions via "Edit Attendance" button. Backend enforces lock on all routes (POST records, POST save, checkin). Routes: `POST /api/attendance/sessions/:id/save` (save+close), `PATCH /api/attendance/sessions/:id` (super admin edit)
 
 ## Brand & Theme
 - Primary: teal `#0F8B7D`, Accent: gold `#F2B705`
