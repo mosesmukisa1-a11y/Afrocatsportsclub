@@ -280,6 +280,17 @@ export const api = {
   deleteMatchEvent: (matchId: string, eventId: string) =>
     apiFetch<any>(`/matches/${matchId}/events/${eventId}`, { method: "DELETE" }),
 
+  getDevStatsInit: (matchId: string, teamId: string) =>
+    apiFetch<any>(`/matches/${matchId}/devstats/init?teamId=${teamId}`),
+  createDevStatsEvent: (matchId: string, data: any) =>
+    apiFetch<any>(`/matches/${matchId}/devstats/events`, { method: "POST", body: JSON.stringify(data) }),
+  deleteDevStatsEvent: (matchId: string, eventId: string) =>
+    apiFetch<any>(`/matches/${matchId}/devstats/events/${eventId}`, { method: "DELETE" }),
+  generateDevStatsReport: (matchId: string, teamId: string) =>
+    apiFetch<any>(`/matches/${matchId}/devstats/report/generate`, { method: "POST", body: JSON.stringify({ teamId }) }),
+  getCoachDevStatsDashboard: (teamId: string, matchId: string) =>
+    apiFetch<any>(`/coach/devstats/dashboard?teamId=${teamId}&matchId=${matchId}`),
+
   getTeamGenderRules: () => apiFetch<Record<string, string>>("/team-gender-rules"),
   getPendingUpdateRequests: () => apiFetch<any[]>("/player-update-requests/pending"),
   getMyUpdateRequests: () => apiFetch<any[]>("/player-update-requests/mine"),

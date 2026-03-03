@@ -35,6 +35,8 @@ import AdminUsers from "@/pages/AdminUsers";
 import MyContract from "@/pages/MyContract";
 import ClubContract from "@/pages/ClubContract";
 import TouchStats from "@/pages/TouchStats";
+import DevStats from "@/pages/DevStats";
+import CoachDashboard from "@/pages/CoachDashboard";
 import StatsComparison from "@/pages/StatsComparison";
 import Chat from "@/pages/Chat";
 import MatchSimulation from "@/pages/MatchSimulation";
@@ -67,6 +69,8 @@ function Router() {
       <Route path="/matches">{() => <ProtectedRoute component={Matches} />}</Route>
       <Route path="/stats">{() => <ProtectedRoute component={Stats} />}</Route>
       <Route path="/touch-stats">{() => <ProtectedRoute component={TouchStats} />}</Route>
+      <Route path="/dev-stats">{() => <ProtectedRoute component={DevStats} />}</Route>
+      <Route path="/coach-dashboard">{() => <ProtectedRoute component={CoachDashboard} />}</Route>
       <Route path="/attendance">{() => <ProtectedRoute component={Attendance} />}</Route>
       <Route path="/finance">{() => <ProtectedRoute component={Finance} />}</Route>
       <Route path="/injuries">{() => <ProtectedRoute component={Injuries} />}</Route>

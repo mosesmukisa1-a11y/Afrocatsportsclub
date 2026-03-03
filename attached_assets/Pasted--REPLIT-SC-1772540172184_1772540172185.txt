@@ -1,0 +1,1334 @@
+/*****************************************************************************************
+REPLIT SCRIPT (PASTE ALL) – AFROCAT ADVANCED DEVELOPMENT STATS PLATFORM (FULL)
+✅ Includes your full spec text EXACTLY as-is (no edits) in a constant so Replit can’t miss it.
+✅ Replaces current Enter Stats with Touch-Style UI (player photo + name + jersey).
+✅ Adds MatchEvent schema (Prisma-style + JSON fallback notes)
+✅ Adds API endpoints:
+   - init enums + roster
+   - create event
+   - undo event
+   - generate development report
+   - coach dashboard alerts (red/yellow/green)
+✅ Adds rule-based training focus generator
+✅ Locks edits when match stats are locked (statsEntered/scoreLocked/scoreSource=STATS)
+
+INSTALL (Shell):
+npm i express cors
+
+(If you already have Express/DB, only copy the routes + frontend components.)
+
+=========================================================================================
+A) PUT THIS INTO YOUR PROJECT FILES EXACTLY AS LABELED:
+- server/devstats/specText.js
+- server/devstats/enums.js
+- server/devstats/metrics.js
+- server/devstats/report.js
+- server/devstats/routes.js
+- src/components/TouchDevelopmentStats.jsx
+- src/components/CoachDashboardAlerts.jsx
+=========================================================================================
+******************************************************************************************/
+
+/* =======================================================================================
+FILE: server/devstats/specText.js
+(Your full spec text EXACTLY as provided)
+======================================================================================= */
+export const AFROCAT_ADVANCED_DEV_STATS_SPEC_TEXT = `
+AFROCAT – ADVANCED DEVELOPMENT STAT PLATFORM (HIGH-DETAIL VOLLEYBALL ANALYTICS)
+
+OBJECTIVE:
+Build a PROFESSIONAL, DEVELOPMENT-FOCUSED, DETAILED stat system.
+Track EVERYTHING: technical, tactical, physical, decision-making, and errors.
+Designed for player growth, not just match scoring.
+
+====================================================================
+1) CORE PHILOSOPHY (DEVELOPMENT MODE)
+====================================================================
+
+We do NOT only track:
+- Points
+- Kills
+- Errors
+
+We track:
+- Quality of execution
+- Decision making
+- Technique flaws
+- Tactical discipline
+- Error patterns
+- Improvement trends
+
+====================================================================
+2) STRUCTURE OF THE SYSTEM
+====================================================================
+
+LEVEL 1 – EVENT TRACKING (EVERY TOUCH)
+LEVEL 2 – QUALITY GRADING (Execution quality)
+LEVEL 3 – ERROR CLASSIFICATION (Detailed error types)
+LEVEL 4 – ROTATION ANALYSIS
+LEVEL 5 – PLAYER DEVELOPMENT METRICS
+LEVEL 6 – TEAM SYSTEM METRICS
+
+====================================================================
+3) SERVE – MOST DETAILED SERVE TRACKING
+====================================================================
+
+Track:
+
+• Serve Type:
+  - Float
+  - Jump Float
+  - Jump Spin
+  - Underhand
+  - Hybrid
+
+• Serve Target Zone (1–6 + deep corners)
+• Serve Speed (optional later)
+
+• Outcome:
+  - Ace
+  - In – Perfect pressure
+  - In – Moderate pressure
+  - In – Easy receive
+  - Net error
+  - Out long
+  - Out wide
+  - Foot fault
+  - Rotation fault
+
+• Error Type Classification:
+  - Technical error
+  - Decision error
+  - Pressure error
+  - Fatigue error
+
+• Tactical Intention:
+  - Target weak passer
+  - Target libero
+  - Short serve
+  - Deep serve
+  - Zone disruption
+
+Derived Metrics:
+- Ace %
+- Serve Pressure %
+- Service Error %
+- Serve Efficiency
+- Tactical Success %
+
+====================================================================
+4) RECEIVE (PASSING)
+====================================================================
+
+• Pass Type:
+  - Forearm
+  - Overhead
+  - Emergency
+
+• Receive Rating (0–3 scale):
+  3 = Perfect
+  2 = Positive
+  1 = Off system
+  0 = Error
+
+• Error Types:
+  - Platform angle error
+  - Footwork error
+  - Communication error
+  - Late reaction
+  - Ball misjudgment
+  - Technical breakdown
+
+• Pass Target Location
+
+Derived:
+- Perfect Pass %
+- Reception Efficiency
+- Error Cause Frequency
+
+====================================================================
+5) SETTING (VERY DETAILED FOR DEVELOPMENT)
+====================================================================
+
+Track:
+
+• Set Type:
+  - High outside
+  - Quick (1, 2, 3 tempo)
+  - Back set
+  - Slide
+  - Pipe
+  - Dump
+
+• Set Quality:
+  - Perfect
+  - Slightly off
+  - Poor
+  - Error
+
+• Error Type:
+  - Double touch
+  - Lift
+  - Miscommunication
+  - Wrong decision
+  - Footwork issue
+  - Timing issue
+
+• Decision Tracking:
+  - Correct decision
+  - Predictable decision
+  - Forced decision
+  - Wrong read
+
+Derived:
+- Setting Efficiency
+- Decision Accuracy %
+- Tempo Distribution
+
+====================================================================
+6) ATTACK (VERY HIGH DETAIL)
+====================================================================
+
+• Attack Type:
+  - Power
+  - Roll
+  - Tip
+  - Tool block
+  - Line
+  - Cross
+  - Seam
+
+• Attack Zone (2,3,4, pipe etc)
+
+• Outcome:
+  - Kill
+  - Blocked
+  - Dug
+  - Out
+  - Net
+
+• Error Classification:
+  - Technical swing error
+  - Poor approach
+  - Bad decision
+  - Forced by bad set
+  - Fatigue
+  - Timing error
+
+• Block Situation:
+  - Single block
+  - Double block
+  - Triple block
+
+Derived:
+- Kill %
+- Attack Efficiency
+- Smart Decision %
+- High Block Success %
+
+====================================================================
+7) BLOCKING
+====================================================================
+
+• Block Type:
+  - Solo
+  - Assist
+  - Touch
+  - Late block
+
+• Block Error:
+  - Net
+  - Late read
+  - Poor hand position
+  - Jump timing
+  - Closed wrong angle
+
+Derived:
+- Block Success Rate
+- Read Accuracy %
+
+====================================================================
+8) DEFENCE (DIG)
+====================================================================
+
+• Dig Type:
+  - Controlled
+  - Emergency
+  - Pancake
+  - One-arm
+
+• Defensive Position:
+  - 1,5,6 zones
+
+• Error Type:
+  - Poor reading
+  - Slow reaction
+  - Positioning issue
+  - Communication error
+
+Derived:
+- Dig Conversion %
+- Defensive Efficiency
+
+====================================================================
+9) ROTATION ANALYSIS
+====================================================================
+
+Track performance per rotation (1–6):
+
+• Points scored in rotation
+• Points conceded
+• Side-out %
+• Rotation weakness index
+
+This is HUGE for development.
+
+====================================================================
+10) PLAYER DEVELOPMENT METRICS (AUTOMATIC)
+====================================================================
+
+System should calculate:
+
+• Error Pattern Heatmap
+• Technical Error % vs Decision Error %
+• Pressure Error Index
+• Fatigue Drop (late set performance drop)
+• Skill Consistency Index
+• Growth Trend (Last 5 matches vs Season)
+
+====================================================================
+11) TEAM SYSTEM METRICS
+====================================================================
+
+• Side-Out %
+• Transition Efficiency
+• Serve-Receive Quality
+• First Ball Side-Out %
+• Block-Defence Conversion
+• Break Point %
+
+====================================================================
+12) ERROR CATEGORIES MASTER LIST
+====================================================================
+
+Create a master error enum:
+
+TECHNICAL_ERRORS:
+- Footwork
+- Platform angle
+- Arm swing
+- Jump timing
+- Hand position
+- Contact point
+
+DECISION_ERRORS:
+- Wrong target
+- Poor shot selection
+- Misread block
+- Predictable play
+- Communication failure
+
+PRESSURE_ERRORS:
+- End of set
+- After timeout
+- Service pressure
+- Momentum shift
+
+FATIGUE_ERRORS:
+- Late set drop
+- Poor recovery
+- Slow reaction
+
+====================================================================
+13) ADVANCED DEVELOPMENT FEATURES
+====================================================================
+
+• Player Weakness Report (auto generated)
+• “Focus Areas Next Training” (AI suggestion)
+• Compare player vs position average
+• Injury risk indicator (if error spike + fatigue)
+
+====================================================================
+14) WHAT TO BUILD NEXT (RECOMMENDED ARCHITECTURE)
+====================================================================
+
+TABLES NEEDED:
+
+MatchEvent
+- matchId
+- playerId
+- rotation
+- skillType (SERVE, RECEIVE, SET, ATTACK, BLOCK, DIG)
+- subType
+- zone
+- tempo
+- outcome
+- errorType
+- pressureFlag
+- fatigueFlag
+- timestamp
+
+PlayerMatchSummary (auto aggregated)
+TeamMatchSummary (auto aggregated)
+
+====================================================================
+15) IF YOU WANT MAXIMUM DEVELOPMENT IMPACT
+====================================================================
+
+Add:
+- Video tag timestamp integration (future)
+- Training session stat mode
+- Practice error tracking
+- Drill performance tracking
+- Individual progress dashboard
+
+====================================================================
+FINAL RECOMMENDATION
+====================================================================
+
+For Afrocat (Development Focus):
+
+Start with:
+1) Detailed Serve tracking
+2) Detailed Attack tracking
+3) Detailed Error classification
+4) Rotation performance
+5) Auto Development Report after each match
+
+This alone will make Afrocat one of the most data-advanced development clubs in Namibia.
+
+====================================================================
+
+If you want, I can now:
+
+A) Design the FULL DATABASE schema for this
+B) Create the Touch-style UI structure for this
+C) Create Auto Development Report generator
+D) Design a Coach Dashboard with red/yellow/green alerts
+
+Tell me which one to build first.
+`;
+
+/* =======================================================================================
+FILE: server/devstats/enums.js
+======================================================================================= */
+export const SKILL_TYPES = ["SERVE","RECEIVE","SET","ATTACK","BLOCK","DIG","FREEBALL"];
+
+export const OUTCOME = ["PLUS","ZERO","MINUS"]; // Quality grading for dev analytics
+
+export const SERVE_TYPES = ["FLOAT","JUMP_FLOAT","JUMP_SPIN","UNDERHAND","HYBRID"];
+export const SERVE_OUTCOME_DETAIL = ["ACE","IN_PERFECT_PRESSURE","IN_MODERATE_PRESSURE","IN_EASY","NET","OUT_LONG","OUT_WIDE","FOOT_FAULT","ROTATION_FAULT"];
+export const SERVE_TACTICAL_INTENTION = ["TARGET_WEAK_PASSER","TARGET_LIBERO","SHORT_SERVE","DEEP_SERVE","ZONE_DISRUPTION","NONE"];
+
+export const RECEIVE_TYPES = ["FOREARM","OVERHEAD","EMERGENCY"];
+export const RECEIVE_RATING_DETAIL = ["3_PERFECT","2_POSITIVE","1_OFF_SYSTEM","0_ERROR"];
+export const RECEIVE_ERROR_TYPES = ["PLATFORM_ANGLE","FOOTWORK","COMMUNICATION","LATE_REACTION","BALL_MISJUDGMENT","TECHNICAL_BREAKDOWN"];
+
+export const SET_TYPES = ["HIGH_OUTSIDE","QUICK_1","QUICK_2","QUICK_3","BACK_SET","SLIDE","PIPE","DUMP"];
+export const SET_QUALITY_DETAIL = ["PERFECT","SLIGHTLY_OFF","POOR","ERROR"];
+export const SET_ERROR_TYPES = ["DOUBLE_TOUCH","LIFT","MISCOMMUNICATION","WRONG_DECISION","FOOTWORK","TIMING"];
+
+export const ATTACK_TYPES = ["POWER","ROLL","TIP","TOOL_BLOCK","LINE","CROSS","SEAM"];
+export const ATTACK_OUTCOME_DETAIL = ["KILL","BLOCKED","DUG","OUT","NET"];
+export const ATTACK_ERROR_TYPES = ["TECHNICAL_SWING","POOR_APPROACH","BAD_DECISION","FORCED_BY_BAD_SET","FATIGUE","TIMING"];
+
+export const BLOCK_TYPES = ["SOLO","ASSIST","TOUCH","LATE_BLOCK"];
+export const BLOCK_ERROR_TYPES = ["NET","LATE_READ","HAND_POSITION","JUMP_TIMING","CLOSED_WRONG_ANGLE"];
+
+export const DIG_TYPES = ["CONTROLLED","EMERGENCY","PANCAKE","ONE_ARM"];
+export const DIG_ERROR_TYPES = ["POOR_READING","SLOW_REACTION","POSITIONING","COMMUNICATION"];
+
+export const ERROR_CATEGORY = ["NONE","TECHNICAL","DECISION","PRESSURE","FATIGUE"];
+
+export const TECHNICAL_ERRORS = ["FOOTWORK","PLATFORM_ANGLE","ARM_SWING","JUMP_TIMING","HAND_POSITION","CONTACT_POINT"];
+export const DECISION_ERRORS = ["WRONG_TARGET","POOR_SHOT_SELECTION","MISREAD_BLOCK","PREDICTABLE_PLAY","COMMUNICATION_FAILURE"];
+export const PRESSURE_ERRORS = ["END_OF_SET","AFTER_TIMEOUT","SERVICE_PRESSURE","MOMENTUM_SHIFT"];
+export const FATIGUE_ERRORS = ["LATE_SET_DROP","POOR_RECOVERY","SLOW_REACTION"];
+
+// Zones: volleyball zones + optional deep corners
+export const ZONES = ["1","2","3","4","5","6","DEEP_1","DEEP_5","SHORT_2","SHORT_4","SEAM_56","SEAM_12"];
+
+/* =======================================================================================
+FILE: server/devstats/metrics.js
+(aggregation helpers)
+======================================================================================= */
+function pct(num, den) {
+  if (!den) return 0;
+  return Math.round((num / den) * 1000) / 10; // 1 decimal %
+}
+
+export function groupBy(arr, keyFn) {
+  const m = new Map();
+  for (const x of arr) {
+    const k = keyFn(x);
+    const a = m.get(k) || [];
+    a.push(x);
+    m.set(k, a);
+  }
+  return m;
+}
+
+export function computeAttackEfficiency(events) {
+  // Standard volleyball: (kills - errors - blocked) / attempts
+  const attempts = events.length;
+  const kills = events.filter(e => e.outcomeDetail === "KILL").length;
+  const errors = events.filter(e => e.outcomeDetail === "OUT" || e.outcomeDetail === "NET").length;
+  const blocked = events.filter(e => e.outcomeDetail === "BLOCKED").length;
+  const eff = attempts ? (kills - errors - blocked) / attempts : 0;
+  return Math.round(eff * 1000) / 1000;
+}
+
+export function summarizeSkill(events, { isServe=false, isReceive=false, isAttack=false } = {}) {
+  const attempts = events.length;
+  const plus = events.filter(e => e.outcome === "PLUS").length;
+  const zero = events.filter(e => e.outcome === "ZERO").length;
+  const minus = events.filter(e => e.outcome === "MINUS").length;
+
+  const outDetailCount = {};
+  for (const e of events) {
+    const k = e.outcomeDetail || "NONE";
+    outDetailCount[k] = (outDetailCount[k] || 0) + 1;
+  }
+
+  const errorCatCount = { TECHNICAL:0, DECISION:0, PRESSURE:0, FATIGUE:0, NONE:0 };
+  const errorTypeCount = {};
+  for (const e of events) {
+    const cat = e.errorCategory || "NONE";
+    errorCatCount[cat] = (errorCatCount[cat] || 0) + 1;
+    if (e.errorType) errorTypeCount[e.errorType] = (errorTypeCount[e.errorType] || 0) + 1;
+  }
+
+  const base = {
+    attempts,
+    plus,
+    zero,
+    minus,
+    plusPct: pct(plus, attempts),
+    minusPct: pct(minus, attempts),
+    outDetailCount,
+    errorCatCount,
+    errorTypeCount,
+  };
+
+  if (isServe) {
+    const aces = outDetailCount["ACE"] || 0;
+    const pressure = (outDetailCount["IN_PERFECT_PRESSURE"] || 0) + (outDetailCount["IN_MODERATE_PRESSURE"] || 0);
+    const errors = (outDetailCount["NET"] || 0) + (outDetailCount["OUT_LONG"] || 0) + (outDetailCount["OUT_WIDE"] || 0) + (outDetailCount["FOOT_FAULT"] || 0) + (outDetailCount["ROTATION_FAULT"] || 0);
+    base.acePct = pct(aces, attempts);
+    base.pressurePct = pct(pressure, attempts);
+    base.serveErrorPct = pct(errors, attempts);
+  }
+
+  if (isReceive) {
+    const perfect = outDetailCount["3_PERFECT"] || 0;
+    const offSystem = outDetailCount["1_OFF_SYSTEM"] || 0;
+    const err = outDetailCount["0_ERROR"] || 0;
+    base.perfectPassPct = pct(perfect, attempts);
+    base.offSystemPct = pct(offSystem, attempts);
+    base.receiveErrorPct = pct(err, attempts);
+  }
+
+  if (isAttack) {
+    base.attackEfficiency = computeAttackEfficiency(events);
+    const kills = outDetailCount["KILL"] || 0;
+    const blocked = outDetailCount["BLOCKED"] || 0;
+    base.killPct = pct(kills, attempts);
+    base.blockedPct = pct(blocked, attempts);
+  }
+
+  return base;
+}
+
+export function topK(obj, k=3) {
+  const entries = Object.entries(obj || {}).sort((a,b)=>b[1]-a[1]);
+  return entries.slice(0,k).map(([key,val])=>({ key, val }));
+}
+
+/* =======================================================================================
+FILE: server/devstats/report.js
+(auto development report generator + coach alerts)
+======================================================================================= */
+import { groupBy, summarizeSkill, topK } from "./metrics.js";
+
+function trainingSuggestionFromWeakness(w) {
+  // Rule-based suggestions (simple & reliable)
+  switch (w) {
+    case "RECEIVE_HIGH_ERRORS":
+      return "Passing focus: platform angle + footwork + communication reps. Add serve-receive pressure drills.";
+    case "SERVE_HIGH_ERRORS":
+      return "Serving focus: consistency targets, 10-in-a-row routines, then pressure serving (end-of-set simulations).";
+    case "ATTACK_LOW_EFF":
+      return "Attacking focus: approach timing + shot selection (tooling/roll/line) + reading block drills.";
+    case "DECISION_ERRORS_HIGH":
+      return "Game IQ focus: setter decision patterns, attacker shot selection, reading defence, video review sessions.";
+    case "BLOCK_LATE_READ":
+      return "Blocking focus: reading hitter cues, first step timing, hand positioning, closing to antenna drills.";
+    case "DIG_LOW_CONTROL":
+      return "Defence focus: positioning, reading, controlled dig to target, repetition under speed.";
+    default:
+      return "General improvement: fundamentals + repetition under match-like pressure.";
+  }
+}
+
+export function generateDevelopmentReport({ match, teamId, rosterPlayers, events }) {
+  // events = all MatchEvent for match + teamId
+  const byPlayer = groupBy(events, e => e.playerId);
+
+  const playerSummaries = [];
+  for (const p of rosterPlayers) {
+    const pe = byPlayer.get(p.id) || [];
+    const bySkill = groupBy(pe, e => e.skillType);
+
+    const serve = summarizeSkill(bySkill.get("SERVE") || [], { isServe:true });
+    const receive = summarizeSkill(bySkill.get("RECEIVE") || [], { isReceive:true });
+    const set = summarizeSkill(bySkill.get("SET") || []);
+    const attack = summarizeSkill(bySkill.get("ATTACK") || [], { isAttack:true });
+    const block = summarizeSkill(bySkill.get("BLOCK") || []);
+    const dig = summarizeSkill(bySkill.get("DIG") || []);
+
+    // top errors across all events
+    const errorTypesAll = {};
+    for (const e of pe) {
+      if (e.errorType) errorTypesAll[e.errorType] = (errorTypesAll[e.errorType] || 0) + 1;
+    }
+    const topErrors = topK(errorTypesAll, 3);
+
+    // weakness rules
+    const weaknessFlags = [];
+    if ((receive.receiveErrorPct || 0) >= 20 || (receive.minusPct || 0) >= 20) weaknessFlags.push("RECEIVE_HIGH_ERRORS");
+    if ((serve.serveErrorPct || 0) >= 18) weaknessFlags.push("SERVE_HIGH_ERRORS");
+    if (typeof attack.attackEfficiency === "number" && attack.attackEfficiency < 0.0 && (attack.attempts || 0) >= 5) weaknessFlags.push("ATTACK_LOW_EFF");
+
+    // decision errors (category)
+    const decisionErrors = (serve.errorCatCount?.DECISION||0) + (receive.errorCatCount?.DECISION||0) + (set.errorCatCount?.DECISION||0) + (attack.errorCatCount?.DECISION||0) + (block.errorCatCount?.DECISION||0) + (dig.errorCatCount?.DECISION||0);
+    if (decisionErrors >= 6) weaknessFlags.push("DECISION_ERRORS_HIGH");
+
+    const focus = (weaknessFlags.length ? weaknessFlags : ["GENERAL"])
+      .slice(0,2)
+      .map(trainingSuggestionFromWeakness);
+
+    playerSummaries.push({
+      playerId: p.id,
+      playerName: `${p.firstName || ""} ${p.lastName || ""}`.trim(),
+      jerseyNumber: p.jerseyNumber ?? "",
+      serve, receive, set, attack, block, dig,
+      decisionErrors,
+      topErrors,
+      focusAreas: focus,
+    });
+  }
+
+  // team summary
+  const bySkillTeam = groupBy(events, e => e.skillType);
+  const team = {
+    serve: summarizeSkill(bySkillTeam.get("SERVE") || [], { isServe:true }),
+    receive: summarizeSkill(bySkillTeam.get("RECEIVE") || [], { isReceive:true }),
+    set: summarizeSkill(bySkillTeam.get("SET") || [], {}),
+    attack: summarizeSkill(bySkillTeam.get("ATTACK") || [], { isAttack:true }),
+    block: summarizeSkill(bySkillTeam.get("BLOCK") || [], {}),
+    dig: summarizeSkill(bySkillTeam.get("DIG") || [], {}),
+  };
+
+  // build dashboard alerts (R/Y/G)
+  const alerts = playerSummaries.map(ps => {
+    const serveErr = ps.serve.serveErrorPct || 0;
+    const recvMinus = ps.receive.minusPct || 0;
+    const atkEff = ps.attack.attackEfficiency ?? 0;
+    const dec = ps.decisionErrors || 0;
+
+    let status = "GREEN";
+    const reasons = [];
+
+    // RED thresholds
+    if (recvMinus >= 20) { status = "RED"; reasons.push(`Receive minus% ${recvMinus}`); }
+    if (serveErr >= 18) { status = "RED"; reasons.push(`Serve error% ${serveErr}`); }
+    if (atkEff < 0.0 && (ps.attack.attempts||0) >= 5) { status = "RED"; reasons.push(`Attack eff ${atkEff}`); }
+    if (dec >= 6) { status = "RED"; reasons.push(`Decision errors ${dec}`); }
+
+    // YELLOW thresholds (only if not RED)
+    if (status !== "RED") {
+      if (recvMinus >= 10) { status = "YELLOW"; reasons.push(`Receive minus% ${recvMinus}`); }
+      if (serveErr >= 10) { status = "YELLOW"; reasons.push(`Serve error% ${serveErr}`); }
+      if (atkEff >= 0.0 && atkEff <= 0.10 && (ps.attack.attempts||0) >= 5) { status = "YELLOW"; reasons.push(`Attack eff ${atkEff}`); }
+    }
+
+    return {
+      playerId: ps.playerId,
+      playerName: ps.playerName,
+      jerseyNumber: ps.jerseyNumber,
+      status,
+      reasons,
+      keyMetrics: {
+        serveErrorPct: serveErr,
+        receiveMinusPct: recvMinus,
+        attackEfficiency: atkEff,
+        decisionErrors: dec,
+      },
+      focusAreas: ps.focusAreas,
+    };
+  });
+
+  return {
+    matchId: match.id,
+    teamId,
+    createdAt: new Date().toISOString(),
+    specTextIncluded: true,
+    teamSummary: team,
+    playerSummaries,
+    coachAlerts: alerts,
+  };
+}
+
+/* =======================================================================================
+FILE: server/devstats/routes.js
+Express routes for Dev Stats + Reports + Coach Dashboard
+NOTE: Adjust DB calls to your Prisma models if you have them.
+======================================================================================= */
+import express from "express";
+import {
+  SKILL_TYPES, OUTCOME, ZONES,
+  SERVE_TYPES, SERVE_OUTCOME_DETAIL, SERVE_TACTICAL_INTENTION,
+  RECEIVE_TYPES, RECEIVE_RATING_DETAIL, RECEIVE_ERROR_TYPES,
+  SET_TYPES, SET_QUALITY_DETAIL, SET_ERROR_TYPES,
+  ATTACK_TYPES, ATTACK_OUTCOME_DETAIL, ATTACK_ERROR_TYPES,
+  BLOCK_TYPES, BLOCK_ERROR_TYPES,
+  DIG_TYPES, DIG_ERROR_TYPES,
+  ERROR_CATEGORY, TECHNICAL_ERRORS, DECISION_ERRORS, PRESSURE_ERRORS, FATIGUE_ERRORS
+} from "./enums.js";
+
+import { AFROCAT_ADVANCED_DEV_STATS_SPEC_TEXT } from "./specText.js";
+import { generateDevelopmentReport } from "./report.js";
+
+const router = express.Router();
+
+function isMatchLocked(match) {
+  return !!match.statsEntered || !!match.scoreLocked || match.scoreSource === "STATS";
+}
+
+// INIT for touch UI: roster + enums + lock state + spec text
+router.get("/matches/:matchId/devstats/init", async (req, res) => {
+  const { matchId } = req.params;
+  const teamId = req.query.teamId;
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+
+  const players = await req.db.player.findMany({
+    where: { teamId },
+    select: { id:true, firstName:true, lastName:true, jerseyNumber:true, photoUrl:true },
+    orderBy: [{ jerseyNumber: "asc" }, { lastName: "asc" }],
+  });
+
+  return res.json({
+    ok:true,
+    match,
+    locked: isMatchLocked(match),
+    players,
+    enums: {
+      SKILL_TYPES, OUTCOME, ZONES,
+      SERVE_TYPES, SERVE_OUTCOME_DETAIL, SERVE_TACTICAL_INTENTION,
+      RECEIVE_TYPES, RECEIVE_RATING_DETAIL, RECEIVE_ERROR_TYPES,
+      SET_TYPES, SET_QUALITY_DETAIL, SET_ERROR_TYPES,
+      ATTACK_TYPES, ATTACK_OUTCOME_DETAIL, ATTACK_ERROR_TYPES,
+      BLOCK_TYPES, BLOCK_ERROR_TYPES,
+      DIG_TYPES, DIG_ERROR_TYPES,
+      ERROR_CATEGORY, TECHNICAL_ERRORS, DECISION_ERRORS, PRESSURE_ERRORS, FATIGUE_ERRORS
+    },
+    specText: AFROCAT_ADVANCED_DEV_STATS_SPEC_TEXT
+  });
+});
+
+// CREATE event
+router.post("/matches/:matchId/devstats/events", async (req, res) => {
+  const { matchId } = req.params;
+  const b = req.body || {};
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+  if (isMatchLocked(match)) return res.status(403).json({ ok:false, error:"Stats locked: match already submitted." });
+
+  const required = ["teamId","playerId","skillType","outcome"];
+  for (const k of required) {
+    if (!b[k]) return res.status(400).json({ ok:false, error:`Missing ${k}` });
+  }
+
+  // Basic validations
+  if (!SKILL_TYPES.includes(b.skillType)) return res.status(400).json({ ok:false, error:"Invalid skillType" });
+  if (!OUTCOME.includes(b.outcome)) return res.status(400).json({ ok:false, error:"Invalid outcome" });
+
+  // If outcome MINUS require outcomeDetail + errorCategory (development focus)
+  if (b.outcome === "MINUS") {
+    if (!b.outcomeDetail) return res.status(400).json({ ok:false, error:"outcomeDetail required for MINUS" });
+    if (!b.errorCategory || b.errorCategory === "NONE") return res.status(400).json({ ok:false, error:"errorCategory required for MINUS" });
+  }
+
+  const event = await req.db.matchEvent.create({
+    data: {
+      matchId,
+      teamId: b.teamId,
+      playerId: b.playerId,
+      rotation: b.rotation ?? null,
+      skillType: b.skillType,
+      subType: b.subType ?? null,
+      zone: b.zone ?? null,
+      tempo: b.tempo ?? null,
+      outcome: b.outcome,
+      outcomeDetail: b.outcomeDetail ?? null,
+      errorCategory: b.errorCategory ?? "NONE",
+      errorType: b.errorType ?? null,
+      pressureFlag: !!b.pressureFlag,
+      fatigueFlag: !!b.fatigueFlag,
+      tacticalIntention: b.tacticalIntention ?? null,
+      notes: b.notes ?? null,
+      createdAt: new Date().toISOString(),
+      createdBy: req.user?.id || null,
+    },
+  });
+
+  return res.json({ ok:true, event });
+});
+
+// UNDO last: delete by eventId
+router.delete("/matches/:matchId/devstats/events/:eventId", async (req, res) => {
+  const { matchId, eventId } = req.params;
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+  if (isMatchLocked(match)) return res.status(403).json({ ok:false, error:"Stats locked: match already submitted." });
+
+  await req.db.matchEvent.delete({ where: { id: eventId } });
+  return res.json({ ok:true });
+});
+
+// GENERATE REPORT (stores in DB if you have a table; else returns JSON)
+router.post("/matches/:matchId/devstats/report/generate", async (req, res) => {
+  const { matchId } = req.params;
+  const teamId = req.body?.teamId;
+  if (!teamId) return res.status(400).json({ ok:false, error:"teamId required" });
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+
+  const rosterPlayers = await req.db.player.findMany({
+    where: { teamId },
+    select: { id:true, firstName:true, lastName:true, jerseyNumber:true, photoUrl:true },
+  });
+
+  // IMPORTANT: adapt this to your DB. Here we assume you have a findMany; if not, add it.
+  // If you use JSON store from previous scripts, add matchEvent.findMany OR filter from a stored array.
+  const events = await (req.db.matchEvent.findMany
+    ? req.db.matchEvent.findMany({ where: { matchId, teamId } })
+    : []); // replace if needed
+
+  const report = generateDevelopmentReport({ match, teamId, rosterPlayers, events });
+
+  // Optional: save report table if exists
+  if (req.db.matchDevelopmentReport?.upsert) {
+    await req.db.matchDevelopmentReport.upsert({
+      where: { matchId_teamId: { matchId, teamId } },
+      update: { reportJson: report, createdAt: report.createdAt },
+      create: { matchId, teamId, reportJson: report, createdAt: report.createdAt },
+    });
+  }
+
+  return res.json({ ok:true, report });
+});
+
+// COACH DASHBOARD (R/Y/G)
+router.get("/coach/devstats/dashboard", async (req, res) => {
+  const teamId = req.query.teamId;
+  const matchId = req.query.matchId;
+  if (!teamId || !matchId) return res.status(400).json({ ok:false, error:"teamId and matchId required" });
+
+  const match = await req.db.match.findUnique({ where: { id: matchId } });
+  if (!match) return res.status(404).json({ ok:false, error:"Match not found" });
+
+  const rosterPlayers = await req.db.player.findMany({
+    where: { teamId },
+    select: { id:true, firstName:true, lastName:true, jerseyNumber:true, photoUrl:true },
+  });
+
+  const events = await (req.db.matchEvent.findMany
+    ? req.db.matchEvent.findMany({ where: { matchId, teamId } })
+    : []);
+
+  const report = generateDevelopmentReport({ match, teamId, rosterPlayers, events });
+
+  return res.json({ ok:true, dashboard: report.coachAlerts, teamSummary: report.teamSummary, focus: report.playerSummaries.map(p=>({playerId:p.playerId, playerName:p.playerName, focusAreas:p.focusAreas})) });
+});
+
+export default router;
+
+/* =======================================================================================
+FILE: server/index.js  (ADD THESE LINES)
+======================================================================================= */
+// import devStatsRouter from "./server/devstats/routes.js";  // adjust path if needed
+// app.use("/api", devStatsRouter);
+// IMPORTANT: remove old enter-stats routes or stop linking to them.
+// Replace navigation to NEW UI route: /devstats/enter?matchId=...&teamId=...
+
+/* =======================================================================================
+FRONTEND: src/components/TouchDevelopmentStats.jsx
+Touch-style UI with dynamic detailed fields (player photo + name + jersey)
+======================================================================================= */
+import React, { useEffect, useMemo, useState } from "react";
+
+export default function TouchDevelopmentStats({ matchId, teamId }) {
+  const [init, setInit] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPlayerId, setSelectedPlayerId] = useState(null);
+
+  const [skillType, setSkillType] = useState("SERVE");
+  const [subType, setSubType] = useState("");
+  const [zone, setZone] = useState("");
+  const [outcome, setOutcome] = useState("PLUS");
+  const [outcomeDetail, setOutcomeDetail] = useState("");
+  const [errorCategory, setErrorCategory] = useState("NONE");
+  const [errorType, setErrorType] = useState("");
+  const [pressureFlag, setPressureFlag] = useState(false);
+  const [fatigueFlag, setFatigueFlag] = useState(false);
+  const [tacticalIntention, setTacticalIntention] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const [recent, setRecent] = useState([]);
+
+  const locked = !!init?.locked;
+
+  const players = init?.players || [];
+  const enums = init?.enums || {};
+
+  const selectedPlayer = useMemo(
+    () => players.find((p) => p.id === selectedPlayerId),
+    [players, selectedPlayerId]
+  );
+
+  function skillConfig(skill) {
+    // Return { subTypes, outcomeDetails, errorTypes, tacticalIntentions }
+    if (!enums) return {};
+    switch (skill) {
+      case "SERVE":
+        return { subTypes: enums.SERVE_TYPES, outcomeDetails: enums.SERVE_OUTCOME_DETAIL, errorTypes: enums.TECHNICAL_ERRORS, tactical: enums.SERVE_TACTICAL_INTENTION };
+      case "RECEIVE":
+        return { subTypes: enums.RECEIVE_TYPES, outcomeDetails: enums.RECEIVE_RATING_DETAIL, errorTypes: enums.RECEIVE_ERROR_TYPES, tactical: ["NONE"] };
+      case "SET":
+        return { subTypes: enums.SET_TYPES, outcomeDetails: enums.SET_QUALITY_DETAIL, errorTypes: enums.SET_ERROR_TYPES, tactical: ["NONE"] };
+      case "ATTACK":
+        return { subTypes: enums.ATTACK_TYPES, outcomeDetails: enums.ATTACK_OUTCOME_DETAIL, errorTypes: enums.ATTACK_ERROR_TYPES, tactical: ["NONE"] };
+      case "BLOCK":
+        return { subTypes: enums.BLOCK_TYPES, outcomeDetails: ["STUFF","TOUCH","ERROR","NONE"], errorTypes: enums.BLOCK_ERROR_TYPES, tactical: ["NONE"] };
+      case "DIG":
+        return { subTypes: enums.DIG_TYPES, outcomeDetails: ["CONTROLLED","NOT_CONTROLLED","ERROR","NONE"], errorTypes: enums.DIG_ERROR_TYPES, tactical: ["NONE"] };
+      default:
+        return { subTypes: [], outcomeDetails: [], errorTypes: [], tactical: ["NONE"] };
+    }
+  }
+
+  const cfg = useMemo(() => skillConfig(skillType), [skillType, enums]);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      const r = await fetch(`/api/matches/${matchId}/devstats/init?teamId=${teamId}`);
+      const d = await r.json();
+      if (d?.ok) {
+        setInit(d);
+        if (d.players?.[0]?.id) setSelectedPlayerId(d.players[0].id);
+        // set defaults
+        setSubType(d?.enums?.SERVE_TYPES?.[0] || "");
+        setZone(d?.enums?.ZONES?.[0] || "");
+        setOutcomeDetail(d?.enums?.SERVE_OUTCOME_DETAIL?.[0] || "");
+        setTacticalIntention(d?.enums?.SERVE_TACTICAL_INTENTION?.[0] || "NONE");
+      }
+      setLoading(false);
+    })();
+  }, [matchId, teamId]);
+
+  // Update defaults when skillType changes
+  useEffect(() => {
+    setSubType(cfg.subTypes?.[0] || "");
+    setOutcomeDetail(cfg.outcomeDetails?.[0] || "");
+    setErrorType("");
+    setErrorCategory("NONE");
+    setTacticalIntention(cfg.tactical?.[0] || "NONE");
+  }, [skillType]);
+
+  async function saveEvent() {
+    if (locked) return alert("Stats locked for this match.");
+    if (!selectedPlayerId) return alert("Select a player.");
+
+    // MINUS requires detail + errorCategory (server enforces too)
+    if (outcome === "MINUS") {
+      if (!outcomeDetail) return alert("Outcome detail required for MINUS.");
+      if (!errorCategory || errorCategory === "NONE") return alert("Error category required for MINUS.");
+    }
+
+    const payload = {
+      teamId,
+      playerId: selectedPlayerId,
+      skillType,
+      subType: subType || null,
+      zone: zone || null,
+      outcome,
+      outcomeDetail: outcomeDetail || null,
+      errorCategory: errorCategory || "NONE",
+      errorType: errorType || null,
+      pressureFlag,
+      fatigueFlag,
+      tacticalIntention: tacticalIntention || null,
+      notes: notes || null,
+    };
+
+    const tempId = `temp_${Date.now()}`;
+    setRecent(prev => [{
+      id: tempId,
+      at: new Date().toISOString(),
+      playerName: `${selectedPlayer?.firstName || ""} ${selectedPlayer?.lastName || ""}`.trim(),
+      jerseyNumber: selectedPlayer?.jerseyNumber ?? "",
+      skillType, outcome, outcomeDetail,
+    }, ...prev].slice(0, 20));
+
+    const res = await fetch(`/api/matches/${matchId}/devstats/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const d = await res.json().catch(() => null);
+    if (!res.ok || !d?.ok) {
+      setRecent(prev => prev.filter(x => x.id !== tempId));
+      return alert(d?.error || "Failed to save event.");
+    }
+    setRecent(prev => prev.map(x => x.id === tempId ? { ...x, id: d.event.id } : x));
+
+    // reset quick fields
+    setNotes("");
+    if (outcome === "MINUS") {
+      setOutcome("PLUS");
+      setErrorCategory("NONE");
+      setErrorType("");
+    }
+  }
+
+  async function undoLast() {
+    if (locked) return alert("Stats locked for this match.");
+    const last = recent[0];
+    if (!last || String(last.id).startsWith("temp_")) return;
+
+    const res = await fetch(`/api/matches/${matchId}/devstats/events/${last.id}`, { method: "DELETE" });
+    const d = await res.json().catch(() => null);
+    if (!res.ok || !d?.ok) return alert(d?.error || "Undo failed.");
+    setRecent(prev => prev.slice(1));
+  }
+
+  async function generateReport() {
+    const res = await fetch(`/api/matches/${matchId}/devstats/report/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ teamId }),
+    });
+    const d = await res.json().catch(() => null);
+    if (!res.ok || !d?.ok) return alert(d?.error || "Report failed.");
+    alert("Development Report Generated ✅");
+    console.log("REPORT:", d.report);
+  }
+
+  if (loading) return <div style={S.wrap}>Loading...</div>;
+  if (!init) return <div style={S.wrap}>Init failed.</div>;
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.topRow}>
+        <div>
+          <div style={S.h1}>Touch Development Stats</div>
+          <div style={S.sub}>
+            Match: <b>{matchId}</b> • Team: <b>{teamId}</b>{" "}
+            {locked ? <span style={S.badge}>LOCKED</span> : <span style={S.badge}>OPEN</span>}
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:10 }}>
+          <button style={S.btn} onClick={generateReport}>Generate Report</button>
+          <button style={{ ...S.btn, opacity: recent.length ? 1 : 0.4 }} onClick={undoLast} disabled={!recent.length || locked}>
+            Undo Last
+          </button>
+        </div>
+      </div>
+
+      {/* Player grid */}
+      <div style={S.playerGrid}>
+        {players.map(p => {
+          const active = p.id === selectedPlayerId;
+          return (
+            <button key={p.id} style={{ ...S.playerCard, borderColor: active ? "#111" : "#ddd" }} onClick={() => setSelectedPlayerId(p.id)}>
+              <img src={p.photoUrl || "/default-avatar.png"} alt="" style={S.photo}/>
+              <div>
+                <div style={S.pName}>{(p.firstName||"").toUpperCase()} {(p.lastName||"").toUpperCase()}</div>
+                <div style={S.pMeta}>Jersey: <b>{p.jerseyNumber ?? "-"}</b></div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Touch pad */}
+      <div style={S.pad}>
+        <div style={S.sectionTitle}>1) Skill</div>
+        <div style={S.rowGrid}>
+          {(enums.SKILL_TYPES||[]).map(s => (
+            <button key={s} style={{ ...S.bigBtn, background: skillType===s ? "#111" : "#fff", color: skillType===s ? "#fff" : "#111" }}
+              disabled={locked}
+              onClick={()=>setSkillType(s)}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <div style={S.twoCol}>
+          <div>
+            <div style={S.sectionTitle}>2) Sub Type</div>
+            <select style={S.select} value={subType} onChange={e=>setSubType(e.target.value)} disabled={locked}>
+              {(cfg.subTypes||[]).map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <div style={S.sectionTitle}>3) Zone</div>
+            <select style={S.select} value={zone} onChange={e=>setZone(e.target.value)} disabled={locked}>
+              {(enums.ZONES||[]).map(z => <option key={z} value={z}>{z}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <div style={S.sectionTitle}>4) Outcome (Quality)</div>
+        <div style={S.rowGrid3}>
+          {["PLUS","ZERO","MINUS"].map(o => (
+            <button key={o} style={{ ...S.bigBtn, background: outcome===o ? "#111" : "#fff", color: outcome===o ? "#fff" : "#111" }}
+              disabled={locked}
+              onClick={()=>setOutcome(o)}
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <div style={S.twoCol}>
+          <div>
+            <div style={S.sectionTitle}>5) Outcome Detail</div>
+            <select style={S.select} value={outcomeDetail} onChange={e=>setOutcomeDetail(e.target.value)} disabled={locked}>
+              {(cfg.outcomeDetails||[]).map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <div style={S.sectionTitle}>6) Tactical Intention (Serve)</div>
+            <select style={S.select} value={tacticalIntention} onChange={e=>setTacticalIntention(e.target.value)} disabled={locked || skillType!=="SERVE"}>
+              {(cfg.tactical||["NONE"]).map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <div style={S.twoCol}>
+          <div>
+            <div style={S.sectionTitle}>7) Error Category</div>
+            <select style={S.select} value={errorCategory} onChange={e=>setErrorCategory(e.target.value)} disabled={locked}>
+              {(enums.ERROR_CATEGORY||[]).map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <div style={S.sectionTitle}>8) Error Type</div>
+            <select style={S.select} value={errorType} onChange={e=>setErrorType(e.target.value)} disabled={locked || errorCategory==="NONE"}>
+              <option value="">(none)</option>
+              {(cfg.errorTypes||[]).map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <div style={S.flags}>
+          <label style={S.flag}><input type="checkbox" checked={pressureFlag} onChange={e=>setPressureFlag(e.target.checked)} disabled={locked}/> Pressure</label>
+          <label style={S.flag}><input type="checkbox" checked={fatigueFlag} onChange={e=>setFatigueFlag(e.target.checked)} disabled={locked}/> Fatigue</label>
+        </div>
+
+        <div style={{ height: 10 }} />
+
+        <div style={S.sectionTitle}>9) Notes (optional)</div>
+        <textarea style={S.textarea} value={notes} onChange={e=>setNotes(e.target.value)} disabled={locked} placeholder="Quick note..."/>
+
+        <button style={S.saveBtn} onClick={saveEvent} disabled={locked}>
+          SAVE EVENT
+        </button>
+      </div>
+
+      {/* Recent */}
+      <div style={S.recent}>
+        <div style={S.sectionTitle}>Recent Events</div>
+        {recent.length===0 ? <div style={{opacity:0.7}}>No events yet.</div> : (
+          <div style={{ display:"grid", gap:8 }}>
+            {recent.map(e => (
+              <div key={e.id} style={S.recentItem}>
+                <div>
+                  <div style={{ fontWeight:900 }}>{e.playerName} <span style={{opacity:0.7}}>#{e.jerseyNumber}</span></div>
+                  <div style={{ fontSize:12, opacity:0.75 }}>{e.skillType} • {e.outcome} • {e.outcomeDetail}</div>
+                </div>
+                <div style={{ fontSize:12, opacity:0.75 }}>{new Date(e.at).toLocaleTimeString()}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Spec text display (optional) */}
+      <details style={{ marginTop: 16 }}>
+        <summary style={{ cursor:"pointer", fontWeight:900 }}>View Full Afrocat Advanced Stats Spec (as-is)</summary>
+        <pre style={{ whiteSpace:"pre-wrap", fontSize:12, background:"#fafafa", padding:12, borderRadius:12, border:"1px solid #eee" }}>
+          {init.specText}
+        </pre>
+      </details>
+    </div>
+  );
+}
+
+const S = {
+  wrap: { maxWidth: 1200, margin: "16px auto", padding: 12, fontFamily: "Arial" },
+  topRow: { display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 },
+  h1: { fontSize: 18, fontWeight: 900 },
+  sub: { fontSize: 12, opacity: 0.8, marginTop: 4 },
+  badge: { marginLeft: 8, padding: "2px 10px", border: "1px solid #111", borderRadius: 999, fontSize: 12 },
+  btn: { padding:"10px 12px", border:"1px solid #111", borderRadius:10, background:"#fff", fontWeight:900, cursor:"pointer" },
+
+  playerGrid: { marginTop: 12, display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))", gap:10 },
+  playerCard: { display:"flex", gap:10, border:"2px solid #ddd", borderRadius:14, padding:10, background:"#fff", textAlign:"left", cursor:"pointer" },
+  photo: { width:62, height:62, borderRadius:12, objectFit:"cover", border:"1px solid #ddd" },
+  pName: { fontWeight: 900, fontSize: 13 },
+  pMeta: { fontSize: 12, opacity: 0.85 },
+
+  pad: { marginTop: 14, border:"1px solid #ddd", borderRadius:14, padding:12 },
+  sectionTitle: { fontWeight: 900, marginBottom: 8 },
+  rowGrid: { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))", gap:10 },
+  rowGrid3: { display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:10 },
+  bigBtn: { padding:"14px 10px", border:"2px solid #111", borderRadius:14, fontWeight:900, cursor:"pointer" },
+  twoCol: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 },
+  select: { width:"100%", padding:10, borderRadius:10, border:"1px solid #ccc" },
+  flags: { display:"flex", gap:14, alignItems:"center" },
+  flag: { display:"flex", gap:8, alignItems:"center", fontWeight:900, fontSize:12 },
+  textarea: { width:"100%", minHeight:70, padding:10, borderRadius:10, border:"1px solid #ccc" },
+  saveBtn: { marginTop: 10, width:"100%", padding:"14px 12px", borderRadius:14, border:"1px solid #111", background:"#111", color:"#fff", fontWeight:900, cursor:"pointer" },
+
+  recent: { marginTop: 14, border:"1px solid #ddd", borderRadius:14, padding:12 },
+  recentItem: { display:"flex", justifyContent:"space-between", alignItems:"center", border:"1px solid #eee", borderRadius:12, padding:10, background:"#fafafa" },
+};
+
+/* =======================================================================================
+FRONTEND: src/components/CoachDashboardAlerts.jsx
+Red/Yellow/Green table + focus areas
+======================================================================================= */
+import React, { useEffect, useState } from "react";
+
+export default function CoachDashboardAlerts({ teamId, matchId }) {
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const r = await fetch(`/api/coach/devstats/dashboard?teamId=${teamId}&matchId=${matchId}`);
+      const d = await r.json();
+      if (d?.ok) setData(d);
+    })();
+  }, [teamId, matchId]);
+
+  if (!data) return <div style={{ padding:12 }}>Loading dashboard...</div>;
+
+  const rows = data.dashboard || [];
+
+  function badgeColor(status) {
+    if (status === "RED") return "#ffdddd";
+    if (status === "YELLOW") return "#fff3cd";
+    return "#ddffdd";
+  }
+
+  return (
+    <div style={{ maxWidth: 1100, margin:"16px auto", padding:12, fontFamily:"Arial" }}>
+      <h2>Coach Dashboard Alerts</h2>
+
+      <div style={{ border:"1px solid #ddd", borderRadius:12, overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"#f2f2f2" }}>
+              <th style={TH}>Player</th>
+              <th style={TH}>Serve Err%</th>
+              <th style={TH}>Receive -%</th>
+              <th style={TH}>Attack Eff</th>
+              <th style={TH}>Decision Err</th>
+              <th style={TH}>Status</th>
+              <th style={TH}>Reasons</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.playerId} style={{ background: badgeColor(r.status) }}>
+                <td style={TD}><b>{r.playerName}</b> <span style={{opacity:0.7}}>#{r.jerseyNumber}</span></td>
+                <td style={TD}>{r.keyMetrics.serveErrorPct}</td>
+                <td style={TD}>{r.keyMetrics.receiveMinusPct}</td>
+                <td style={TD}>{r.keyMetrics.attackEfficiency}</td>
+                <td style={TD}>{r.keyMetrics.decisionErrors}</td>
+                <td style={TD}><b>{r.status}</b></td>
+                <td style={TD}>{(r.reasons||[]).join(", ")}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ marginTop: 14, border:"1px solid #ddd", borderRadius:12, padding:12 }}>
+        <h3>Focus Areas Next Training</h3>
+        {(data.focus || []).map(f => (
+          <div key={f.playerId} style={{ padding:"8px 0", borderBottom:"1px solid #eee" }}>
+            <div style={{ fontWeight:900 }}>{f.playerName}</div>
+            <ul style={{ margin:"6px 0 0 18px" }}>
+              {(f.focusAreas||[]).map((x,i)=><li key={i}>{x}</li>)}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const TH = { border:"1px solid #ddd", padding:8, textAlign:"left", fontSize:12 };
+const TD = { border:"1px solid #ddd", padding:8, fontSize:12 };
+
+/* =======================================================================================
+IMPORTANT NOTES TO REPLIT (DO THIS)
+=======================================================================================
+
+1) REPLACE OLD ENTER STATS:
+- Remove old route/page links.
+- In navigation, point “Enter Stats” to the new component/page that renders:
+  <TouchDevelopmentStats matchId={...} teamId={...} />
+
+2) ADD SERVER ROUTER:
+- In server/index.js add:
+  import devStatsRouter from "./devstats/routes.js";
+  app.use("/api", devStatsRouter);
+
+3) DATABASE:
+- If you use Prisma, create MatchEvent table with these fields:
+  id, matchId, teamId, playerId, rotation, skillType, subType, zone, tempo,
+  outcome, outcomeDetail, errorCategory, errorType, pressureFlag, fatigueFlag,
+  tacticalIntention, notes, createdAt, createdBy
+
+- Also add matchEvent.findMany (used by report/dashboard). If missing, implement.
+
+4) LOCK RULE:
+- If statsEntered OR scoreLocked OR scoreSource=STATS => block create/delete events.
+
+5) The FULL spec text is embedded in the init response and shown in the UI under “View Spec”.
+
+END
+======================================================================================= */

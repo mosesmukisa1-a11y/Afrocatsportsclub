@@ -11,6 +11,8 @@ import { eq, and } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { ALL_ENUMS, SKILL_TYPES, OUTCOME } from "./devstats/enums";
+import { generateDevelopmentReport } from "./devstats/report";
 
 const TEAM_GENDER_RULES: Record<string, string> = {
   "Afrocat D": "MALE",
@@ -5022,6 +5024,143 @@ th{background:#0d7377;color:white}
     }
   });
 
+  // ─── ADVANCED DEVELOPMENT STATS ────────────────────
+  app.get("/api/matches/:matchId/devstats/init", requireAuth, async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const teamId = req.query.teamId as string;
+      if (!teamId) return res.status(400).json({ ok: false, message: "teamId required" });
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ ok: false, message: "Match not found" });
+
+      const players = await storage.getPlayersByTeam(teamId);
+      const events = await storage.getMatchEvents(matchId);
+      const teamEvents = events.filter((e: any) => e.teamId === teamId);
+
+      const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
+
+      res.json({
+        ok: true,
+        match: { ...match, isLocked },
+        locked: isLocked,
+        players: players.map((p: any) => ({
+          id: p.id, firstName: p.firstName, lastName: p.lastName,
+          jerseyNo: p.jerseyNo, position: p.position, photoUrl: p.photoUrl,
+        })),
+        events: teamEvents,
+        enums: ALL_ENUMS,
+      });
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/matches/:matchId/devstats/events", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const b = req.body || {};
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ ok: false, message: "Match not found" });
+
+      const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
+      if (isLocked) return res.status(403).json({ ok: false, message: "Stats locked: match already submitted." });
+
+      const required = ["teamId", "playerId", "skillType", "outcome"];
+      for (const k of required) {
+        if (!b[k]) return res.status(400).json({ ok: false, message: `Missing ${k}` });
+      }
+
+      if (!SKILL_TYPES.includes(b.skillType)) return res.status(400).json({ ok: false, message: "Invalid skillType" });
+      if (!OUTCOME.includes(b.outcome)) return res.status(400).json({ ok: false, message: "Invalid outcome" });
+
+      if (b.outcome === "MINUS") {
+        if (!b.outcomeDetail) return res.status(400).json({ ok: false, message: "Outcome detail required for MINUS" });
+        if (!b.errorCategory || b.errorCategory === "NONE") return res.status(400).json({ ok: false, message: "Error category required for MINUS" });
+      }
+
+      const event = await storage.createMatchEvent({
+        matchId,
+        teamId: b.teamId,
+        playerId: b.playerId,
+        action: b.skillType,
+        outcome: b.outcome,
+        rotation: b.rotation ?? null,
+        subType: b.subType ?? null,
+        zone: b.zone ?? null,
+        tempo: b.tempo ?? null,
+        outcomeDetail: b.outcomeDetail ?? null,
+        errorCategory: b.errorCategory ?? "NONE",
+        errorType: b.errorType ?? null,
+        pressureFlag: !!b.pressureFlag,
+        fatigueFlag: !!b.fatigueFlag,
+        tacticalIntention: b.tacticalIntention ?? null,
+        notes: b.notes ?? null,
+        createdBy: (req as any).user?.id || null,
+      });
+
+      res.json({ ok: true, event });
+    } catch (err) { next(err); }
+  });
+
+  app.delete("/api/matches/:matchId/devstats/events/:eventId", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId, eventId } = req.params;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ ok: false, message: "Match not found" });
+
+      const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
+      if (isLocked) return res.status(403).json({ ok: false, message: "Stats locked" });
+
+      await storage.deleteMatchEvent(eventId);
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/matches/:matchId/devstats/report/generate", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const teamId = req.body?.teamId;
+      if (!teamId) return res.status(400).json({ ok: false, message: "teamId required" });
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ ok: false, message: "Match not found" });
+
+      const rosterPlayers = await storage.getPlayersByTeam(teamId);
+      const allEvents = await storage.getMatchEvents(matchId);
+      const events = allEvents.filter((e: any) => e.teamId === teamId);
+
+      const report = generateDevelopmentReport({ match, teamId, rosterPlayers, events });
+      res.json({ ok: true, report });
+    } catch (err) { next(err); }
+  });
+
+  app.get("/api/coach/devstats/dashboard", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const teamId = req.query.teamId as string;
+      const matchId = req.query.matchId as string;
+      if (!teamId || !matchId) return res.status(400).json({ ok: false, message: "teamId and matchId required" });
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ ok: false, message: "Match not found" });
+
+      const rosterPlayers = await storage.getPlayersByTeam(teamId);
+      const allEvents = await storage.getMatchEvents(matchId);
+      const events = allEvents.filter((e: any) => e.teamId === teamId);
+
+      const report = generateDevelopmentReport({ match, teamId, rosterPlayers, events });
+
+      res.json({
+        ok: true,
+        dashboard: report.coachAlerts,
+        teamSummary: report.teamSummary,
+        focus: report.playerSummaries.map((p: any) => ({
+          playerId: p.playerId, playerName: p.playerName, focusAreas: p.focusAreas
+        })),
+      });
+    } catch (err) { next(err); }
+  });
+
+  // ─── TOUCH STATS (LEGACY) ────────────────────
   app.get("/api/matches/:matchId/stats-touch/init", requireAuth, async (req, res, next) => {
     try {
       const { matchId } = req.params;

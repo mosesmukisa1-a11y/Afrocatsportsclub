@@ -101,6 +101,13 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - **Matches.tsx UI**: Edit button (ADMIN), Staff Assignment button, O2BIS generation button on upcoming match cards.
 - **Touch Stats Sync**: `POST /api/matches/:matchId/stats-touch/sync` — aggregates all touch events (SERVE/ATTACK/BLOCK/RECEIVE/DIG/SET with +/0/- outcomes) into `playerMatchStats` table. Calculates pointsTotal, generates Smart Focus recommendations, marks match as statsEntered. Frontend "Sync to Stats" button in TouchStats page with success/locked state indicators.
 
+## Advanced Development Stats Platform
+- **Dev Stats Page** (`/dev-stats`): Full development-focused stat tracking with detailed fields per skill type (Serve types, Receive ratings, Set quality, Attack outcomes, Block types, Dig types). Error classification (Technical/Decision/Pressure/Fatigue). Pressure + Fatigue flags. Zones, tactical intentions, notes.
+- **Schema**: `matchEvents` table extended with: `rotation`, `subType`, `zone`, `tempo`, `outcomeDetail`, `errorCategory`, `errorType`, `pressureFlag`, `fatigueFlag`, `tacticalIntention`, `notes`.
+- **Backend modules**: `server/devstats/enums.ts` (all volleyball enum constants), `server/devstats/metrics.ts` (aggregation helpers, attack efficiency, skill summaries), `server/devstats/report.ts` (development report generator with weakness detection + training suggestions).
+- **Endpoints**: `GET /api/matches/:matchId/devstats/init` (roster + enums + events), `POST /api/matches/:matchId/devstats/events` (create event with detailed validation), `DELETE /api/matches/:matchId/devstats/events/:eventId` (undo), `POST /api/matches/:matchId/devstats/report/generate` (auto development report), `GET /api/coach/devstats/dashboard` (R/Y/G alerts + team summary + focus areas).
+- **Coach Dashboard** (`/coach-dashboard`): Red/Yellow/Green player alerts table. Team performance summary (serve/receive/attack/block/dig/set). Per-player training focus recommendations. Rule-based thresholds: RED (receive minus% >= 20, serve error% >= 18, attack eff < 0, decision errors >= 6), YELLOW (moderate thresholds).
+
 ## New Features
 - **Stats Comparison** (`/stats-comparison`): Side-by-side player stat comparison with visual bars. Select two players, compare kills/aces/blocks/digs/assists/points/errors/matches + awards count. Uses `GET /api/stats/compare?player1=ID&player2=ID`.
 - **Real-Time Chat** (`/chat`): Room-based messaging (General + per-team rooms). REST-based with 3s auto-refresh via react-query. Role badges (ADMIN=gold, COACH=teal, PLAYER=muted). `chatMessages` table with `sentAt` timestamp. Endpoints: `GET /api/chat/rooms`, `GET /api/chat/messages/:roomId`, `POST /api/chat/messages`.

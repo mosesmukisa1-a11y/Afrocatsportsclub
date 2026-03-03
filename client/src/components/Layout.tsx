@@ -5,7 +5,8 @@ import {
   CalendarCheck, DollarSign, Activity, FileText, 
   LogOut, ShieldAlert, Award, Menu, X, Star,
   ScrollText, FolderOpen, UserCircle, UserCheck,
-  BarChart3, MessageCircle, Gamepad2, FileSpreadsheet
+  BarChart3, MessageCircle, Gamepad2, FileSpreadsheet,
+  Microscope, Gauge
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import logo from "@assets/afrocate_logo_1772226294597.png";
@@ -18,6 +19,8 @@ const allNavItems = [
   { icon: Trophy, label: "Matches", href: "/matches", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: ClipboardList, label: "Enter Stats", href: "/stats", roles: ["ADMIN","MANAGER","STATISTICIAN","COACH","PLAYER"] },
   { icon: ClipboardList, label: "Touch Stats", href: "/touch-stats", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
+  { icon: Microscope, label: "Dev Stats", href: "/dev-stats", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
+  { icon: Gauge, label: "Coach Dashboard", href: "/coach-dashboard", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: CalendarCheck, label: "Attendance", href: "/attendance", roles: ["ADMIN","MANAGER","COACH"] },
   { icon: DollarSign, label: "Finance", href: "/finance", roles: ["ADMIN","MANAGER","FINANCE"] },
   { icon: Activity, label: "Injuries", href: "/injuries", roles: ["ADMIN","MANAGER","MEDICAL"] },

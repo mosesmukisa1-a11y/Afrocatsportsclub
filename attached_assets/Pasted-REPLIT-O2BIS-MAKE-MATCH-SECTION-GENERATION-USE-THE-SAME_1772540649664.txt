@@ -1,0 +1,148 @@
+REPLIT – O2BIS: MAKE MATCH-SECTION GENERATION USE THE SAME TEMPLATE AS DOCUMENT SECTION (NO VISUAL/PHYSICAL CHANGES) + PULL ASSIGNED STAFF + LIBERO RULE
+
+GOAL:
+- The O2BIS generated from the Match section must be IDENTICAL to the one in Document Centre.
+- Do NOT change layout/fonts/positions/fields.
+- Only add ability to auto-fill assigned staff (Head Coach, Assistant, Medic, etc.) from the system.
+- Add validation rule for squad size:
+   • If selected players are 12 or less → just fill (no libero enforcement)
+   • If selected players are 14 or more → ensure at least 2 players are marked as LIBEROS
+
+========================================================
+1) IMPORTANT FIX: USE ONE SINGLE O2BIS GENERATOR
+========================================================
+
+Currently you have 2 generators:
+- Document Centre O2BIS
+- Match Section O2BIS
+
+REQUIREMENT:
+DELETE/STOP using the Match-section generator.
+Instead, Match-section must call the SAME backend function used by Document Centre.
+
+Implementation:
+- Move the Document Centre O2BIS code into a shared function:
+   generateO2BISPdf(matchId, options)
+- Both endpoints call the same function.
+
+========================================================
+2) STAFF AUTOFILL (NO LAYOUT CHANGES)
+========================================================
+
+Keep the same template.
+Only change “data source” feeding the PDF fields.
+
+When generating O2BIS, pull staff from system:
+
+MatchStaffAssignments:
+- headCoachUserId (required)
+- assistantCoachUserId (optional)
+- medicUserId (optional)
+- teamManagerUserId (optional)
+
+Also allow storing staff in Match itself if you already do that.
+
+PDF mapping (NO layout change):
+- Wherever the template currently expects Coach/Assistant/Medic names:
+  fill from assigned staff records.
+- If missing, keep blank EXACTLY as current template (no extra labels)
+
+If staff userId exists:
+- display “FirstName LastName”
+
+========================================================
+3) LIBERO RULE (ONLY WHEN SQUAD >= 14)
+========================================================
+
+We must preserve current template.
+So we ONLY enforce and/or auto-assign LIBERO flags in data.
+
+Squad selection data MUST have:
+MatchSquad:
+- matchId
+- teamId
+- playerId
+- isLibero (boolean) default false
+
+Rule:
+- Let totalSelected = number of selected players for that team in that match.
+
+IF totalSelected <= 12:
+  - do not enforce liberos, just generate O2BIS
+
+IF totalSelected >= 14:
+  - require at least 2 players with isLibero=true
+  - If less than 2:
+      Prompt user:
+       “Squad is 14+ players. You must mark 2 liberos. Do you want the system to auto-select 2 liberos now?”
+      Options:
+       [Auto-Select] [Go Back]
+  - Auto-select logic (safe):
+      - choose 2 players whose POSITION = "LIBERO" if your Player profile stores position
+      - if no position field, select 2 with lowest jerseyNumbers among selected who are not already libero
+      - set isLibero=true for those 2
+
+When generating PDF:
+- Keep same rows.
+- Mark the “L”/Libero indicator in the SAME place template already uses (if template has it).
+- If template doesn’t have explicit libero indicator, do not add any new column; instead ensure liberos appear in the designated libero lines if your template already expects them.
+  (IMPORTANT: do not change layout)
+
+========================================================
+4) MATCH SECTION BUTTON – EXACT SAME PDF OUTPUT
+========================================================
+
+Match Section “Generate O2BIS” must call:
+GET /api/docs/o2bis/:matchId.pdf?teamId=...&source=match
+
+But backend must ignore source and use the same generator and template.
+
+========================================================
+5) MINIMUM CHANGES REQUIRED (NO UI REDESIGN)
+========================================================
+
+A) Backend:
+- Ensure match generator calls shared document generator
+- Add staff lookup + mapping before writing into PDF fields
+- Add libero validation check before generating
+
+B) Frontend:
+- If libero rule fails (14+ and liberos <2):
+  show simple modal “Auto-select 2 liberos?” (Yes/No)
+- If Yes -> call endpoint:
+  POST /api/matches/:matchId/squad/auto-select-liberos?teamId=...
+
+Then regenerate PDF.
+
+========================================================
+6) ENDPOINTS TO ADD/ADJUST
+========================================================
+
+1) Shared PDF endpoint (already exists in doc centre):
+GET /api/docs/o2bis/:matchId.pdf?teamId=...
+
+Modify this endpoint to:
+- Pull assigned staff and inject into PDF data
+- Enforce libero rule (only if totalSelected >=14)
+
+2) Auto-select liberos:
+POST /api/matches/:matchId/squad/auto-select-liberos
+Body:
+{ teamId }
+
+Returns:
+{ ok:true, selectedLiberos:[playerId1, playerId2] }
+
+========================================================
+7) TEST CASES REPLIT MUST VERIFY
+========================================================
+
+1) Generate O2BIS from Document Centre → unchanged look
+2) Generate O2BIS from Match Section → EXACTLY same look as above
+3) Assign head coach/assistant/medic → names appear on O2BIS without layout change
+4) Squad size 12 → generates without asking about liberos
+5) Squad size 14 → if liberos <2 prompt appears, then after selection O2BIS generates successfully
+
+========================================================
+END – IMPLEMENT EXACTLY, NO TEMPLATE VISUAL CHANGES
+========================================================
