@@ -273,6 +273,7 @@ export const api = {
   getClubContractAdminSummary: () => apiFetch<any>("/contract/admin/summary"),
 
   getTouchStatsInit: (matchId: string, teamId: string) => apiFetch<any>(`/matches/${matchId}/stats-touch/init?teamId=${teamId}`),
+  syncTouchStats: (matchId: string) => apiFetch<any>(`/matches/${matchId}/stats-touch/sync`, { method: "POST" }),
   getMatchEvents: (matchId: string) => apiFetch<any[]>(`/matches/${matchId}/events`),
   createMatchEvent: (matchId: string, data: { playerId: string; action: string; outcome: string; teamId: string }) =>
     apiFetch<any>(`/matches/${matchId}/events`, { method: "POST", body: JSON.stringify(data) }),

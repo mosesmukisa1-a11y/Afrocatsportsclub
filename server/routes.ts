@@ -5106,6 +5106,80 @@ th{background:#0d7377;color:white}
     } catch (err) { next(err); }
   });
 
+  app.post("/api/matches/:matchId/stats-touch/sync", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+
+      const events = await storage.getMatchEvents(matchId);
+      if (events.length === 0) return res.status(400).json({ message: "No touch events to sync" });
+
+      const playerAgg: Record<string, {
+        spikesKill: number; spikesError: number;
+        servesAce: number; servesError: number;
+        blocksSolo: number; blocksAssist: number;
+        receivePerfect: number; receiveError: number;
+        digs: number; settingAssist: number; settingError: number;
+      }> = {};
+
+      for (const ev of events) {
+        if (!playerAgg[ev.playerId]) {
+          playerAgg[ev.playerId] = {
+            spikesKill: 0, spikesError: 0,
+            servesAce: 0, servesError: 0,
+            blocksSolo: 0, blocksAssist: 0,
+            receivePerfect: 0, receiveError: 0,
+            digs: 0, settingAssist: 0, settingError: 0,
+          };
+        }
+        const s = playerAgg[ev.playerId];
+        const a = ev.action;
+        const o = ev.outcome;
+
+        if (a === "ATTACK" && o === "PLUS") s.spikesKill++;
+        else if (a === "ATTACK" && o === "MINUS") s.spikesError++;
+        else if (a === "SERVE" && o === "PLUS") s.servesAce++;
+        else if (a === "SERVE" && o === "MINUS") s.servesError++;
+        else if (a === "BLOCK" && o === "PLUS") s.blocksSolo++;
+        else if (a === "BLOCK" && o === "ZERO") s.blocksAssist++;
+        else if (a === "RECEIVE" && o === "PLUS") s.receivePerfect++;
+        else if (a === "RECEIVE" && o === "MINUS") s.receiveError++;
+        else if (a === "DIG" && o === "PLUS") s.digs++;
+        else if (a === "SET" && o === "PLUS") s.settingAssist++;
+        else if (a === "SET" && o === "MINUS") s.settingError++;
+      }
+
+      const results = [];
+      for (const [playerId, stat] of Object.entries(playerAgg)) {
+        const pointsTotal =
+          (stat.spikesKill * 2) + (stat.servesAce * 2) + (stat.blocksSolo * 2) +
+          stat.blocksAssist + stat.digs + stat.settingAssist -
+          (stat.spikesError * 2) - (stat.servesError * 2) - (stat.receiveError * 2) - (stat.settingError * 2);
+
+        const saved = await storage.upsertStat({ ...stat, matchId, playerId, pointsTotal });
+        results.push(saved);
+
+        const player = await storage.getPlayer(playerId);
+        const focusAreas: string[] = [];
+        if (stat.servesError >= 3) focusAreas.push("Serving consistency");
+        if (stat.spikesError >= 3) focusAreas.push("Attack control");
+        if (stat.receiveError >= 3) focusAreas.push("Serve reception");
+        if (stat.settingError >= 3) focusAreas.push("Setting accuracy");
+        if (player && player.position && player.position.toLowerCase().includes("middle") && (stat.blocksSolo + stat.blocksAssist) < 2) {
+          focusAreas.push("Blocking timing");
+        }
+        if (focusAreas.length > 0) {
+          await storage.createSmartFocus({ playerId, matchId, focusAreas });
+        }
+      }
+
+      await storage.updateMatch(matchId, { statsEntered: true, scoreSource: "STATS" });
+
+      res.json({ ok: true, synced: results.length, stats: results });
+    } catch (err) { next(err); }
+  });
+
   app.delete("/api/matches/:matchId/events/:eventId", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
       const { matchId, eventId } = req.params;

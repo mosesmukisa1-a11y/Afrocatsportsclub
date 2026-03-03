@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useMemo, useCallback } from "react";
 import {
   Zap, Target, Shield, Hand, ArrowUpCircle, CircleDot,
-  Undo2, Lock, Unlock, User, Trophy
+  Undo2, Lock, Unlock, User, Trophy, Upload, CheckCircle2
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -50,12 +50,14 @@ export default function TouchStats() {
   const [recentEvents, setRecentEvents] = useState<any[]>([]);
 
   const selectedMatch = matches.find((m: any) => m.id === selectedMatchId);
+  const [syncResetKey, setSyncResetKey] = useState(0);
 
   const handleMatchChange = useCallback((matchId: string) => {
     setSelectedMatchId(matchId);
     setSelectedPlayerId(null);
     setSelectedAction(null);
     setRecentEvents([]);
+    setSyncResetKey(k => k + 1);
     const match = matches.find((m: any) => m.id === matchId);
     if (match?.teamId) setSelectedTeamId(match.teamId);
   }, [matches]);
@@ -107,6 +109,17 @@ export default function TouchStats() {
       toast({ title: "Undone", description: "Last event removed." });
     },
     onError: (err: any) => toast({ title: "Undo Failed", description: err.message, variant: "destructive" }),
+  });
+
+  const syncMut = useMutation({
+    mutationKey: ["sync-touch-stats", syncResetKey],
+    mutationFn: () => api.syncTouchStats(selectedMatchId),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      toast({ title: "Stats Synced!", description: `${data.synced} player stats saved to database. Smart Focus generated.` });
+    },
+    onError: (err: any) => toast({ title: "Sync Failed", description: err.message, variant: "destructive" }),
   });
 
   const handleOutcome = useCallback((outcome: string) => {
@@ -334,6 +347,44 @@ export default function TouchStats() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {allEvents.length > 0 && !isLocked && (
+              <div className="afrocat-card p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-display font-bold text-afrocat-text text-sm" data-testid="text-sync-title">
+                      Sync Touch Stats to Player Stats
+                    </h3>
+                    <p className="text-xs text-afrocat-muted mt-1">
+                      Aggregate all {allEvents.length} touch events into official player match statistics, career stats, and Smart Focus recommendations.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => syncMut.mutate()}
+                    disabled={syncMut.isPending}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-afrocat-teal text-white font-bold text-sm hover:bg-afrocat-teal/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                    data-testid="button-sync-stats"
+                  >
+                    {syncMut.isPending ? (
+                      <><Upload className="w-4 h-4 animate-spin" /> Syncing...</>
+                    ) : syncMut.isSuccess ? (
+                      <><CheckCircle2 className="w-4 h-4" /> Synced!</>
+                    ) : (
+                      <><Upload className="w-4 h-4" /> Sync to Stats</>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isLocked && allEvents.length > 0 && (
+              <div className="afrocat-card p-4 flex items-center gap-3 border-afrocat-green/30">
+                <CheckCircle2 className="w-5 h-5 text-afrocat-green shrink-0" />
+                <p className="text-sm text-afrocat-green font-medium" data-testid="text-stats-synced">
+                  Stats have been synced to player records. Match is locked.
+                </p>
               </div>
             )}
 

@@ -99,6 +99,7 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - **O2BIS Skip Modal**: Frontend shows missing info list with "Go Back & Fill" / "Skip & Generate" buttons. PDF downloaded via fetch+blob for JWT auth compatibility.
 - **Staff-Eligible Users Endpoint**: `GET /api/staff-eligible-users` for ADMIN/MANAGER/COACH to populate staff assignment dropdowns.
 - **Matches.tsx UI**: Edit button (ADMIN), Staff Assignment button, O2BIS generation button on upcoming match cards.
+- **Touch Stats Sync**: `POST /api/matches/:matchId/stats-touch/sync` — aggregates all touch events (SERVE/ATTACK/BLOCK/RECEIVE/DIG/SET with +/0/- outcomes) into `playerMatchStats` table. Calculates pointsTotal, generates Smart Focus recommendations, marks match as statsEntered. Frontend "Sync to Stats" button in TouchStats page with success/locked state indicators.
 
 ## New Features
 - **Stats Comparison** (`/stats-comparison`): Side-by-side player stat comparison with visual bars. Select two players, compare kills/aces/blocks/digs/assists/points/errors/matches + awards count. Uses `GET /api/stats/compare?player1=ID&player2=ID`.
