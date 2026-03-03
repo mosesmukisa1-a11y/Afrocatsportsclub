@@ -40,7 +40,7 @@ A full-stack management portal for the Afrocat Volleyball Club. Manages match st
 - Used in: Register.tsx (required photo), Players.tsx (player photo), ProfileSetup.tsx (profile photo)
 
 ## Key Entities
-Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, ContractIssuedItems, ContractTransportBenefits, NvfTransferFeeSchedules, PlayerTransferCases, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments, ShopItems, MediaPosts, MediaTags, MediaTagRequests
+Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, ContractIssuedItems, ContractTransportBenefits, NvfTransferFeeSchedules, PlayerTransferCases, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments, ShopItems, MediaPosts, MediaTags, MediaTagRequests, MatchEvents
 
 ## RBAC Roles
 - **Super Admin**: mosesmukisa1@gmail.com — only user who can assign roles to others. Flagged via `isSuperAdmin` in DB.
@@ -71,6 +71,7 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Player Delete (Admin)**: Cascade deletes stats, attendance, injuries, awards, contracts, smart focus
 - **Forgot Password**: Self-service forgot password flow — generates reset link (no email service). `POST /api/auth/forgot-password` → token-based reset via `/reset-password`
 - **Camera Capture**: Shared `CameraCapture` component (`client/src/components/CameraCapture.tsx`) used in both Registration and Admin Add Player forms. Captures photo via device camera with preview.
+- **SoloStats Touch**: Event-based stat entry (`/touch-stats`). Tap Player → Action (Serve/Receive/Set/Attack/Block/Dig/Free Ball) → Outcome (+/0/−). Real-time feed with Undo. Locked state enforcement (statsEntered/scoreLocked/scoreSource). Server validates action/outcome enums, player-team association, match-event scoping. Roles: ADMIN, MANAGER, COACH, STATISTICIAN
 - **Motivational Messages**: Player dashboard shows auto-generated coaching tips based on attendance rate, performance trend, and error analysis
 - **Media System**: Upload → PENDING_REVIEW → Admin approves. Player tag requests with admin approval workflow
 - **Shop System**: Admin CRUD for merchandise, public display

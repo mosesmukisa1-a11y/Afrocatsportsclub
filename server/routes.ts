@@ -3921,5 +3921,109 @@ th{background:#0d7377;color:white}
     }
   });
 
+  app.get("/api/matches/:matchId/stats-touch/init", requireAuth, async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const teamId = req.query.teamId as string;
+      if (!teamId) return res.status(400).json({ error: "teamId query parameter required" });
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+
+      const players = await storage.getPlayersByTeam(teamId);
+      const events = await storage.getMatchEvents(matchId);
+
+      const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
+
+      res.json({
+        match: { ...match, isLocked },
+        players: players.map((p: any) => ({
+          id: p.id,
+          firstName: p.firstName,
+          lastName: p.lastName,
+          jerseyNo: p.jerseyNo,
+          position: p.position,
+          photoUrl: p.photoUrl,
+        })),
+        events,
+      });
+    } catch (err) { next(err); }
+  });
+
+  app.get("/api/matches/:matchId/events", requireAuth, async (req, res, next) => {
+    try {
+      const events = await storage.getMatchEvents(req.params.matchId);
+      res.json(events);
+    } catch (err) { next(err); }
+  });
+
+  const VALID_ACTIONS = ["SERVE", "RECEIVE", "SET", "ATTACK", "BLOCK", "DIG", "FREEBALL"];
+  const VALID_OUTCOMES = ["PLUS", "ZERO", "MINUS"];
+
+  app.post("/api/matches/:matchId/events", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const { playerId, action, outcome, teamId } = req.body;
+
+      if (!playerId || !action || !outcome || !teamId) {
+        return res.status(400).json({ error: "Missing playerId, action, outcome, or teamId" });
+      }
+
+      if (!VALID_ACTIONS.includes(action)) {
+        return res.status(400).json({ error: `Invalid action. Must be one of: ${VALID_ACTIONS.join(", ")}` });
+      }
+      if (!VALID_OUTCOMES.includes(outcome)) {
+        return res.status(400).json({ error: `Invalid outcome. Must be one of: ${VALID_OUTCOMES.join(", ")}` });
+      }
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+
+      if (match.teamId !== teamId) {
+        return res.status(400).json({ error: "Team does not match this match's team" });
+      }
+
+      const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
+      if (isLocked) return res.status(403).json({ error: "Stats locked: match already submitted" });
+
+      const players = await storage.getPlayersByTeam(teamId);
+      const playerBelongs = players.some((p: any) => p.id === playerId);
+      if (!playerBelongs) {
+        return res.status(400).json({ error: "Player does not belong to this team" });
+      }
+
+      const event = await storage.createMatchEvent({
+        matchId,
+        teamId,
+        playerId,
+        action,
+        outcome,
+        createdBy: (req as any).user?.id || null,
+      });
+
+      res.json({ event, match });
+    } catch (err) { next(err); }
+  });
+
+  app.delete("/api/matches/:matchId/events/:eventId", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId, eventId } = req.params;
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+
+      const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
+      if (isLocked) return res.status(403).json({ error: "Stats locked: match already submitted" });
+
+      const event = await storage.getMatchEvent(eventId);
+      if (!event || event.matchId !== matchId) {
+        return res.status(404).json({ error: "Event not found for this match" });
+      }
+
+      await storage.deleteMatchEvent(eventId);
+      res.json({ ok: true, match });
+    } catch (err) { next(err); }
+  });
+
   return httpServer;
 }

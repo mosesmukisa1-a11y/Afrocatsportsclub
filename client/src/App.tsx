@@ -34,6 +34,7 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import AdminUsers from "@/pages/AdminUsers";
 import MyContract from "@/pages/MyContract";
 import ClubContract from "@/pages/ClubContract";
+import TouchStats from "@/pages/TouchStats";
 
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
@@ -61,6 +62,7 @@ function Router() {
       <Route path="/players">{() => <ProtectedRoute component={Players} />}</Route>
       <Route path="/matches">{() => <ProtectedRoute component={Matches} />}</Route>
       <Route path="/stats">{() => <ProtectedRoute component={Stats} />}</Route>
+      <Route path="/touch-stats">{() => <ProtectedRoute component={TouchStats} />}</Route>
       <Route path="/attendance">{() => <ProtectedRoute component={Attendance} />}</Route>
       <Route path="/finance">{() => <ProtectedRoute component={Finance} />}</Route>
       <Route path="/injuries">{() => <ProtectedRoute component={Injuries} />}</Route>

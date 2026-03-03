@@ -16,6 +16,7 @@ const allNavItems = [
   { icon: Users, label: "Players", href: "/players", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL"] },
   { icon: Trophy, label: "Matches", href: "/matches", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: ClipboardList, label: "Enter Stats", href: "/stats", roles: ["ADMIN","MANAGER","STATISTICIAN","COACH","PLAYER"] },
+  { icon: ClipboardList, label: "Touch Stats", href: "/touch-stats", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: CalendarCheck, label: "Attendance", href: "/attendance", roles: ["ADMIN","MANAGER","COACH"] },
   { icon: DollarSign, label: "Finance", href: "/finance", roles: ["ADMIN","MANAGER","FINANCE"] },
   { icon: Activity, label: "Injuries", href: "/injuries", roles: ["ADMIN","MANAGER","MEDICAL"] },

@@ -1,0 +1,198 @@
+AFROCAT APP – REGISTRATION UPGRADE (GENDER-TEAM RULES + HEIGHT/WEIGHT + AGE + QUARTERLY WEIGHT UPDATE + ADMIN RE-APPROVAL)
+
+====================================================
+A) TEAM ↔ GENDER ALLOCATION RULES (APPLY EVERYWHERE)
+====================================================
+
+TEAM OPTIONS (MUST ENFORCE GENDER):
+
+MALE ONLY TEAMS:
+- "Afrocat D"
+- "Afrocat C"
+- "Afrocat E"
+- "Afrocat V"
+Gender allowed: MALE only
+
+FEMALE ONLY TEAMS:
+- "Afrocat Ladies"
+- "Afrocat Titans"
+Gender allowed: FEMALE only
+
+RULE:
+1) If user selects TEAM first:
+   - auto-set gender to the only allowed gender
+   - disable gender field (read-only)
+2) If user selects GENDER first:
+   - filter team list to only teams allowed for that gender
+3) Server MUST validate:
+   - reject registration if team + gender mismatch
+
+Apply this rule ANYWHERE gender is required (registration, editing profile, transfers, roster lists, match eligibility, document centre, stats team selection).
+
+====================================================
+B) REGISTRATION FORM UPDATES
+====================================================
+
+Add required fields:
+- heightCm (number, required)
+- weightKg (number, required)
+
+DOB already exists.
+Calculate:
+- age = derived from DOB (do NOT store as editable)
+- Age must appear on Player Profile (computed every time it is displayed)
+
+====================================================
+C) WEIGHT UPDATE POLICY (QUARTERLY)
+====================================================
+
+Requirement:
+- Weight must be updated every quarter (every 3 months).
+- Show dashboard notification: "Please update your weight for Q1/Q2/Q3/Q4"
+
+Implement:
+1) Add to Player:
+   - lastWeightUpdatedAt (DateTime, nullable)
+   - weightKg (number)
+2) Weight is considered “overdue” if:
+   now - lastWeightUpdatedAt > 90 days   (or null => overdue)
+3) Create notification job:
+   - Run daily at 08:00
+   - For every player with overdue weight update:
+     create/refresh an in-app notification: type="WEIGHT_UPDATE"
+     (avoid duplicates using userId + quarterKey)
+
+Quarter key:
+- YYYY-Q1/Q2/Q3/Q4 (based on current date)
+
+====================================================
+D) ADMIN APPROVAL WORKFLOW (IMPORTANT)
+====================================================
+
+1) Registration initially submitted:
+   status = "PENDING"
+   adminApprovedAt = null
+   approvedBy = null
+
+2) Admin approves registration:
+   status = "APPROVED"
+   adminApprovedAt = now
+   approvedBy = adminUserId
+
+3) After APPROVAL:
+   ANY updates to registration/profile fields must create a PENDING UPDATE request and require admin approval before becoming active.
+
+Implement with a two-layer model:
+
+Player (ACTIVE data):
+- firstName,lastName,dob,gender,teamId,heightCm,weightKg,photoUrl,...
+- status: PENDING/APPROVED
+- approvedBy, approvedAt
+- lastWeightUpdatedAt
+
+PlayerUpdateRequest (PENDING changes):
+- id
+- playerId
+- patchJson (JSON of fields changed)
+- status: PENDING/APPROVED/REJECTED
+- submittedAt
+- submittedBy
+- reviewedAt
+- reviewedBy
+- reviewNote (optional)
+
+RULE:
+- If player.status !== "APPROVED": allow edits directly on Player as part of initial submission (still pending).
+- If player.status === "APPROVED": edits DO NOT change Player directly.
+  Instead:
+   - create/update PlayerUpdateRequest(status=PENDING)
+   - notify admin for approval
+   - show player: "Update submitted for admin approval"
+
+Admin approval action:
+- apply patchJson to Player
+- set reviewedAt/reviewedBy
+- mark request APPROVED
+
+====================================================
+E) BACKEND VALIDATION (PASTE)
+====================================================
+
+1) Gender-Team validation helper:
+
+const TEAM_GENDER_RULES = {
+  "Afrocat D": "MALE",
+  "Afrocat C": "MALE",
+  "Afrocat E": "MALE",
+  "Afrocat V": "MALE",
+  "Afrocat Ladies": "FEMALE",
+  "Afrocat Titans": "FEMALE",
+};
+
+function validateTeamGender(teamName, gender) {
+  const reqGender = TEAM_GENDER_RULES[teamName];
+  if (!reqGender) return { ok:true };
+  if (reqGender !== gender) return { ok:false, error:`${teamName} is ${reqGender} only.` };
+  return { ok:true };
+}
+
+2) Age computation (server side):
+
+function calcAge(dobISO) {
+  const dob = new Date(dobISO);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+3) Registration create endpoint must require:
+- firstName,lastName,dob,teamId,gender,heightCm,weightKg,photo
+And validate team-gender match.
+
+4) Update endpoint behavior:
+IF player.status === "APPROVED":
+  - create PlayerUpdateRequest instead of updating Player
+ELSE:
+  - update Player directly
+
+====================================================
+F) FRONTEND REGISTRATION UI LOGIC (PASTE)
+====================================================
+
+1) Team -> Gender auto-fill:
+
+When team changes:
+- if team is one of male-only => set gender="MALE" and disable gender
+- if team is one of female-only => set gender="FEMALE" and disable gender
+- else enable gender
+
+2) Gender -> Team filtering:
+
+When gender changes:
+- if gender="MALE" show teams: Afrocat D,C,E,V
+- if gender="FEMALE" show teams: Afrocat Ladies,Titans
+
+3) Add fields:
+- Height (cm) number input required
+- Weight (kg) number input required
+
+4) On player profile:
+- display Age: calcAge(dob)
+- display Last weight update: lastWeightUpdatedAt
+- show warning badge if weight overdue.
+
+====================================================
+G) WEIGHT UPDATE NOTIFICATION JOB (PASTE)
+====================================================
+
+Run daily:
+
+- Find all players where lastWeightUpdatedAt is null OR older than 90 days
+- Create notification type="WEIGHT_UPDATE" targeted to that player
+- Use dateKey = "YYYY-Qx" to avoid duplicates per quarter
+
+====================================================
+DONE
+====================================================

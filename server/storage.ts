@@ -27,7 +27,8 @@ import type {
   ContractContribution, InsertContractContribution,
   FundRaisingActivity, InsertFundRaisingActivity,
   PlayerFundRaisingContribution, InsertPlayerFundRaisingContribution,
-  MatchSetStat, InsertMatchSetStat
+  MatchSetStat, InsertMatchSetStat,
+  MatchEvent, InsertMatchEvent
 } from "@shared/schema";
 
 export interface IStorage {
@@ -179,6 +180,10 @@ export interface IStorage {
   updatePlayerFundRaisingContribution(id: string, data: Partial<InsertPlayerFundRaisingContribution>): Promise<PlayerFundRaisingContribution | undefined>;
   deletePlayerFundRaisingContribution(id: string): Promise<void>;
   getNextMembershipNo(): Promise<string>;
+  getMatchEvents(matchId: string): Promise<MatchEvent[]>;
+  getMatchEvent(id: string): Promise<MatchEvent | undefined>;
+  createMatchEvent(event: InsertMatchEvent): Promise<MatchEvent>;
+  deleteMatchEvent(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -855,6 +860,20 @@ export class DatabaseStorage implements IStorage {
     let next = 21;
     while (usedNos.includes(next)) next++;
     return String(next).padStart(3, "0");
+  }
+  async getMatchEvents(matchId: string) {
+    return db.select().from(schema.matchEvents).where(eq(schema.matchEvents.matchId, matchId)).orderBy(desc(schema.matchEvents.createdAt));
+  }
+  async getMatchEvent(id: string) {
+    const [event] = await db.select().from(schema.matchEvents).where(eq(schema.matchEvents.id, id));
+    return event;
+  }
+  async createMatchEvent(event: InsertMatchEvent) {
+    const [created] = await db.insert(schema.matchEvents).values(event).returning();
+    return created;
+  }
+  async deleteMatchEvent(id: string) {
+    await db.delete(schema.matchEvents).where(eq(schema.matchEvents.id, id));
   }
 }
 

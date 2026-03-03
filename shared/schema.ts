@@ -646,3 +646,18 @@ export const contractAcceptances = pgTable("contract_acceptances", {
 export const insertContractAcceptanceSchema = createInsertSchema(contractAcceptances).omit({ id: true, acceptedAt: true });
 export type InsertContractAcceptance = z.infer<typeof insertContractAcceptanceSchema>;
 export type ContractAcceptance = typeof contractAcceptances.$inferSelect;
+
+export const matchEvents = pgTable("match_events", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  matchId: varchar("match_id", { length: 36 }).notNull(),
+  teamId: varchar("team_id", { length: 36 }).notNull(),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  action: text("action").notNull(),
+  outcome: text("outcome").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  createdBy: varchar("created_by", { length: 36 }),
+});
+
+export const insertMatchEventSchema = createInsertSchema(matchEvents).omit({ id: true, createdAt: true });
+export type InsertMatchEvent = z.infer<typeof insertMatchEventSchema>;
+export type MatchEvent = typeof matchEvents.$inferSelect;
