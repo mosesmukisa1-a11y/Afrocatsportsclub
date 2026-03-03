@@ -26,6 +26,7 @@ const allNavItems = [
   { icon: FileText, label: "Reports", href: "/reports", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: Users, label: "Player Stats", href: "/player-dashboard", roles: ["ADMIN","MANAGER","COACH","PLAYER"] },
   { icon: ScrollText, label: "My Contract", href: "/my-contract", roles: ["PLAYER"] },
+  { icon: FileText, label: "Club Contract", href: "/club-contract", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
   { icon: UserCircle, label: "My Profile", href: "/profile-setup", roles: ["PLAYER"] },
   { icon: UserCheck, label: "Registrations", href: "/admin/registrations", roles: ["ADMIN","MANAGER"] },
   { icon: ShieldAlert, label: "User Management", href: "/admin/users", roles: ["ADMIN"] },

@@ -264,4 +264,9 @@ export const api = {
   getNextMembershipNo: () => apiFetch<{ membershipNo: string }>("/membership/next"),
   assignMembershipNo: (playerId: string) => apiFetch<any>(`/membership/assign/${playerId}`, { method: "POST" }),
   getPlayerValue: (playerId: string) => apiFetch<any>(`/player-value/${playerId}`),
+
+  getClubContractStatus: () => apiFetch<any>("/contract/status"),
+  acceptClubContract: (data: { accepterFullName: string; acceptedBy: string; guardianIdNumber?: string; guardianPhoneNumber?: string }) =>
+    apiFetch<any>("/contract/accept", { method: "POST", body: JSON.stringify(data) }),
+  getClubContractAdminSummary: () => apiFetch<any>("/contract/admin/summary"),
 };

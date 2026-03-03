@@ -12,6 +12,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { Link } from "wouter";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -70,6 +71,12 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
+  const { data: clubContractStatus } = useQuery({
+    queryKey: ["/api/contract/status"],
+    queryFn: api.getClubContractStatus,
+    enabled: !!user,
+  });
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -107,6 +114,25 @@ export default function Dashboard() {
           <h1 className="text-3xl font-display font-bold text-afrocat-text tracking-tight">Dashboard</h1>
           <p className="text-afrocat-muted mt-1">Welcome back, {user?.fullName}</p>
         </div>
+
+        {clubContractStatus && !clubContractStatus.accepted && (
+          <div className="afrocat-card border border-afrocat-gold/30 overflow-hidden" data-testid="card-contract-warning">
+            <div className="bg-afrocat-gold-soft px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-afrocat-gold shrink-0" />
+                <div>
+                  <p className="font-bold text-sm text-afrocat-text">Club Contract Not Confirmed</p>
+                  <p className="text-xs text-afrocat-muted">Please read and confirm the official Afrocat Volleyball Club contract.</p>
+                </div>
+              </div>
+              <Link href="/club-contract">
+                <span className="px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-sm hover:bg-afrocat-teal/80 transition-colors cursor-pointer" data-testid="link-confirm-contract">
+                  Confirm Contract
+                </span>
+              </Link>
+            </div>
+          </div>
+        )}
 
         {birthdays.length > 0 && (
           <div className="afrocat-card overflow-hidden" data-testid="card-birthdays">

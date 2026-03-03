@@ -6,6 +6,7 @@ import { db } from "./db";
 import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
+import path from "path";
 
 const app = express();
 const httpServer = createServer(app);
@@ -25,6 +26,8 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.use("/contracts", express.static(path.join(process.cwd(), "public", "contracts")));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

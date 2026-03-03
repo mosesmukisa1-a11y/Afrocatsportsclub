@@ -7,6 +7,7 @@ import { hashPassword, comparePassword, signToken, requireAuth, requireRole } fr
 import { z } from "zod";
 import crypto from "crypto";
 import cron from "node-cron";
+import { eq, and } from "drizzle-orm";
 
 function esc(str: string | null | undefined): string {
   if (!str) return "—";
@@ -3715,6 +3716,128 @@ th{background:#0d7377;color:white}
       }
       birthdays.sort((a, b) => a.daysUntil - b.daysUntil);
       res.json(birthdays);
+    } catch (e) { next(e); }
+  });
+
+  // ─── CLUB CONTRACT ACCEPTANCE ────────────────────────────────
+  const CONTRACT_KEY = "AFROCAT_CONTRACT_2024_2026";
+  const CONTRACT_VERSION = "PDF_v1_2024_2026";
+
+  app.get("/api/contract/status", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.userId;
+      const [acceptance] = await db.select().from(schema.contractAcceptances)
+        .where(and(
+          eq(schema.contractAcceptances.userId, userId),
+          eq(schema.contractAcceptances.contractKey, CONTRACT_KEY)
+        ));
+      if (acceptance) {
+        return res.json({
+          ok: true, required: true, accepted: true,
+          acceptedAt: acceptance.acceptedAt,
+          acceptedBy: acceptance.acceptedBy,
+          accepterFullName: acceptance.accepterFullName,
+          isMinor: acceptance.isMinor,
+          contractKey: CONTRACT_KEY,
+        });
+      }
+      return res.json({ ok: true, required: true, accepted: false, contractKey: CONTRACT_KEY });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/contract/accept", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.userId;
+      const playerId = req.user!.playerId || null;
+
+      const [existing] = await db.select().from(schema.contractAcceptances)
+        .where(and(
+          eq(schema.contractAcceptances.userId, userId),
+          eq(schema.contractAcceptances.contractKey, CONTRACT_KEY)
+        ));
+      if (existing) return res.status(400).json({ message: "Contract already accepted" });
+
+      let playerDob: string | null = null;
+      if (playerId) {
+        const player = await storage.getPlayer(playerId);
+        if (player) playerDob = player.dob || null;
+      }
+
+      let isMinor = false;
+      if (playerDob) {
+        const birth = new Date(playerDob);
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const m = today.getMonth() - birth.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+        isMinor = age < 18;
+      }
+
+      const body = z.object({
+        accepterFullName: z.string().min(1),
+        acceptedBy: z.enum(["SELF", "GUARDIAN"]),
+        guardianIdNumber: z.string().optional().nullable(),
+        guardianPhoneNumber: z.string().optional().nullable(),
+      }).parse(req.body);
+
+      if (isMinor) {
+        if (body.acceptedBy !== "GUARDIAN") {
+          return res.status(400).json({ message: "Minors must have a guardian accept the contract" });
+        }
+        if (!body.guardianIdNumber || !body.guardianPhoneNumber) {
+          return res.status(400).json({ message: "Guardian ID number and phone number are required for minors" });
+        }
+      }
+
+      const [record] = await db.insert(schema.contractAcceptances).values({
+        userId,
+        playerId,
+        contractKey: CONTRACT_KEY,
+        contractVersionHash: CONTRACT_VERSION,
+        sport: "VOLLEYBALL",
+        isMinor,
+        acceptedBy: body.acceptedBy,
+        accepterFullName: body.accepterFullName,
+        guardianIdNumber: isMinor ? body.guardianIdNumber || null : null,
+        guardianPhoneNumber: isMinor ? body.guardianPhoneNumber || null : null,
+        ipAddress: (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || null,
+        userAgent: req.headers["user-agent"] || null,
+      }).returning();
+
+      res.status(201).json({ ok: true, accepted: true, acceptedAt: record.acceptedAt, contractKey: CONTRACT_KEY });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.get("/api/contract/admin/summary", requireAuth, requireRole(["ADMIN", "MANAGER"]), async (req, res, next) => {
+    try {
+      const allAcceptances = await db.select().from(schema.contractAcceptances)
+        .where(eq(schema.contractAcceptances.contractKey, CONTRACT_KEY));
+      const acceptedUserIds = new Set(allAcceptances.map(a => a.userId));
+
+      const allUsers = await db.select().from(schema.users);
+      const activePlayers = allUsers.filter(u => u.accountStatus === "ACTIVE");
+
+      const accepted = activePlayers.filter(u => acceptedUserIds.has(u.id));
+      const notAccepted = activePlayers.filter(u => !acceptedUserIds.has(u.id));
+
+      res.json({
+        totalActive: activePlayers.length,
+        accepted: accepted.length,
+        notAccepted: notAccepted.length,
+        notAcceptedUsers: notAccepted.map(u => ({
+          id: u.id, fullName: u.fullName, email: u.email, role: u.role,
+        })),
+        acceptedUsers: accepted.map(u => {
+          const acc = allAcceptances.find(a => a.userId === u.id);
+          return {
+            id: u.id, fullName: u.fullName, email: u.email, role: u.role,
+            acceptedAt: acc?.acceptedAt, acceptedBy: acc?.acceptedBy,
+          };
+        }),
+      });
     } catch (e) { next(e); }
   });
 

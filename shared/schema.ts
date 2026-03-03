@@ -623,3 +623,26 @@ export const notifications = pgTable("notifications", {
 export const insertNotificationSchema = createInsertSchema(notifications).omit({ id: true, createdAt: true });
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Notification = typeof notifications.$inferSelect;
+
+export const contractAcceptedByEnum = pgEnum("contract_accepted_by", ["SELF", "GUARDIAN"]);
+
+export const contractAcceptances = pgTable("contract_acceptances", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  playerId: varchar("player_id", { length: 36 }),
+  contractKey: text("contract_key").notNull(),
+  contractVersionHash: text("contract_version_hash").notNull(),
+  sport: text("sport").notNull().default("VOLLEYBALL"),
+  isMinor: boolean("is_minor").notNull().default(false),
+  acceptedBy: contractAcceptedByEnum("accepted_by").notNull(),
+  accepterFullName: text("accepter_full_name").notNull(),
+  guardianIdNumber: text("guardian_id_number"),
+  guardianPhoneNumber: text("guardian_phone_number"),
+  acceptedAt: timestamp("accepted_at").defaultNow(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+});
+
+export const insertContractAcceptanceSchema = createInsertSchema(contractAcceptances).omit({ id: true, acceptedAt: true });
+export type InsertContractAcceptance = z.infer<typeof insertContractAcceptanceSchema>;
+export type ContractAcceptance = typeof contractAcceptances.$inferSelect;

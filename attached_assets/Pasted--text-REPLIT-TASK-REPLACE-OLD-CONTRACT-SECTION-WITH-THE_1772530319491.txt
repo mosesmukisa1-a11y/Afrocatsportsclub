@@ -1,0 +1,162 @@
+```text
+REPLIT TASK: REPLACE OLD “CONTRACT” SECTION WITH THE OFFICIAL AFROCAT VOLLEYBALL CLUB CONTRACT (ELECTRONIC), AND MAKE IT AVAILABLE TO ALL PLAYERS TO READ + CONFIRM.
+SOURCE FILE: “Afrocat SC Application 2024-2026.pdf” (use exactly as-is as the contract content). :contentReference[oaicite:0]{index=0}
+
+====================================================
+A) WHAT TO CHANGE
+====================================================
+
+1) Replace the existing/old “Contract” section/page with the NEW official contract PDF exactly as it appears (no edits to wording/layout).
+2) Add a public link/button on every player dashboard: “Club Contract (Read & Confirm)”.
+3) Add a contract confirmation form:
+   - All users must confirm (checkbox + name).
+   - MINORS (under 18) must be confirmed by Parent/Guardian instead of the minor.
+   - Parent/Guardian must provide: Full Name, ID Number, Phone Number.
+4) IMPORTANT: On the confirmation form, SPORT must be VOLLEYBALL ONLY (no other sports selectable).
+   - The PDF itself remains unchanged electronically.
+
+====================================================
+B) FILE PLACEMENT (SERVE PDF)
+====================================================
+
+1) Put the PDF in a public/static folder so the app can serve it:
+   - If Next.js: /public/contracts/afrocat-volleyball-contract.pdf
+   - If Express static: /public/contracts/afrocat-volleyball-contract.pdf and app.use(express.static("public"))
+
+2) Make sure this URL loads in the browser:
+   /contracts/afrocat-volleyball-contract.pdf
+
+====================================================
+C) DATABASE TABLE (STORE CONFIRMATION)
+====================================================
+
+Create table/model: ContractAcceptance
+
+Fields:
+- id
+- userId (nullable if guest, but in your app use logged-in userId)
+- playerId (optional if you separate players/users)
+- contractKey (string) e.g. "AFROCAT_CONTRACT_2024_2026"
+- contractVersionHash (string) // hash of PDF file or version string
+- sport (string) ALWAYS "VOLLEYBALL"
+- isMinor (boolean)
+- acceptedBy (enum: "SELF" | "GUARDIAN")
+- accepterFullName (string) // player name if adult OR guardian name if minor
+- guardianIdNumber (string, nullable, required if minor)
+- guardianPhoneNumber (string, nullable, required if minor)
+- acceptedAt (datetime)
+- ipAddress (string, optional)
+- userAgent (string, optional)
+
+Uniqueness:
+- unique(userId, contractKey) so one active acceptance per user.
+
+====================================================
+D) AGE / MINOR RULE
+====================================================
+
+Compute age from Date of Birth stored at registration.
+
+IF age < 18:
+  - acceptedBy = "GUARDIAN"
+  - guardianIdNumber REQUIRED
+  - guardianPhoneNumber REQUIRED
+  - accepterFullName must be Guardian full name
+  - player cannot submit as “SELF”
+ELSE:
+  - acceptedBy = "SELF"
+  - guardian fields must be empty/ignored
+
+====================================================
+E) BACKEND API (ADD THESE ROUTES)
+====================================================
+
+1) GET current contract acceptance status
+GET /api/contract/status
+Response:
+{ ok:true, required:true, accepted:false/true, acceptedAt, acceptedBy, contractKey }
+
+2) POST confirm contract
+POST /api/contract/accept
+Body:
+{
+  accepterFullName,
+  acceptedBy,         // "SELF" or "GUARDIAN"
+  guardianIdNumber,
+  guardianPhoneNumber
+}
+
+Backend must:
+- read user DOB from registration
+- compute age
+- enforce minor/adult rules above
+- store record in ContractAcceptance
+- sport = "VOLLEYBALL" hardcoded
+- contractKey = "AFROCAT_CONTRACT_2024_2026"
+- contractVersionHash = set a constant string like "PDF_v1_2024_2026" (or compute file hash once)
+
+3) OPTIONAL: Admin view who has not accepted
+GET /api/contract/admin/summary
+Return counts and list of users missing acceptance.
+
+====================================================
+F) FRONTEND “CONTRACT PAGE” (READ + CONFIRM)
+====================================================
+
+Create route/page:
+- /contract
+
+On this page:
+1) Display the PDF exactly as-is:
+   - use iframe or embed:
+     <iframe src="/contracts/afrocat-volleyball-contract.pdf" style="width:100%; height:80vh;"></iframe>
+
+2) Below PDF, show confirmation form:
+   - SPORT field (read-only): VOLLEYBALL
+   - If user is minor (age < 18):
+       * show: “Parent/Guardian Confirmation Required”
+       * fields: Guardian Full Name, Guardian ID Number, Guardian Phone Number
+       * checkbox: “I confirm on behalf of the minor”
+   - If adult:
+       * field: Full Name (pre-fill with user name)
+       * checkbox: “I have read and agree”
+
+3) After successful submit:
+   - show “Contract Confirmed ✅” with date/time
+   - disable the form (read-only)
+   - show button: “Back to Dashboard”
+
+====================================================
+G) DASHBOARD LINK (ALL PLAYERS)
+====================================================
+
+On every player dashboard navigation/menu add:
+- “Contract” -> /contract
+
+Also add a dashboard warning banner if NOT accepted:
+- “Please confirm the Club Contract to continue.” + button to /contract
+
+(Optional restriction):
+- If contract not accepted, block certain actions (match registration, stats entry) until accepted.
+
+====================================================
+H) VOLLEYBALL ONLY (FORM)
+====================================================
+
+In the confirmation form:
+- Do NOT show multi-sport options.
+- Sport is fixed: “VOLLEYBALL”
+- Save sport="VOLLEYBALL" to ContractAcceptance.
+
+The PDF remains unchanged and displayed as-is.
+
+====================================================
+I) CONTRACT CONTENT REFERENCE
+====================================================
+
+The PDF includes “Application Form” + “Terms and Conditions” + “Afrocat Development Contract” sections and fee tables (pages 1–4). Use it exactly as the electronic contract users read before confirming. :contentReference[oaicite:1]{index=1}
+
+====================================================
+DONE
+====================================================
+```
