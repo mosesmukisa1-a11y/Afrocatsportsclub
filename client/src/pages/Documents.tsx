@@ -6,6 +6,7 @@ import { useState } from "react";
 import { FileText, Download, Plus, Filter, Users, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 import { AFROCAT_LOGO_BASE64 } from "@/lib/logo-base64";
@@ -43,11 +44,64 @@ export default function Documents() {
     teamId: "", competition: "", season: new Date().getFullYear().toString(),
   });
 
+  const [liberoModal, setLiberoModal] = useState<{ matchId: string; teamId: string; totalSelected: number; liberoCount: number } | null>(null);
+  const [liberoLoading, setLiberoLoading] = useState(false);
+
+  const downloadO2bisPdfFromDoc = async (matchId: string, teamId: string, skipMissing: boolean) => {
+    try {
+      const token = localStorage.getItem("token");
+      const resp = await fetch(`/api/docs/o2bis/${matchId}.pdf?skipMissing=${skipMissing}&teamId=${teamId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => null);
+        if (errData?.needsLiberos) {
+          setLiberoModal({ matchId, teamId, totalSelected: errData.totalSelected, liberoCount: errData.liberoCount });
+          return;
+        }
+        throw new Error(errData?.message || "Failed to generate O2BIS PDF");
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `O2BIS_${matchId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "O2BIS PDF downloaded" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleAutoSelectLiberos = async () => {
+    if (!liberoModal) return;
+    setLiberoLoading(true);
+    try {
+      await api.autoSelectLiberos(liberoModal.matchId, liberoModal.teamId);
+      setLiberoModal(null);
+      await downloadO2bisPdfFromDoc(liberoModal.matchId, liberoModal.teamId, false);
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setLiberoLoading(false);
+    }
+  };
+
   const generateO2bisMut = useMutation({
-    mutationFn: api.generateO2bis,
+    mutationFn: async (data: any) => {
+      if (data.matchId) {
+        await downloadO2bisPdfFromDoc(data.matchId, data.teamId, false);
+        return null;
+      }
+      return api.generateO2bis(data);
+    },
     onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ["match-documents"] });
       setShowO2bis(false);
+      if (data === null) return;
       toast({ title: "O-2 Bis Generated!", description: "Form is ready to view and print." });
       if (data?.data) {
         const w = window.open("", "_blank");
@@ -306,6 +360,40 @@ export default function Documents() {
           </div>
         )}
       </div>
+
+      <Dialog open={!!liberoModal} onOpenChange={(open) => !open && setLiberoModal(null)}>
+        <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text max-w-md">
+          <DialogTitle className="text-lg font-display font-bold text-afrocat-gold">Libero Selection Required</DialogTitle>
+          <div className="space-y-4">
+            <p className="text-sm text-afrocat-muted">
+              Squad has {liberoModal?.totalSelected} players (14+). At least 2 players must be marked as liberos.
+              Currently {liberoModal?.liberoCount || 0} libero(s) selected.
+            </p>
+            <p className="text-sm text-afrocat-muted">
+              Would you like the system to auto-select 2 liberos?
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
+                onClick={() => setLiberoModal(null)}
+                data-testid="button-libero-goback"
+              >
+                Go Back
+              </Button>
+              <Button
+                className="flex-1 bg-afrocat-teal hover:bg-afrocat-teal/80"
+                onClick={handleAutoSelectLiberos}
+                disabled={liberoLoading}
+                data-testid="button-libero-autoselect"
+              >
+                {liberoLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Auto-Select
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

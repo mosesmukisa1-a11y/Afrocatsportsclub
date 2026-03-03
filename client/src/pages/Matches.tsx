@@ -133,13 +133,25 @@ export default function Matches() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const [liberoModal, setLiberoModal] = useState<{ matchId: string; teamId: string; totalSelected: number; liberoCount: number } | null>(null);
+  const [liberoLoading, setLiberoLoading] = useState(false);
+
   const downloadO2bisPdf = async (matchId: string, skipMissing: boolean) => {
     try {
       const token = localStorage.getItem("token");
       const resp = await fetch(`/api/docs/o2bis/${matchId}.pdf?skipMissing=${skipMissing}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!resp.ok) throw new Error("Failed to generate O2BIS PDF");
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => null);
+        if (errData?.needsLiberos) {
+          const allMatches = [...upcomingMatches, ...playedMatches];
+          const match = allMatches.find((m: any) => m.id === matchId);
+          setLiberoModal({ matchId, teamId: match?.teamId || "", totalSelected: errData.totalSelected, liberoCount: errData.liberoCount });
+          return;
+        }
+        throw new Error(errData?.message || "Failed to generate O2BIS PDF");
+      }
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -152,6 +164,20 @@ export default function Matches() {
       toast({ title: "O2BIS PDF downloaded" });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
+    }
+  };
+
+  const handleAutoSelectLiberosMatch = async () => {
+    if (!liberoModal) return;
+    setLiberoLoading(true);
+    try {
+      await api.autoSelectLiberos(liberoModal.matchId, liberoModal.teamId);
+      setLiberoModal(null);
+      await downloadO2bisPdf(liberoModal.matchId, false);
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setLiberoLoading(false);
     }
   };
 
@@ -726,6 +752,40 @@ export default function Matches() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <Dialog open={!!liberoModal} onOpenChange={(open) => !open && setLiberoModal(null)}>
+        <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text max-w-md">
+          <DialogTitle className="text-lg font-display font-bold text-afrocat-gold">Libero Selection Required</DialogTitle>
+          <div className="space-y-4">
+            <p className="text-sm text-afrocat-muted">
+              Squad has {liberoModal?.totalSelected} players (14+). At least 2 players must be marked as liberos.
+              Currently {liberoModal?.liberoCount || 0} libero(s) selected.
+            </p>
+            <p className="text-sm text-afrocat-muted">
+              Would you like the system to auto-select 2 liberos?
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
+                onClick={() => setLiberoModal(null)}
+                data-testid="button-libero-match-goback"
+              >
+                Go Back
+              </Button>
+              <Button
+                className="flex-1 bg-afrocat-teal hover:bg-afrocat-teal/80"
+                onClick={handleAutoSelectLiberosMatch}
+                disabled={liberoLoading}
+                data-testid="button-libero-match-autoselect"
+              >
+                {liberoLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Auto-Select
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

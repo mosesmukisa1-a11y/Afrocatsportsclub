@@ -13,6 +13,7 @@ import path from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { ALL_ENUMS, SKILL_TYPES, OUTCOME } from "./devstats/enums";
 import { generateDevelopmentReport } from "./devstats/report";
+import { generateO2BISPdf, validateLiberoRule, autoSelectLiberos } from "./o2bis";
 
 const TEAM_GENDER_RULES: Record<string, string> = {
   "Afrocat D": "MALE",
@@ -2844,156 +2845,67 @@ th{background:#0d7377;color:white}
   // ─── O2BIS PDF DOWNLOAD ────────────────────
   app.get("/api/docs/o2bis/:matchId.pdf", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
     try {
-      const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
-      const match = await storage.getMatch(req.params.matchId);
+      const matchId = req.params.matchId;
+      const skipMissing = req.query.skipMissing === "true";
+      const teamId = (req.query.teamId as string) || undefined;
+
+      const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ message: "Match not found" });
 
-      const skipMissing = req.query.skipMissing === "true";
-      const team = await storage.getTeam(match.teamId);
-      if (!team) return res.status(404).json({ message: "Team not found" });
-
-      const staffRows = await db.select().from(schema.matchStaffAssignments)
-        .where(eq(schema.matchStaffAssignments.matchId, req.params.matchId));
-      const staff = staffRows[0] || null;
-
-      const resolveUserName = async (uid: string | null) => {
-        if (!uid) return skipMissing ? "________________" : "";
-        const u = await storage.getUser(uid);
-        return u?.fullName || (skipMissing ? "________________" : "");
-      };
-
-      const headCoachName = staff ? await resolveUserName(staff.headCoachUserId) : (skipMissing ? "________________" : "");
-      const assistantCoachName = staff ? await resolveUserName(staff.assistantCoachUserId) : (skipMissing ? "________________" : "");
-      const medicName = staff ? await resolveUserName(staff.medicUserId) : (skipMissing ? "________________" : "");
-      const teamManagerName = staff ? await resolveUserName(staff.teamManagerUserId) : (skipMissing ? "________________" : "");
-
-      let players: any[] = [];
-      const squad = await storage.getMatchSquad(req.params.matchId, match.teamId);
-      if (squad) {
-        const entries = await storage.getMatchSquadEntries(squad.id);
-        const allPlayers = await storage.getPlayersByTeam(match.teamId);
-        const captainIds = await getCaptainPlayerIds();
-        players = entries.map((e: any) => {
-          const p = allPlayers.find(pl => pl.id === e.playerId);
-          return p ? {
-            jerseyNo: e.jerseyNo ?? p.jerseyNo ?? "",
-            name: `${(p.lastName || "").toUpperCase()} ${p.firstName}`,
-            position: p.position || "",
-            dob: p.dob || "",
-            age: calculateAge(p.dob || ""),
-            isCaptain: captainIds.has(p.id),
-          } : null;
-        }).filter(Boolean).sort((a: any, b: any) => (a.jerseyNo || 99) - (b.jerseyNo || 99));
+      const resolvedTeamId = teamId || match.teamId;
+      if (resolvedTeamId !== match.teamId) {
+        return res.status(400).json({ message: "teamId does not match this match's team" });
+      }
+      const liberoCheck = await validateLiberoRule(storage, matchId, resolvedTeamId);
+      if (!liberoCheck.valid) {
+        return res.status(400).json({
+          message: "Libero validation failed",
+          needsLiberos: true,
+          totalSelected: liberoCheck.totalSelected,
+          liberoCount: liberoCheck.liberoCount,
+        });
       }
 
-      const pdfDoc = await PDFDocument.create();
-      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
-      let page = pdfDoc.addPage([595, 842]);
-      let y = 800;
-      const black = rgb(0, 0, 0);
-      const teal = rgb(0.06, 0.55, 0.49);
-      const lineH = 16;
-
-      const drawText = (text: string, x: number, yPos: number, size = 10, f = font, color = black) => {
-        page.drawText(text, { x, y: yPos, size, font: f, color });
-      };
-
-      drawText("O-2 Bis — OFFICIAL TEAM COMPOSITION FORM", 120, y, 14, fontBold, teal);
-      y -= 25;
-      drawText("AFROCAT VOLLEYBALL CLUB", 200, y, 12, fontBold);
-      y -= 20;
-      drawText("One Team One Dream — Passion Discipline Victory", 170, y, 9, font, rgb(0.4, 0.4, 0.4));
-      y -= 30;
-
-      drawText("MATCH INFORMATION", 40, y, 11, fontBold, teal);
-      y -= lineH;
-      drawText(`Competition: ${match.competition || (skipMissing ? "________________" : "")}`, 40, y, 10);
-      if (match.round) drawText(`Round: ${match.round}`, 350, y, 10);
-      y -= lineH;
-      drawText(`Date: ${match.matchDate}`, 40, y, 10);
-      drawText(`Time: ${match.startTime ? new Date(match.startTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : (skipMissing ? "____" : "")}`, 200, y, 10);
-      y -= lineH;
-      drawText(`Venue: ${match.venue || (skipMissing ? "________________" : "")}`, 40, y, 10);
-      y -= lineH;
-      drawText(`Home Team: ${team.name}`, 40, y, 10);
-      drawText(`Away Team: ${match.opponent}`, 300, y, 10);
-      y -= 25;
-
-      drawText("STAFF", 40, y, 11, fontBold, teal);
-      y -= lineH;
-      drawText(`Head Coach: ${headCoachName}`, 40, y, 10);
-      y -= lineH;
-      drawText(`Assistant Coach: ${assistantCoachName}`, 40, y, 10);
-      y -= lineH;
-      drawText(`Medic: ${medicName}`, 40, y, 10);
-      y -= lineH;
-      drawText(`Team Manager: ${teamManagerName}`, 40, y, 10);
-      y -= 25;
-
-      drawText("PLAYER LIST", 40, y, 11, fontBold, teal);
-      y -= lineH;
-
-      const colX = [40, 80, 250, 340, 410, 475];
-      drawText("#", colX[0], y, 9, fontBold);
-      drawText("Name", colX[1], y, 9, fontBold);
-      drawText("Position", colX[2], y, 9, fontBold);
-      drawText("DOB", colX[3], y, 9, fontBold);
-      drawText("Age", colX[4], y, 9, fontBold);
-      drawText("Captain", colX[5], y, 9, fontBold);
-      y -= 3;
-      page.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 0.5, color: black });
-      y -= lineH;
-
-      for (const p of players) {
-        if (y < 60) {
-          page = pdfDoc.addPage([595, 842]);
-          y = 800;
-        }
-        drawText(String(p.jerseyNo || "—"), colX[0], y, 9);
-        drawText(p.name, colX[1], y, 9);
-        drawText(p.position, colX[2], y, 9);
-        drawText(p.dob, colX[3], y, 9);
-        drawText(String(p.age || "—"), colX[4], y, 9);
-        if (p.isCaptain) drawText("(C)", colX[5], y, 9, fontBold, teal);
-        y -= lineH;
-      }
-
-      if (players.length === 0) {
-        drawText(skipMissing ? "(No players selected)" : "No players in squad", 40, y, 9, font, rgb(0.5, 0.5, 0.5));
-        y -= lineH;
-      }
-
-      y -= 20;
-      if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
-
-      const officials = await storage.getTeamOfficials(match.teamId);
-      if (officials.length > 0) {
-        drawText("TEAM OFFICIALS", 40, y, 11, fontBold, teal);
-        y -= lineH;
-        for (const o of officials) {
-          if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
-          drawText(`${o.role}: ${o.name}`, 40, y, 10);
-          y -= lineH;
-        }
-        y -= 10;
-      }
-
-      if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
-      drawText("SIGNATURES", 40, y, 11, fontBold, teal);
-      y -= 25;
-      drawText("Head Coach: ___________________________", 40, y, 10);
-      drawText("Team Manager: ___________________________", 300, y, 10);
-      y -= 25;
-      drawText("Match Commissioner: ___________________________", 40, y, 10);
-      y -= 30;
-      drawText(`Generated: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`, 40, y, 8, font, rgb(0.5, 0.5, 0.5));
-
-      const pdfBytes = await pdfDoc.save();
+      const pdfBuffer = await generateO2BISPdf(storage, { matchId, teamId: resolvedTeamId, skipMissing });
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="O2BIS_${req.params.matchId}.pdf"`);
-      res.send(Buffer.from(pdfBytes));
+      res.setHeader("Content-Disposition", `attachment; filename="O2BIS_${matchId}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (e) { next(e); }
+  });
+
+  // ─── AUTO-SELECT LIBEROS ─────────────────────────
+  app.post("/api/matches/:matchId/squad/auto-select-liberos", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const body = z.object({ teamId: z.string() }).parse(req.body);
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+      if (body.teamId !== match.teamId) {
+        return res.status(400).json({ message: "teamId does not match this match's team" });
+      }
+
+      const check = await validateLiberoRule(storage, matchId, body.teamId);
+      if (check.totalSelected < 14) {
+        return res.status(400).json({ message: "Libero auto-select only applies when squad has 14+ players" });
+      }
+
+      const selectedPlayerIds = await autoSelectLiberos(storage, matchId, body.teamId);
+      res.json({ ok: true, selectedLiberos: selectedPlayerIds });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── LIBERO VALIDATION CHECK ────────────────────
+  app.get("/api/matches/:matchId/squad/libero-check", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const teamId = req.query.teamId as string;
+      if (!teamId) return res.status(400).json({ message: "teamId query parameter required" });
+
+      const result = await validateLiberoRule(storage, matchId, teamId);
+      res.json(result);
     } catch (e) { next(e); }
   });
 

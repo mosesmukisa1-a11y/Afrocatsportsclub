@@ -188,6 +188,11 @@ export const api = {
   generateMatchReport: (matchId: string, teamId?: string) =>
     apiFetch<any>("/reports/match/" + matchId + "/pdf", { method: "POST", body: JSON.stringify({ teamId }) }),
 
+  autoSelectLiberos: (matchId: string, teamId: string) =>
+    apiFetch<any>(`/matches/${matchId}/squad/auto-select-liberos`, { method: "POST", body: JSON.stringify({ teamId }) }),
+  checkLiberos: (matchId: string, teamId: string) =>
+    apiFetch<any>(`/matches/${matchId}/squad/libero-check?teamId=${teamId}`),
+
   getSquadEligibility: (teamId: string) => apiFetch<any[]>(`/squad/eligibility/${teamId}`),
   getMatchSquad: (matchId: string, teamId: string) => apiFetch<any>(`/squad/${matchId}/${teamId}`),
   saveMatchSquad: (data: { matchId: string; teamId: string; playerIds: string[] }) =>

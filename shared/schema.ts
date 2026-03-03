@@ -403,6 +403,7 @@ export const matchSquadEntries = pgTable("match_squad_entries", {
   squadId: varchar("squad_id", { length: 36 }).notNull(),
   playerId: varchar("player_id", { length: 36 }).notNull(),
   jerseyNo: integer("jersey_no"),
+  isLibero: boolean("is_libero").default(false),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
