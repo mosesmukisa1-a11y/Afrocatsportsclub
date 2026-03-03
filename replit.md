@@ -90,6 +90,12 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - Club: AFROCAT VOLLEYBALL CLUB — One Team One Dream — Passion Discipline Victory
 - **Global Dark Theme**: Full `afrocat-*` token system. `.afrocat-card` CSS class for card components.
 
+## New Features (Latest)
+- **Stats Comparison** (`/stats-comparison`): Side-by-side player stat comparison with visual bars. Select two players, compare kills/aces/blocks/digs/assists/points/errors/matches + awards count. Uses `GET /api/stats/compare?player1=ID&player2=ID`.
+- **Real-Time Chat** (`/chat`): Room-based messaging (General + per-team rooms). REST-based with 3s auto-refresh via react-query. Role badges (ADMIN=gold, COACH=teal, PLAYER=muted). `chatMessages` table with `sentAt` timestamp. Endpoints: `GET /api/chat/rooms`, `GET /api/chat/messages/:roomId`, `POST /api/chat/messages`.
+- **Match Simulation** (`/match-simulation`): Coaches build Starting 6 lineups from team roster. Shows per-player avg stats (kills/aces/blocks/digs/assists/points/efficiency). Team Strength Score = sum of efficiency. Save/load presets via localStorage. Compare mode for lineup testing. `GET /api/simulation/team-stats/:teamId`.
+- **Report Templates** (`/report-templates`): 5 customizable report types: Season Summary, Player Report, Team Roster, Attendance Summary, Financial Summary. Each returns HTML for print-to-PDF. POST endpoints under `/api/reports/*`. Financial requires ADMIN/MANAGER/FINANCE; others require ADMIN/MANAGER/COACH/STATISTICIAN.
+
 ## GitHub Repository
 - **Repo**: https://github.com/mosesmukisa1-a11y/afrocat-club-portal
 - **Branch**: main

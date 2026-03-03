@@ -35,6 +35,10 @@ import AdminUsers from "@/pages/AdminUsers";
 import MyContract from "@/pages/MyContract";
 import ClubContract from "@/pages/ClubContract";
 import TouchStats from "@/pages/TouchStats";
+import StatsComparison from "@/pages/StatsComparison";
+import Chat from "@/pages/Chat";
+import MatchSimulation from "@/pages/MatchSimulation";
+import ReportTemplates from "@/pages/ReportTemplates";
 
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
@@ -76,6 +80,10 @@ function Router() {
       <Route path="/club-contract">{() => <ProtectedRoute component={ClubContract} />}</Route>
       <Route path="/admin/registrations">{() => <ProtectedRoute component={AdminRegistrations} />}</Route>
       <Route path="/admin/users">{() => <ProtectedRoute component={AdminUsers} />}</Route>
+      <Route path="/stats-comparison">{() => <ProtectedRoute component={StatsComparison} />}</Route>
+      <Route path="/chat">{() => <ProtectedRoute component={Chat} />}</Route>
+      <Route path="/match-simulation">{() => <ProtectedRoute component={MatchSimulation} />}</Route>
+      <Route path="/report-templates">{() => <ProtectedRoute component={ReportTemplates} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

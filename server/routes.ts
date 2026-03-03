@@ -4078,6 +4078,350 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  // ─── STATS COMPARISON ────────────────────
+  app.get("/api/stats/compare", requireAuth, async (req, res, next) => {
+    try {
+      const p1Id = req.query.player1 as string;
+      const p2Id = req.query.player2 as string;
+      if (!p1Id || !p2Id) return res.status(400).json({ message: "Two player IDs required" });
+
+      const getPlayerStats = async (playerId: string) => {
+        const player = await storage.getPlayer(playerId);
+        if (!player) return null;
+        const team = player.teamId ? await storage.getTeam(player.teamId) : null;
+        const stats = await db.select().from(schema.playerMatchStats)
+          .where(eq(schema.playerMatchStats.playerId, playerId));
+        const awards = await db.select().from(schema.awards)
+          .where(eq(schema.awards.playerId, playerId));
+
+        return {
+          id: player.id,
+          fullName: player.fullName,
+          firstName: player.firstName,
+          lastName: player.lastName,
+          photoUrl: player.photoUrl,
+          position: player.position,
+          jerseyNo: player.jerseyNo,
+          teamName: team?.name || null,
+          age: calcAge(player.dob),
+          heightCm: player.heightCm,
+          weightKg: player.weightKg,
+          careerStats: {
+            matchesPlayed: stats.length,
+            totalKills: stats.reduce((s, st) => s + (st.spikesKill || 0), 0),
+            totalAces: stats.reduce((s, st) => s + (st.servesAce || 0), 0),
+            totalBlocks: stats.reduce((s, st) => s + (st.blocksSolo || 0) + (st.blocksAssist || 0), 0),
+            totalDigs: stats.reduce((s, st) => s + (st.digs || 0), 0),
+            totalAssists: stats.reduce((s, st) => s + (st.settingAssist || 0), 0),
+            totalPoints: stats.reduce((s, st) => s + (st.pointsTotal || 0), 0),
+            totalErrors: stats.reduce((s, st) => s + (st.spikesError || 0) + (st.servesError || 0) + (st.receiveError || 0) + (st.settingError || 0), 0),
+          },
+          totalAwards: awards.length,
+          awards: awards.map(a => ({ awardType: a.awardType, awardMonth: a.awardMonth })),
+        };
+      };
+
+      const [player1, player2] = await Promise.all([getPlayerStats(p1Id), getPlayerStats(p2Id)]);
+      if (!player1 || !player2) return res.status(404).json({ message: "One or both players not found" });
+
+      res.json({ player1, player2 });
+    } catch (e) { next(e); }
+  });
+
+  // ─── MATCH SIMULATION ────────────────────
+  app.get("/api/simulation/team-stats/:teamId", requireAuth, requireRole(["ADMIN", "MANAGER", "COACH"]), async (req, res, next) => {
+    try {
+      const team = await storage.getTeam(req.params.teamId);
+      if (!team) return res.status(404).json({ message: "Team not found" });
+
+      const allPlayers = await storage.getPlayers();
+      const teamPlayers = allPlayers.filter((p: any) => p.teamId === req.params.teamId && p.status === "ACTIVE");
+
+      const playersWithStats = await Promise.all(teamPlayers.map(async (p: any) => {
+        const stats = await db.select().from(schema.playerMatchStats)
+          .where(eq(schema.playerMatchStats.playerId, p.id));
+        const mp = stats.length || 1;
+        return {
+          id: p.id,
+          fullName: p.fullName,
+          firstName: p.firstName,
+          lastName: p.lastName,
+          photoUrl: p.photoUrl,
+          position: p.position,
+          jerseyNo: p.jerseyNo,
+          heightCm: p.heightCm,
+          weightKg: p.weightKg,
+          matchesPlayed: stats.length,
+          avgKills: +(stats.reduce((s, st) => s + (st.spikesKill || 0), 0) / mp).toFixed(1),
+          avgAces: +(stats.reduce((s, st) => s + (st.servesAce || 0), 0) / mp).toFixed(1),
+          avgBlocks: +(stats.reduce((s, st) => s + (st.blocksSolo || 0) + (st.blocksAssist || 0), 0) / mp).toFixed(1),
+          avgDigs: +(stats.reduce((s, st) => s + (st.digs || 0), 0) / mp).toFixed(1),
+          avgAssists: +(stats.reduce((s, st) => s + (st.settingAssist || 0), 0) / mp).toFixed(1),
+          avgPoints: +(stats.reduce((s, st) => s + (st.pointsTotal || 0), 0) / mp).toFixed(1),
+          totalErrors: stats.reduce((s, st) => s + (st.spikesError || 0) + (st.servesError || 0) + (st.receiveError || 0) + (st.settingError || 0), 0),
+          efficiency: stats.length > 0 ? +((stats.reduce((s, st) => s + (st.pointsTotal || 0), 0) - stats.reduce((s, st) => s + (st.spikesError || 0) + (st.servesError || 0) + (st.receiveError || 0) + (st.settingError || 0), 0)) / mp).toFixed(1) : 0,
+        };
+      }));
+
+      res.json({ team: { id: team.id, name: team.name }, players: playersWithStats });
+    } catch (e) { next(e); }
+  });
+
+  // ─── REPORT TEMPLATES ────────────────────
+  function esc(s: string | null | undefined): string {
+    return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  app.post("/api/reports/season-summary", requireAuth, requireRole(["ADMIN", "MANAGER", "COACH", "STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { teamId } = req.body;
+      const allMatches = await storage.getMatches();
+      const teamMatches = teamId ? allMatches.filter((m: any) => m.teamId === teamId) : allMatches;
+      const played = teamMatches.filter((m: any) => m.status === "PLAYED");
+      const wins = played.filter((m: any) => m.result === "W").length;
+      const losses = played.length - wins;
+      const team = teamId ? await storage.getTeam(teamId) : null;
+
+      const allStats = await db.select().from(schema.playerMatchStats);
+      const matchIds = new Set(played.map((m: any) => m.id));
+      const relevantStats = allStats.filter(s => matchIds.has(s.matchId));
+
+      const playerTotals: Record<string, any> = {};
+      for (const s of relevantStats) {
+        if (!playerTotals[s.playerId]) playerTotals[s.playerId] = { playerId: s.playerId, kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0, points: 0, matches: 0 };
+        const t = playerTotals[s.playerId];
+        t.kills += s.spikesKill || 0; t.aces += s.servesAce || 0;
+        t.blocks += (s.blocksSolo || 0) + (s.blocksAssist || 0);
+        t.digs += s.digs || 0; t.assists += s.settingAssist || 0;
+        t.points += s.pointsTotal || 0; t.matches++;
+      }
+      const topPerformers = Object.values(playerTotals).sort((a: any, b: any) => b.points - a.points).slice(0, 10);
+      const allPlayers = await storage.getPlayers();
+      const pMap: Record<string, any> = {};
+      for (const p of allPlayers) pMap[p.id] = p;
+
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Season Summary</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}.record{font-size:24px;font-weight:bold;margin:10px 0}@media print{body{padding:0}}</style></head><body>`;
+      html += `<h1>AFROCAT VOLLEYBALL CLUB — Season Summary</h1>`;
+      html += `<p><strong>Team:</strong> ${esc(team?.name || "All Teams")} | <strong>Generated:</strong> ${new Date().toLocaleDateString()}</p>`;
+      html += `<div class="record">${wins}W - ${losses}L (${played.length > 0 ? ((wins / played.length) * 100).toFixed(0) : 0}% Win Rate)</div>`;
+      html += `<p>Total Matches Played: ${played.length}</p>`;
+
+      html += `<h2>Match Results</h2><table><tr><th>Date</th><th>Opponent</th><th>Competition</th><th>Result</th><th>Score</th></tr>`;
+      for (const m of played.sort((a: any, b: any) => new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime())) {
+        html += `<tr><td>${esc(m.matchDate)}</td><td>${esc(m.opponent)}</td><td>${esc(m.competition)}</td><td style="color:${m.result === 'W' ? 'green' : 'red'};font-weight:bold">${esc(m.result)}</td><td>${m.setsFor || 0}-${m.setsAgainst || 0}</td></tr>`;
+      }
+      html += `</table>`;
+
+      html += `<h2>Top Performers (by Points)</h2><table><tr><th>#</th><th>Player</th><th>Matches</th><th>Points</th><th>Kills</th><th>Aces</th><th>Blocks</th><th>Digs</th><th>Assists</th></tr>`;
+      topPerformers.forEach((t: any, i: number) => {
+        const p = pMap[t.playerId];
+        html += `<tr><td>${i + 1}</td><td>${esc(p?.fullName || "Unknown")}</td><td>${t.matches}</td><td><strong>${t.points}</strong></td><td>${t.kills}</td><td>${t.aces}</td><td>${t.blocks}</td><td>${t.digs}</td><td>${t.assists}</td></tr>`;
+      });
+      html += `</table></body></html>`;
+
+      res.json({ html });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/reports/player-report/:playerId", requireAuth, requireRole(["ADMIN", "MANAGER", "COACH", "STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+      const team = player.teamId ? await storage.getTeam(player.teamId) : null;
+      const stats = await db.select().from(schema.playerMatchStats).where(eq(schema.playerMatchStats.playerId, player.id));
+      const awards = await db.select().from(schema.awards).where(eq(schema.awards.playerId, player.id));
+      const age = calcAge(player.dob);
+
+      const totals = {
+        kills: stats.reduce((s, st) => s + (st.spikesKill || 0), 0),
+        aces: stats.reduce((s, st) => s + (st.servesAce || 0), 0),
+        blocks: stats.reduce((s, st) => s + (st.blocksSolo || 0) + (st.blocksAssist || 0), 0),
+        digs: stats.reduce((s, st) => s + (st.digs || 0), 0),
+        assists: stats.reduce((s, st) => s + (st.settingAssist || 0), 0),
+        points: stats.reduce((s, st) => s + (st.pointsTotal || 0), 0),
+      };
+
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Player Report — ${esc(player.fullName)}</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:15px 0}.stat-box{background:#f0f9f8;border:1px solid #0F8B7D;border-radius:8px;padding:12px;text-align:center}.stat-val{font-size:24px;font-weight:bold;color:#0F8B7D}.stat-label{font-size:11px;color:#666;text-transform:uppercase}@media print{body{padding:0}}</style></head><body>`;
+      html += `<h1>AFROCAT VOLLEYBALL CLUB — Player Report</h1>`;
+      html += `<h2>${esc(player.fullName)}</h2>`;
+      html += `<table><tr><td><strong>Position:</strong> ${esc(player.position)}</td><td><strong>Jersey:</strong> #${player.jerseyNo || "N/A"}</td><td><strong>Team:</strong> ${esc(team?.name)}</td></tr>`;
+      html += `<tr><td><strong>Age:</strong> ${age ?? "N/A"}</td><td><strong>Height:</strong> ${player.heightCm || "N/A"}cm</td><td><strong>Weight:</strong> ${player.weightKg || "N/A"}kg</td></tr>`;
+      html += `<tr><td><strong>DOB:</strong> ${esc(player.dob)}</td><td><strong>Gender:</strong> ${esc(player.gender)}</td><td><strong>Nationality:</strong> ${esc(player.nationality)}</td></tr></table>`;
+
+      html += `<h3>Career Statistics (${stats.length} Matches)</h3>`;
+      html += `<div class="stat-grid">`;
+      for (const [label, val] of Object.entries(totals)) {
+        html += `<div class="stat-box"><div class="stat-val">${val}</div><div class="stat-label">${label}</div></div>`;
+      }
+      html += `</div>`;
+
+      if (awards.length > 0) {
+        html += `<h3>Awards (${awards.length})</h3><table><tr><th>Award</th><th>Month</th><th>Notes</th></tr>`;
+        for (const a of awards) html += `<tr><td>${esc(a.awardType)}</td><td>${esc(a.awardMonth)}</td><td>${esc(a.notes)}</td></tr>`;
+        html += `</table>`;
+      }
+      html += `</body></html>`;
+
+      res.json({ html });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/reports/team-roster/:teamId", requireAuth, requireRole(["ADMIN", "MANAGER", "COACH", "STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const team = await storage.getTeam(req.params.teamId);
+      if (!team) return res.status(404).json({ message: "Team not found" });
+      const allPlayers = await storage.getPlayers();
+      const teamPlayers = allPlayers.filter((p: any) => p.teamId === req.params.teamId && p.status === "ACTIVE");
+
+      const playersWithStats = await Promise.all(teamPlayers.map(async (p: any) => {
+        const stats = await db.select().from(schema.playerMatchStats).where(eq(schema.playerMatchStats.playerId, p.id));
+        return { ...p, matchesPlayed: stats.length, totalPoints: stats.reduce((s: number, st: any) => s + (st.pointsTotal || 0), 0) };
+      }));
+
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Team Roster — ${esc(team.name)}</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}@media print{body{padding:0}}</style></head><body>`;
+      html += `<h1>AFROCAT VOLLEYBALL CLUB — Team Roster</h1>`;
+      html += `<h2>${esc(team.name)}</h2><p>Generated: ${new Date().toLocaleDateString()} | Total Players: ${teamPlayers.length}</p>`;
+      html += `<table><tr><th>#</th><th>Name</th><th>Position</th><th>Jersey</th><th>DOB</th><th>Height</th><th>Weight</th><th>Matches</th><th>Points</th></tr>`;
+      playersWithStats.sort((a: any, b: any) => (a.jerseyNo || 99) - (b.jerseyNo || 99)).forEach((p: any, i: number) => {
+        html += `<tr><td>${i + 1}</td><td>${esc(p.fullName)}</td><td>${esc(p.position)}</td><td>${p.jerseyNo || "—"}</td><td>${esc(p.dob)}</td><td>${p.heightCm || "—"}cm</td><td>${p.weightKg || "—"}kg</td><td>${p.matchesPlayed}</td><td>${p.totalPoints}</td></tr>`;
+      });
+      html += `</table></body></html>`;
+
+      res.json({ html });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/reports/attendance-summary", requireAuth, requireRole(["ADMIN", "MANAGER", "COACH"]), async (req, res, next) => {
+    try {
+      const { teamId, startDate, endDate } = req.body;
+      const sessions = await db.select().from(schema.attendanceSessions);
+      const filtered = sessions.filter((s: any) => {
+        if (teamId && s.teamId !== teamId) return false;
+        if (startDate && s.sessionDate < startDate) return false;
+        if (endDate && s.sessionDate > endDate) return false;
+        return true;
+      });
+
+      const records = await db.select().from(schema.attendanceRecords);
+      const allPlayers = await storage.getPlayers();
+      const pMap: Record<string, any> = {};
+      for (const p of allPlayers) pMap[p.id] = p;
+      const team = teamId ? await storage.getTeam(teamId) : null;
+
+      const sessionIds = new Set(filtered.map(s => s.id));
+      const relevantRecords = records.filter((r: any) => sessionIds.has(r.sessionId));
+
+      const playerAttendance: Record<string, { present: number; absent: number; name: string }> = {};
+      for (const r of relevantRecords) {
+        if (!playerAttendance[r.playerId]) playerAttendance[r.playerId] = { present: 0, absent: 0, name: pMap[r.playerId]?.fullName || "Unknown" };
+        if (r.status === "PRESENT" || r.status === "LATE") playerAttendance[r.playerId].present++;
+        else playerAttendance[r.playerId].absent++;
+      }
+
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Attendance Summary</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}.good{color:green}.bad{color:red}@media print{body{padding:0}}</style></head><body>`;
+      html += `<h1>AFROCAT VOLLEYBALL CLUB — Attendance Summary</h1>`;
+      html += `<p><strong>Team:</strong> ${esc(team?.name || "All Teams")} | <strong>Period:</strong> ${esc(startDate || "Start")} to ${esc(endDate || "Now")} | <strong>Sessions:</strong> ${filtered.length}</p>`;
+      html += `<table><tr><th>#</th><th>Player</th><th>Present</th><th>Absent</th><th>Rate</th></tr>`;
+      const sorted = Object.entries(playerAttendance).sort((a, b) => {
+        const rateA = a[1].present / (a[1].present + a[1].absent);
+        const rateB = b[1].present / (b[1].present + b[1].absent);
+        return rateB - rateA;
+      });
+      sorted.forEach(([_id, data], i) => {
+        const total = data.present + data.absent;
+        const rate = total > 0 ? ((data.present / total) * 100).toFixed(0) : "0";
+        html += `<tr><td>${i + 1}</td><td>${esc(data.name)}</td><td>${data.present}</td><td>${data.absent}</td><td class="${+rate >= 75 ? 'good' : 'bad'}">${rate}%</td></tr>`;
+      });
+      html += `</table></body></html>`;
+
+      res.json({ html });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/reports/financial-summary", requireAuth, requireRole(["ADMIN", "MANAGER", "FINANCE"]), async (req, res, next) => {
+    try {
+      const { startDate, endDate } = req.body;
+      const txns = await storage.getFinanceTxns();
+      const filtered = txns.filter((t: any) => {
+        if (startDate && t.date < startDate) return false;
+        if (endDate && t.date > endDate) return false;
+        return true;
+      });
+
+      const income = filtered.filter((t: any) => t.type === "INCOME");
+      const expense = filtered.filter((t: any) => t.type === "EXPENSE");
+      const totalIncome = income.reduce((s: number, t: any) => s + t.amount, 0);
+      const totalExpense = expense.reduce((s: number, t: any) => s + t.amount, 0);
+
+      const categories: Record<string, number> = {};
+      for (const t of filtered) {
+        const cat = t.category || "Uncategorized";
+        categories[cat] = (categories[cat] || 0) + (t.type === "INCOME" ? t.amount : -t.amount);
+      }
+
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Financial Summary</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}.income{color:green}.expense{color:red}.net{font-size:24px;font-weight:bold}@media print{body{padding:0}}</style></head><body>`;
+      html += `<h1>AFROCAT VOLLEYBALL CLUB — Financial Summary</h1>`;
+      html += `<p><strong>Period:</strong> ${esc(startDate || "Start")} to ${esc(endDate || "Now")}</p>`;
+      html += `<div class="net">Net: <span class="${totalIncome - totalExpense >= 0 ? 'income' : 'expense'}">N$${(totalIncome - totalExpense).toLocaleString()}</span></div>`;
+      html += `<p><span class="income">Income: N$${totalIncome.toLocaleString()}</span> | <span class="expense">Expenses: N$${totalExpense.toLocaleString()}</span></p>`;
+
+      html += `<h3>By Category</h3><table><tr><th>Category</th><th>Net Amount</th></tr>`;
+      for (const [cat, amt] of Object.entries(categories).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))) {
+        html += `<tr><td>${esc(cat)}</td><td class="${amt >= 0 ? 'income' : 'expense'}">N$${amt.toLocaleString()}</td></tr>`;
+      }
+      html += `</table>`;
+
+      html += `<h3>All Transactions (${filtered.length})</h3><table><tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th></tr>`;
+      filtered.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()).forEach((t: any) => {
+        html += `<tr><td>${esc(t.date)}</td><td class="${t.type === 'INCOME' ? 'income' : 'expense'}">${t.type}</td><td>${esc(t.category)}</td><td>${esc(t.description)}</td><td>N$${t.amount?.toLocaleString()}</td></tr>`;
+      });
+      html += `</table></body></html>`;
+
+      res.json({ html });
+    } catch (e) { next(e); }
+  });
+
+  // ─── CHAT MESSAGES (REST fallback) ────────────────────
+  app.get("/api/chat/messages/:roomId", requireAuth, async (req, res, next) => {
+    try {
+      const messages = await db.select().from(schema.chatMessages)
+        .where(eq(schema.chatMessages.roomId, req.params.roomId));
+      const sorted = messages.sort((a, b) => new Date(a.sentAt!).getTime() - new Date(b.sentAt!).getTime()).slice(-50);
+      res.json(sorted);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/chat/messages", requireAuth, async (req, res, next) => {
+    try {
+      const body = z.object({
+        roomId: z.string().min(1),
+        message: z.string().min(1).max(2000),
+      }).parse(req.body);
+
+      const [msg] = await db.insert(schema.chatMessages).values({
+        roomId: body.roomId,
+        senderId: req.user!.userId,
+        senderName: req.user!.fullName || "Unknown",
+        senderRole: req.user!.role || "PLAYER",
+        message: body.message,
+      }).returning();
+
+      res.status(201).json(msg);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
+  });
+
+  app.get("/api/chat/rooms", requireAuth, async (req, res, next) => {
+    try {
+      const rooms: { id: string; name: string }[] = [{ id: "general", name: "General Chat" }];
+      const teams = await storage.getTeams();
+      for (const t of teams) rooms.push({ id: `team:${t.id}`, name: t.name });
+      res.json(rooms);
+    } catch (e) { next(e); }
+  });
+
   // ─── PLAYER SPOTLIGHT (daily rotation) ────────────────────
   app.get("/api/player-spotlight", requireAuth, async (_req, res, next) => {
     try {

@@ -681,3 +681,17 @@ export const playerUpdateRequests = pgTable("player_update_requests", {
 export const insertPlayerUpdateRequestSchema = createInsertSchema(playerUpdateRequests).omit({ id: true, submittedAt: true });
 export type InsertPlayerUpdateRequest = z.infer<typeof insertPlayerUpdateRequestSchema>;
 export type PlayerUpdateRequest = typeof playerUpdateRequests.$inferSelect;
+
+export const chatMessages = pgTable("chat_messages", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  roomId: text("room_id").notNull(),
+  senderId: varchar("sender_id", { length: 36 }).notNull(),
+  senderName: text("sender_name").notNull(),
+  senderRole: text("sender_role").notNull(),
+  message: text("message").notNull(),
+  sentAt: timestamp("sent_at").defaultNow(),
+});
+
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, sentAt: true });
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+export type ChatMessage = typeof chatMessages.$inferSelect;

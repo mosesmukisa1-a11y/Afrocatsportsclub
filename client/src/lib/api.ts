@@ -288,4 +288,25 @@ export const api = {
     apiFetch<any>(`/player-update-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ reviewNote }) }),
   getWeightStatus: () => apiFetch<any>("/players/me/weight-status"),
   getPlayerSpotlight: () => apiFetch<any>("/player-spotlight"),
+
+  compareStats: (player1: string, player2: string) =>
+    apiFetch<any>(`/stats/compare?player1=${player1}&player2=${player2}`),
+  getSimulationTeamStats: (teamId: string) =>
+    apiFetch<any>(`/simulation/team-stats/${teamId}`),
+
+  generateSeasonSummary: (teamId?: string) =>
+    apiFetch<any>("/reports/season-summary", { method: "POST", body: JSON.stringify({ teamId }) }),
+  generatePlayerReport: (playerId: string) =>
+    apiFetch<any>(`/reports/player-report/${playerId}`, { method: "POST", body: JSON.stringify({}) }),
+  generateTeamRoster: (teamId: string) =>
+    apiFetch<any>(`/reports/team-roster/${teamId}`, { method: "POST", body: JSON.stringify({}) }),
+  generateAttendanceSummary: (data: { teamId?: string; startDate?: string; endDate?: string }) =>
+    apiFetch<any>("/reports/attendance-summary", { method: "POST", body: JSON.stringify(data) }),
+  generateFinancialSummary: (data: { startDate?: string; endDate?: string }) =>
+    apiFetch<any>("/reports/financial-summary", { method: "POST", body: JSON.stringify(data) }),
+
+  getChatRooms: () => apiFetch<any[]>("/chat/rooms"),
+  getChatMessages: (roomId: string) => apiFetch<any[]>(`/chat/messages/${encodeURIComponent(roomId)}`),
+  sendChatMessage: (data: { roomId: string; message: string }) =>
+    apiFetch<any>("/chat/messages", { method: "POST", body: JSON.stringify(data) }),
 };

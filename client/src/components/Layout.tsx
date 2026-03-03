@@ -4,7 +4,8 @@ import {
   LayoutDashboard, Users, Trophy, ClipboardList, 
   CalendarCheck, DollarSign, Activity, FileText, 
   LogOut, ShieldAlert, Award, Menu, X, Star,
-  ScrollText, FolderOpen, UserCircle, UserCheck
+  ScrollText, FolderOpen, UserCircle, UserCheck,
+  BarChart3, MessageCircle, Gamepad2, FileSpreadsheet
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import logo from "@assets/afrocate_logo_1772226294597.png";
@@ -28,6 +29,10 @@ const allNavItems = [
   { icon: Users, label: "Player Stats", href: "/player-dashboard", roles: ["ADMIN","MANAGER","COACH","PLAYER"] },
   { icon: ScrollText, label: "My Contract", href: "/my-contract", roles: ["PLAYER"] },
   { icon: FileText, label: "Club Contract", href: "/club-contract", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
+  { icon: BarChart3, label: "Compare Stats", href: "/stats-comparison", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","PLAYER"] },
+  { icon: MessageCircle, label: "Chat", href: "/chat", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","PLAYER"] },
+  { icon: Gamepad2, label: "Simulation", href: "/match-simulation", roles: ["ADMIN","MANAGER","COACH"] },
+  { icon: FileSpreadsheet, label: "Report Builder", href: "/report-templates", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE"] },
   { icon: UserCircle, label: "My Profile", href: "/profile-setup", roles: ["PLAYER"] },
   { icon: UserCheck, label: "Registrations", href: "/admin/registrations", roles: ["ADMIN","MANAGER"] },
   { icon: ShieldAlert, label: "User Management", href: "/admin/users", roles: ["ADMIN"] },
