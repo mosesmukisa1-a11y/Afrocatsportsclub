@@ -8,6 +8,9 @@ import { z } from "zod";
 import crypto from "crypto";
 import cron from "node-cron";
 import { eq, and } from "drizzle-orm";
+import fs from "fs";
+import path from "path";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const TEAM_GENDER_RULES: Record<string, string> = {
   "Afrocat D": "MALE",
@@ -25,8 +28,10 @@ function validateTeamGender(teamName: string, gender: string): { ok: boolean; er
   return { ok: true };
 }
 
-function calcAge(dobISO: string): number {
+function calcAge(dobISO: string | null | undefined): number | null {
+  if (!dobISO) return null;
   const dob = new Date(dobISO);
+  if (isNaN(dob.getTime())) return null;
   const today = new Date();
   let age = today.getFullYear() - dob.getFullYear();
   const m = today.getMonth() - dob.getMonth();
@@ -3867,6 +3872,7 @@ th{background:#0d7377;color:white}
           accepterFullName: acceptance.accepterFullName,
           isMinor: acceptance.isMinor,
           contractKey: CONTRACT_KEY,
+          signedPdfUrl: acceptance.signedPdfUrl,
         });
       }
       return res.json({ ok: true, required: true, accepted: false, contractKey: CONTRACT_KEY });
@@ -3886,19 +3892,23 @@ th{background:#0d7377;color:white}
       if (existing) return res.status(400).json({ message: "Contract already accepted" });
 
       let playerDob: string | null = null;
+      let playerName = "";
+      let playerTeamName = "";
       if (playerId) {
         const player = await storage.getPlayer(playerId);
-        if (player) playerDob = player.dob || null;
+        if (player) {
+          playerDob = player.dob || null;
+          playerName = player.fullName || "";
+          if (player.teamId) {
+            const team = await storage.getTeam(player.teamId);
+            if (team) playerTeamName = team.name;
+          }
+        }
       }
 
       let isMinor = false;
       if (playerDob) {
-        const birth = new Date(playerDob);
-        const today = new Date();
-        let age = today.getFullYear() - birth.getFullYear();
-        const m = today.getMonth() - birth.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-        isMinor = age < 18;
+        isMinor = calcAge(playerDob) !== null && calcAge(playerDob)! < 18;
       }
 
       const body = z.object({
@@ -3917,6 +3927,99 @@ th{background:#0d7377;color:white}
         }
       }
 
+      const acceptedAtISO = new Date().toISOString();
+      let signedPdfUrl: string | null = null;
+
+      try {
+        const contractPdfPath = path.resolve("public/contracts/afrocat-volleyball-contract.pdf");
+        if (fs.existsSync(contractPdfPath)) {
+          const pdfBytes = fs.readFileSync(contractPdfPath);
+          const doc = await PDFDocument.load(pdfBytes);
+
+          const page = doc.addPage();
+          const { width, height } = page.getSize();
+          const font = await doc.embedFont(StandardFonts.Helvetica);
+          const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+          const margin = 48;
+          let y = height - margin;
+
+          const drawLine = () => {
+            page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1, color: rgb(0, 0, 0) });
+            y -= 18;
+          };
+          const drawText = (txt: string, size = 11, bold = false) => {
+            page.drawText(txt, { x: margin, y, size, font: bold ? fontBold : font, color: rgb(0, 0, 0) });
+            y -= size + 8;
+          };
+          const drawCheckbox = (label: string, checked: boolean) => {
+            const boxSize = 12;
+            const x = margin;
+            const boxY = y - 2;
+            page.drawRectangle({ x, y: boxY, width: boxSize, height: boxSize, borderColor: rgb(0, 0, 0), borderWidth: 1 });
+            if (checked) {
+              page.drawText("X", { x: x + 2.5, y: boxY + 1, size: 12, font: fontBold, color: rgb(0, 0, 0) });
+            }
+            page.drawText(label, { x: x + 18, y: boxY + 2, size: 11, font, color: rgb(0, 0, 0) });
+            y -= 20;
+          };
+
+          drawText("AFROCAT VOLLEYBALL CLUB - CONTRACT CONFIRMATION", 14, true);
+          drawText(`Contract Key: ${CONTRACT_KEY}`, 10, false);
+          drawText("Sport: VOLLEYBALL", 10, true);
+          drawLine();
+
+          drawText("PLAYER DETAILS", 12, true);
+          drawText(`Player Name: ${playerName}`);
+          drawText(`Date of Birth: ${playerDob || "N/A"}`);
+          drawText(`Team: ${playerTeamName || "Unassigned"}`);
+          drawText(`User ID: ${userId}`, 9, false);
+          drawLine();
+
+          drawText("CONFIRMATION TYPE", 12, true);
+          drawCheckbox("Adult Player (SELF confirmation)", body.acceptedBy === "SELF");
+          drawCheckbox("Minor Player (GUARDIAN confirmation)", body.acceptedBy === "GUARDIAN");
+          drawLine();
+
+          drawText("CONFIRMATION STATEMENT", 12, true);
+          drawText("I confirm that I have read the Afrocat Volleyball Club Contract and agree to the terms.", 11, false);
+          y -= 6;
+          drawText("This confirmation is electronically recorded and attached to the official contract PDF.", 11, false);
+          drawLine();
+
+          drawText("SIGNATORY DETAILS", 12, true);
+          drawText(`Confirmed By: ${body.accepterFullName}`, 11, true);
+
+          if (body.acceptedBy === "GUARDIAN") {
+            drawText(`Guardian ID Number: ${body.guardianIdNumber || ""}`);
+            drawText(`Guardian Phone Number: ${body.guardianPhoneNumber || ""}`);
+          } else {
+            drawText("Guardian ID Number: (Not applicable)");
+            drawText("Guardian Phone Number: (Not applicable)");
+          }
+
+          y -= 8;
+          drawText(`Confirmed At: ${acceptedAtISO}`, 11, false);
+
+          y -= 10;
+          page.drawLine({ start: { x: margin, y }, end: { x: margin + 240, y }, thickness: 1, color: rgb(0, 0, 0) });
+          y -= 14;
+          drawText("Signature (electronic acknowledgement)", 10, false);
+
+          const outBytes = await doc.save();
+
+          const outDir = path.resolve("public/contracts/signed");
+          if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+          const fileName = `signed_${CONTRACT_KEY}_${userId}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, "_");
+          const outPath = path.join(outDir, fileName);
+          fs.writeFileSync(outPath, outBytes);
+
+          signedPdfUrl = `/contracts/signed/${fileName}`;
+        }
+      } catch (pdfErr: any) {
+        console.error("Signed PDF generation warning:", pdfErr.message);
+      }
+
       const [record] = await db.insert(schema.contractAcceptances).values({
         userId,
         playerId,
@@ -3930,9 +4033,15 @@ th{background:#0d7377;color:white}
         guardianPhoneNumber: isMinor ? body.guardianPhoneNumber || null : null,
         ipAddress: (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || null,
         userAgent: req.headers["user-agent"] || null,
+        signedPdfUrl,
       }).returning();
 
-      res.status(201).json({ ok: true, accepted: true, acceptedAt: record.acceptedAt, contractKey: CONTRACT_KEY });
+      res.status(201).json({
+        ok: true, accepted: true, acceptedAt: record.acceptedAt, contractKey: CONTRACT_KEY,
+        signedPdfUrl: record.signedPdfUrl,
+        acceptedBy: body.acceptedBy,
+        isMinor,
+      });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);

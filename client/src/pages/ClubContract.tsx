@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import {
   ScrollText, CheckCircle, AlertTriangle, Loader2, FileText,
-  Shield, UserCheck, Baby
+  Shield, UserCheck, Baby, Download
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -104,7 +104,7 @@ export default function ClubContract() {
           <div className="afrocat-card border border-afrocat-green/30 p-5" data-testid="card-confirmed">
             <div className="flex items-center gap-3">
               <CheckCircle className="w-6 h-6 text-afrocat-green" />
-              <div>
+              <div className="flex-1">
                 <p className="font-bold text-afrocat-green">Contract Confirmed</p>
                 <p className="text-xs text-afrocat-muted">
                   Confirmed on {new Date(contractStatus.acceptedAt).toLocaleDateString()} at {new Date(contractStatus.acceptedAt).toLocaleTimeString()}
@@ -113,6 +113,17 @@ export default function ClubContract() {
                   By: {contractStatus.accepterFullName} ({contractStatus.acceptedBy === "GUARDIAN" ? "Parent/Guardian" : "Self"})
                 </p>
               </div>
+              {contractStatus.signedPdfUrl && (
+                <a
+                  href={contractStatus.signedPdfUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal hover:bg-afrocat-teal/80 text-white text-sm font-bold transition-colors"
+                  data-testid="link-download-signed-pdf"
+                >
+                  <Download className="w-4 h-4" /> Download Signed PDF
+                </a>
+              )}
             </div>
           </div>
         )}

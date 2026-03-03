@@ -644,6 +644,7 @@ export const contractAcceptances = pgTable("contract_acceptances", {
   acceptedAt: timestamp("accepted_at").defaultNow(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
+  signedPdfUrl: text("signed_pdf_url"),
 });
 
 export const insertContractAcceptanceSchema = createInsertSchema(contractAcceptances).omit({ id: true, acceptedAt: true });

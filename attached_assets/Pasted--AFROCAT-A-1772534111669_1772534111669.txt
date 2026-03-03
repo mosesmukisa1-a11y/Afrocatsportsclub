@@ -1,0 +1,572 @@
+/*****************************************************************************************
+AFROCAT APP – CONTRACT SECTION (REPLACE OLD CONTRACT FORMAT WITH PDF-BASED ELECTRONIC FLOW)
+✅ Shows the OFFICIAL PDF exactly as-is (electronic)
+✅ All players can open link, read, fill & confirm
+✅ Minors (<18) REQUIRE parent/guardian confirmation + guardian ID + phone
+✅ Form SPORT is fixed to VOLLEYBALL ONLY
+✅ “Selecting/box marking” implemented as checkboxes + typed fields, then generates a
+   SIGNED PDF = Original Contract PDF + Appended “Confirmation Page” with checkmarks.
+
+WHAT TO DO IN REPLIT:
+1) Put your PDF file exactly here:
+   public/contracts/afrocat-volleyball-contract.pdf
+2) Install deps:
+   npm i pdf-lib
+3) Add these files and routes. Replace your old contract section with the new /contract page link.
+******************************************************************************************/
+
+/* =======================================================================================
+FILE: server/utils/age.js
+======================================================================================= */
+export function calcAge(dobISO) {
+  if (!dobISO) return null;
+  const dob = new Date(dobISO);
+  if (Number.isNaN(dob.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+/* =======================================================================================
+FILE: server/routes/contractV2.js
+======================================================================================= */
+import express from "express";
+import fs from "fs";
+import path from "path";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { calcAge } from "../utils/age.js";
+
+const router = express.Router();
+
+const CONTRACT_KEY = "AFROCAT_VOLLEYBALL_CONTRACT_2024_2026";
+const SPORT_FIXED = "VOLLEYBALL";
+const CONTRACT_PDF_PATH = path.resolve("public/contracts/afrocat-volleyball-contract.pdf");
+
+// ---- storage (Prisma users: replace these with your DB calls) ----
+// Expected: req.db.contractAcceptances[] or Prisma model ContractAcceptance
+function getStore(req) {
+  // If you used my JSON store earlier: req.db.contractAcceptance.upsert exists
+  return req.db;
+}
+
+// ---- helpers ----
+function ensurePdfExists() {
+  if (!fs.existsSync(CONTRACT_PDF_PATH)) {
+    throw new Error("Missing contract PDF. Put it at: public/contracts/afrocat-volleyball-contract.pdf");
+  }
+}
+
+function requireAuth(req, res, next) {
+  // Replace with your real auth.
+  // For now expects req.user exists (from your middleware). If not, block.
+  if (!req.user?.id) return res.status(401).json({ ok: false, error: "Not authenticated" });
+  next();
+}
+
+// This must return a player record that includes dob, firstName, lastName.
+// Adjust lookup to match your app.
+async function getPlayerForUser(req) {
+  // If your userId equals playerId:
+  const player = await req.db.player.findUnique({ where: { id: req.user.id } });
+  return player;
+}
+
+function sanitize(str) {
+  return String(str || "").trim();
+}
+
+function nowISO() {
+  return new Date().toISOString();
+}
+
+/**
+ * Generates Signed PDF: original contract + appended confirmation page with checkboxes
+ * This avoids guessing checkbox coordinates on the original PDF.
+ */
+async function buildSignedPdf({
+  accepterType, // "SELF" | "GUARDIAN"
+  accepterFullName,
+  guardianIdNumber,
+  guardianPhoneNumber,
+  playerName,
+  playerDobISO,
+  playerTeamName,
+  acceptedAtISO,
+  userId,
+}) {
+  ensurePdfExists();
+  const pdfBytes = fs.readFileSync(CONTRACT_PDF_PATH);
+  const doc = await PDFDocument.load(pdfBytes);
+
+  // Add 1 appended confirmation page
+  const page = doc.addPage();
+  const { width, height } = page.getSize();
+
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  const margin = 48;
+  let y = height - margin;
+
+  const drawLine = () => {
+    page.drawLine({
+      start: { x: margin, y },
+      end: { x: width - margin, y },
+      thickness: 1,
+      color: rgb(0, 0, 0),
+    });
+    y -= 18;
+  };
+
+  const drawText = (txt, size = 11, bold = false) => {
+    page.drawText(txt, {
+      x: margin,
+      y,
+      size,
+      font: bold ? fontBold : font,
+      color: rgb(0, 0, 0),
+    });
+    y -= size + 8;
+  };
+
+  const drawCheckbox = (label, checked) => {
+    const boxSize = 12;
+    const x = margin;
+    const boxY = y - 2;
+
+    page.drawRectangle({
+      x,
+      y: boxY,
+      width: boxSize,
+      height: boxSize,
+      borderColor: rgb(0, 0, 0),
+      borderWidth: 1,
+    });
+
+    if (checked) {
+      page.drawText("✓", { x: x + 2.5, y: boxY + 1, size: 12, font: fontBold, color: rgb(0, 0, 0) });
+    }
+
+    page.drawText(label, { x: x + 18, y: boxY + 2, size: 11, font, color: rgb(0, 0, 0) });
+    y -= 20;
+  };
+
+  drawText("AFROCAT VOLLEYBALL CLUB – CONTRACT CONFIRMATION", 14, true);
+  drawText(`Contract Key: ${CONTRACT_KEY}`, 10, false);
+  drawText(`Sport: ${SPORT_FIXED}`, 10, true);
+  drawLine();
+
+  drawText("PLAYER DETAILS", 12, true);
+  drawText(`Player Name: ${playerName}`);
+  drawText(`Date of Birth: ${playerDobISO || ""}`);
+  drawText(`Team: ${playerTeamName || ""}`);
+  drawText(`User ID: ${userId}`, 9, false);
+  drawLine();
+
+  drawText("CONFIRMATION TYPE", 12, true);
+  drawCheckbox("Adult Player (SELF confirmation)", accepterType === "SELF");
+  drawCheckbox("Minor Player (GUARDIAN confirmation)", accepterType === "GUARDIAN");
+  drawLine();
+
+  drawText("CONFIRMATION STATEMENT", 12, true);
+  drawText("I confirm that I have read the Afrocat Volleyball Club Contract and agree to the terms.", 11, false);
+  y -= 6;
+  drawText("This confirmation is electronically recorded and attached to the official contract PDF.", 11, false);
+  drawLine();
+
+  drawText("SIGNATORY DETAILS", 12, true);
+  drawText(`Confirmed By: ${accepterFullName}`, 11, true);
+
+  if (accepterType === "GUARDIAN") {
+    drawText(`Guardian ID Number: ${guardianIdNumber}`);
+    drawText(`Guardian Phone Number: ${guardianPhoneNumber}`);
+  } else {
+    drawText("Guardian ID Number: (Not applicable)");
+    drawText("Guardian Phone Number: (Not applicable)");
+  }
+
+  y -= 8;
+  drawText(`Confirmed At: ${acceptedAtISO}`, 11, false);
+
+  y -= 10;
+  page.drawLine({
+    start: { x: margin, y },
+    end: { x: margin + 240, y },
+    thickness: 1,
+    color: rgb(0, 0, 0),
+  });
+  y -= 14;
+  drawText("Signature (electronic acknowledgement)", 10, false);
+
+  const out = await doc.save();
+  return out;
+}
+
+/* -------------------------------
+ROUTES
+-------------------------------- */
+
+// 1) Public PDF link (read-only)
+router.get("/pdf", (_req, res) => {
+  try {
+    ensurePdfExists();
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "inline; filename=afrocat-volleyball-contract.pdf");
+    fs.createReadStream(CONTRACT_PDF_PATH).pipe(res);
+  } catch (e) {
+    res.status(500).send(String(e.message || e));
+  }
+});
+
+// 2) Status for logged-in user
+router.get("/status", requireAuth, async (req, res) => {
+  const store = getStore(req);
+  const userId = req.user.id;
+
+  const existing =
+    store.contractAcceptance?.findFirst
+      ? await store.contractAcceptance.findFirst({ where: { userId, contractKey: CONTRACT_KEY } })
+      : null;
+
+  res.json({
+    ok: true,
+    contractKey: CONTRACT_KEY,
+    sport: SPORT_FIXED,
+    accepted: !!existing,
+    acceptedAt: existing?.acceptedAt || null,
+    acceptedBy: existing?.acceptedBy || null,
+  });
+});
+
+// 3) Submit acceptance (creates/updates record + returns signed PDF download URL)
+router.post("/accept", requireAuth, async (req, res) => {
+  try {
+    const store = getStore(req);
+    const userId = req.user.id;
+
+    const player = await getPlayerForUser(req);
+    if (!player?.dob) return res.status(400).json({ ok: false, error: "Player DOB not found." });
+
+    const age = calcAge(player.dob);
+    if (age === null) return res.status(400).json({ ok: false, error: "Invalid DOB." });
+
+    const isMinor = age < 18;
+
+    // payload
+    const accepterFullName = sanitize(req.body?.accepterFullName);
+    const guardianIdNumber = sanitize(req.body?.guardianIdNumber);
+    const guardianPhoneNumber = sanitize(req.body?.guardianPhoneNumber);
+
+    // sport fixed to volleyball only
+    const sport = SPORT_FIXED;
+
+    if (!accepterFullName) return res.status(400).json({ ok: false, error: "Full name is required." });
+
+    let acceptedBy = "SELF";
+    if (isMinor) {
+      acceptedBy = "GUARDIAN";
+      if (!guardianIdNumber || !guardianPhoneNumber) {
+        return res.status(400).json({ ok: false, error: "Guardian ID Number and Phone Number are required for minors." });
+      }
+    }
+
+    const acceptedAt = nowISO();
+
+    // save acceptance
+    const saved =
+      store.contractAcceptance?.upsert
+        ? await store.contractAcceptance.upsert({
+            where: { userId_contractKey: { userId, contractKey: CONTRACT_KEY } },
+            update: {
+              contractKey: CONTRACT_KEY,
+              sport,
+              isMinor,
+              acceptedBy,
+              accepterFullName,
+              guardianIdNumber: isMinor ? guardianIdNumber : null,
+              guardianPhoneNumber: isMinor ? guardianPhoneNumber : null,
+              acceptedAt,
+            },
+            create: {
+              userId,
+              contractKey: CONTRACT_KEY,
+              sport,
+              isMinor,
+              acceptedBy,
+              accepterFullName,
+              guardianIdNumber: isMinor ? guardianIdNumber : null,
+              guardianPhoneNumber: isMinor ? guardianPhoneNumber : null,
+              acceptedAt,
+            },
+          })
+        : null;
+
+    // generate signed pdf bytes and store on disk for download
+    const team = player.teamId ? await req.db.team.findUnique({ where: { id: player.teamId } }) : null;
+    const signedBytes = await buildSignedPdf({
+      accepterType: acceptedBy,
+      accepterFullName,
+      guardianIdNumber,
+      guardianPhoneNumber,
+      playerName: `${player.firstName || ""} ${player.lastName || ""}`.trim(),
+      playerDobISO: String(player.dob || ""),
+      playerTeamName: team?.name || "",
+      acceptedAtISO: acceptedAt,
+      userId,
+    });
+
+    const outDir = path.resolve("public/contracts/signed");
+    if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+
+    const fileName = `signed_${CONTRACT_KEY}_${userId}.pdf`.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const outPath = path.join(outDir, fileName);
+    fs.writeFileSync(outPath, signedBytes);
+
+    return res.json({
+      ok: true,
+      accepted: true,
+      acceptedBy,
+      isMinor,
+      sport,
+      acceptance: saved || {
+        userId,
+        contractKey: CONTRACT_KEY,
+        sport,
+        isMinor,
+        acceptedBy,
+        accepterFullName,
+        guardianIdNumber: isMinor ? guardianIdNumber : null,
+        guardianPhoneNumber: isMinor ? guardianPhoneNumber : null,
+        acceptedAt,
+      },
+      signedPdfUrl: `/contracts/signed/${fileName}`,
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+export default router;
+
+/* =======================================================================================
+FILE: server/index.js (ADD THESE LINES)
+- Replace old contract router with contractV2
+======================================================================================= */
+// import contractV2Router from "./routes/contractV2.js";
+// app.use("/api/contract", contractV2Router);
+//
+// ALSO ensure static public folder is served:
+// app.use(express.static(path.resolve("public")));
+
+
+/* =======================================================================================
+FRONTEND: Contract Page (React)
+FILE: src/pages/Contract.jsx   (or your routing equivalent)
+======================================================================================= */
+import React, { useEffect, useMemo, useState } from "react";
+
+function calcAgeLocal(dobISO) {
+  if (!dobISO) return null;
+  const dob = new Date(dobISO);
+  if (Number.isNaN(dob.getTime())) return null;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+export default function ContractPage() {
+  const [status, setStatus] = useState(null);
+  const [profile, setProfile] = useState(null); // should include dob, name
+  const [form, setForm] = useState({
+    sport: "VOLLEYBALL",
+    accepterFullName: "",
+    guardianIdNumber: "",
+    guardianPhoneNumber: "",
+    agree: false,
+  });
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // TODO: replace with your real profile endpoint
+  async function loadProfile() {
+    // If you already have /api/me or /api/player/me use that.
+    // Fallback: set null (user will still be forced by server minor rule).
+    try {
+      const r = await fetch("/api/player/me");
+      const d = await r.json();
+      if (d?.ok) setProfile(d.player);
+    } catch {}
+  }
+
+  async function loadStatus() {
+    const r = await fetch("/api/contract/status");
+    const d = await r.json();
+    if (d?.ok) setStatus(d);
+  }
+
+  useEffect(() => {
+    loadProfile();
+    loadStatus();
+  }, []);
+
+  const age = useMemo(() => calcAgeLocal(profile?.dob), [profile?.dob]);
+  const isMinorHint = age !== null ? age < 18 : false;
+
+  async function submit() {
+    setMsg("");
+    if (!form.agree) return setMsg("Please tick the confirmation checkbox.");
+
+    if (!form.accepterFullName.trim()) return setMsg("Full name is required.");
+
+    // For minors, require guardian fields (client-side; server enforces too)
+    if (isMinorHint) {
+      if (!form.guardianIdNumber.trim() || !form.guardianPhoneNumber.trim()) {
+        return setMsg("Guardian ID Number and Phone Number are required for minors.");
+      }
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/contract/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accepterFullName: form.accepterFullName,
+          guardianIdNumber: form.guardianIdNumber,
+          guardianPhoneNumber: form.guardianPhoneNumber,
+        }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok || !d?.ok) throw new Error(d?.error || "Submit failed.");
+
+      setMsg("Contract confirmed ✅");
+      setStatus({ ...status, accepted: true, acceptedAt: d.acceptance?.acceptedAt, acceptedBy: d.acceptance?.acceptedBy });
+      if (d.signedPdfUrl) {
+        window.open(d.signedPdfUrl, "_blank");
+      }
+    } catch (e) {
+      setMsg(String(e.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ maxWidth: 1100, margin: "16px auto", padding: 12, fontFamily: "Arial" }}>
+      <h2>Afrocat Volleyball Club Contract</h2>
+
+      {/* IMPORTANT: PDF must appear exactly as-is electronically */}
+      <div style={{ border: "1px solid #ddd", borderRadius: 12, overflow: "hidden" }}>
+        <iframe
+          title="contract"
+          src="/api/contract/pdf"
+          style={{ width: "100%", height: "75vh", border: "0" }}
+        />
+      </div>
+
+      <div style={{ marginTop: 14, border: "1px solid #ddd", borderRadius: 12, padding: 12 }}>
+        <div style={{ fontWeight: 800, marginBottom: 8 }}>Fill & Confirm</div>
+
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>Sport (fixed)</span>
+            <input value="VOLLEYBALL" disabled style={I} />
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>Full Name (Adult Player or Parent/Guardian)</span>
+            <input
+              value={form.accepterFullName}
+              onChange={(e) => setForm((p) => ({ ...p, accepterFullName: e.target.value }))}
+              style={I}
+              placeholder="Type full name"
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>Guardian ID Number (required if minor)</span>
+            <input
+              value={form.guardianIdNumber}
+              onChange={(e) => setForm((p) => ({ ...p, guardianIdNumber: e.target.value }))}
+              style={I}
+              placeholder="ID number"
+            />
+          </label>
+
+          <label style={{ display: "grid", gap: 6 }}>
+            <span>Guardian Phone Number (required if minor)</span>
+            <input
+              value={form.guardianPhoneNumber}
+              onChange={(e) => setForm((p) => ({ ...p, guardianPhoneNumber: e.target.value }))}
+              style={I}
+              placeholder="Phone number"
+            />
+          </label>
+        </div>
+
+        <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
+          <input
+            type="checkbox"
+            checked={form.agree}
+            onChange={(e) => setForm((p) => ({ ...p, agree: e.target.checked }))}
+          />
+          <span>
+            I have read the contract PDF above and I confirm (for minors: parent/guardian confirms).
+          </span>
+        </label>
+
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
+          <button onClick={submit} disabled={loading} style={BTN}>
+            {loading ? "Submitting..." : "Confirm Contract"}
+          </button>
+
+          {status?.accepted ? (
+            <span style={{ padding: "4px 10px", border: "1px solid #111", borderRadius: 999, fontSize: 12 }}>
+              Confirmed ✅ {status.acceptedAt ? `(${new Date(status.acceptedAt).toLocaleString()})` : ""}
+            </span>
+          ) : null}
+
+          {isMinorHint ? (
+            <span style={{ padding: "4px 10px", border: "1px solid #111", borderRadius: 999, fontSize: 12 }}>
+              Minor detected (DOB) → Guardian required
+            </span>
+          ) : null}
+        </div>
+
+        {msg ? <div style={{ marginTop: 10, color: msg.includes("✅") ? "green" : "crimson" }}>{msg}</div> : null}
+
+        <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+          After confirming, the system generates a signed PDF (contract + confirmation page with box marking).
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const I = { padding: 10, borderRadius: 10, border: "1px solid #ccc" };
+const BTN = { padding: "10px 14px", borderRadius: 10, border: "1px solid #111", background: "#111", color: "#fff", fontWeight: 800 };
+
+/* =======================================================================================
+REPLIT: WHAT TO REPLACE IN YOUR APP
+=======================================================================================
+
+1) REMOVE/DEPRECATE your old contract UI/component.
+2) Add a menu link on every dashboard:
+   - Label: "Contract"
+   - Route: /contract
+3) Ensure server is running and route mounted:
+   app.use("/api/contract", contractV2Router);
+
+4) Ensure the official PDF is in:
+   public/contracts/afrocat-volleyball-contract.pdf
+
+This makes the contract appear exactly as the PDF electronically, while the “fill + confirm”
+adds selectable checkboxes and generates a signed PDF version.
+
+======================================================================================= */
