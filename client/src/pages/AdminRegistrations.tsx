@@ -11,9 +11,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { Textarea } from "@/components/ui/textarea";
 import {
   UserCheck, UserX, Mail, Shield, CheckCircle, XCircle,
-  Clock, Settings, Users, ShieldCheck
+  Clock, Settings, Users, ShieldCheck, FileEdit, ArrowRight
 } from "lucide-react";
 
 const POSITIONS = ["SETTER", "LIBERO", "MIDDLE", "OUTSIDE", "OPPOSITE"];
@@ -46,6 +47,13 @@ export default function AdminRegistrations() {
     queryKey: ["/api/admin/security-settings"],
     queryFn: api.getSecuritySettings,
   });
+
+  const { data: updateRequests = [] } = useQuery({
+    queryKey: ["/api/player-update-requests/pending"],
+    queryFn: api.getPendingUpdateRequests,
+  });
+
+  const [updateReviewNote, setUpdateReviewNote] = useState<Record<string, string>>({});
 
   const approveMut = useMutation({
     mutationFn: (userId: string) => api.approveRegistration(userId),
@@ -89,6 +97,18 @@ export default function AdminRegistrations() {
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  const approveUpdateMut = useMutation({
+    mutationFn: ({ id, reviewNote }: { id: string; reviewNote?: string }) => api.approveUpdateRequest(id, reviewNote),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/player-update-requests/pending"] }); toast({ title: "Update request approved and applied" }); },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const rejectUpdateMut = useMutation({
+    mutationFn: ({ id, reviewNote }: { id: string; reviewNote?: string }) => api.rejectUpdateRequest(id, reviewNote),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/player-update-requests/pending"] }); toast({ title: "Update request rejected" }); },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   const teamNameMap = new Map(teams.map((t: any) => [t.id, t.name]));
 
   return (
@@ -103,6 +123,9 @@ export default function AdminRegistrations() {
           <TabsList>
             <TabsTrigger value="pending" data-testid="tab-pending">
               <Users className="h-4 w-4 mr-2" />Pending ({pending.length})
+            </TabsTrigger>
+            <TabsTrigger value="update-requests" data-testid="tab-update-requests">
+              <FileEdit className="h-4 w-4 mr-2" />Profile Updates ({updateRequests.length})
             </TabsTrigger>
             <TabsTrigger value="settings" data-testid="tab-settings">
               <Settings className="h-4 w-4 mr-2" />Security Settings
@@ -228,6 +251,116 @@ export default function AdminRegistrations() {
                 </CardContent>
               </Card>
             ))}
+          </TabsContent>
+
+          <TabsContent value="update-requests" className="space-y-4 mt-4">
+            {updateRequests.length === 0 && (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <FileEdit className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p>No pending profile update requests</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {updateRequests.map((req: any) => {
+              const patchJson = typeof req.patchJson === "string" ? JSON.parse(req.patchJson) : (req.patchJson || {});
+              const fieldLabels: Record<string, string> = {
+                firstName: "First Name", lastName: "Last Name", gender: "Gender",
+                dob: "Date of Birth", phone: "Phone", email: "Email",
+                homeAddress: "Home Address", town: "Town", region: "Region",
+                nationality: "Nationality", idNumber: "ID Number",
+                nextOfKinName: "Next of Kin Name", nextOfKinRelation: "Next of Kin Relation",
+                nextOfKinPhone: "Next of Kin Phone", nextOfKinAddress: "Next of Kin Address",
+                emergencyContactName: "Emergency Contact", emergencyContactPhone: "Emergency Phone",
+                medicalNotes: "Medical Notes", allergies: "Allergies", bloodGroup: "Blood Group",
+                position: "Position", requestedPosition: "Requested Position",
+                requestedTeamId: "Requested Team", requestedJerseyNo: "Requested Jersey",
+                heightCm: "Height (cm)", weightKg: "Weight (kg)",
+                maritalStatus: "Marital Status", facebookName: "Facebook Name",
+                photoUrl: "Photo URL",
+              };
+
+              return (
+                <Card key={req.id} data-testid={`card-update-request-${req.id}`}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg" data-testid={`text-update-player-name-${req.id}`}>
+                          {req.playerName || `Player #${req.playerId}`}
+                        </CardTitle>
+                        <p className="text-sm text-muted-foreground" data-testid={`text-update-submitted-date-${req.id}`}>
+                          Submitted: {req.submittedAt ? new Date(req.submittedAt).toLocaleDateString() : "Unknown"}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-amber-600 border-amber-300">
+                        <Clock className="h-3 w-3 mr-1" />Pending Review
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="border rounded-lg overflow-hidden">
+                      <div className="bg-muted px-4 py-2 text-sm font-medium grid grid-cols-3">
+                        <span>Field</span>
+                        <span>Current Value</span>
+                        <span>Requested Value</span>
+                      </div>
+                      {Object.entries(patchJson).map(([field, newValue]: [string, any]) => {
+                        const label = fieldLabels[field] || field;
+                        const currentValue = req.currentValues?.[field];
+                        let displayCurrent = currentValue ?? "—";
+                        let displayNew = newValue ?? "—";
+                        if (field === "requestedTeamId") {
+                          displayCurrent = teamNameMap.get(String(currentValue)) || String(displayCurrent);
+                          displayNew = teamNameMap.get(String(newValue)) || String(displayNew);
+                        }
+                        return (
+                          <div key={field} className="px-4 py-2 text-sm grid grid-cols-3 border-t items-center" data-testid={`diff-field-${field}-${req.id}`}>
+                            <span className="font-medium text-muted-foreground">{label}</span>
+                            <span className="text-red-600 line-through">{String(displayCurrent)}</span>
+                            <div className="flex items-center gap-1">
+                              <ArrowRight className="h-3 w-3 text-green-600 shrink-0" />
+                              <span className="text-green-700 font-medium">{String(displayNew)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-sm">Review Note (optional)</Label>
+                      <Textarea
+                        placeholder="Add a note for the player..."
+                        className="text-sm"
+                        value={updateReviewNote[req.id] || ""}
+                        onChange={e => setUpdateReviewNote(p => ({ ...p, [req.id]: e.target.value }))}
+                        data-testid={`input-update-review-note-${req.id}`}
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t">
+                      <Button
+                        className="flex-1"
+                        onClick={() => approveUpdateMut.mutate({ id: req.id, reviewNote: updateReviewNote[req.id] || undefined })}
+                        disabled={approveUpdateMut.isPending}
+                        data-testid={`button-approve-update-${req.id}`}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />Approve & Apply Changes
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1"
+                        onClick={() => rejectUpdateMut.mutate({ id: req.id, reviewNote: updateReviewNote[req.id] || undefined })}
+                        disabled={rejectUpdateMut.isPending}
+                        data-testid={`button-reject-update-${req.id}`}
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />Reject
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </TabsContent>
 
           <TabsContent value="settings" className="mt-4">

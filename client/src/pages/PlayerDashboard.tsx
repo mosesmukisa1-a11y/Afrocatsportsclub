@@ -8,13 +8,23 @@ import {
   Trophy, Target, Zap, Calendar, Activity, Shield,
   TrendingUp, AlertTriangle, FileText, CheckCircle,
   MapPin, Clock, Swords, User, Flame,
-  Heart, BarChart3, Loader2
+  Heart, BarChart3, Loader2, Cake
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, CartesianGrid, Cell
 } from "recharts";
 import logo from "@assets/afrocate_logo_1772226294597.png";
+
+function calcAge(dob: string | null | undefined): number | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
 
 function AcCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`afrocat-card ${className}`}>{children}</div>;
@@ -156,6 +166,12 @@ export default function PlayerDashboard() {
                             {dash.player?.status}
                           </span>
                         </div>
+                        {calcAge(dash.player?.dob) !== null && (
+                          <div className="flex items-center justify-center gap-1.5 mt-2 text-sm text-afrocat-muted" data-testid="text-player-age">
+                            <Cake size={14} className="text-afrocat-gold" />
+                            <span>Age: <strong className="text-afrocat-text">{calcAge(dash.player?.dob)}</strong></span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-3 gap-3 mt-5">

@@ -5,14 +5,33 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { useState, useEffect } from "react";
-import { User, Phone, MapPin, Heart, Shield, Camera, CheckCircle } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { User, Phone, Heart, Shield, Camera, CheckCircle, Info, AlertTriangle, Ruler, Weight } from "lucide-react";
 import { CameraCapture } from "@/components/CameraCapture";
+
+function calculateAge(dob: string): number | null {
+  if (!dob) return null;
+  const birthDate = new Date(dob);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
+  return age;
+}
+
+function isWeightOverdue(lastWeightUpdatedAt: string | null | undefined): boolean {
+  if (!lastWeightUpdatedAt) return true;
+  const lastUpdate = new Date(lastWeightUpdatedAt);
+  const now = new Date();
+  const diffDays = (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays > 90;
+}
 
 export default function ProfileSetup() {
   const { user } = useAuth();
@@ -27,12 +46,25 @@ export default function ProfileSetup() {
     retry: false,
   });
 
+  const { data: teams = [] } = useQuery({
+    queryKey: ["/api/public/teams"],
+    queryFn: api.getPublicTeams,
+  });
+
+  const { data: teamGenderRules = {} } = useQuery({
+    queryKey: ["/api/team-gender-rules"],
+    queryFn: api.getTeamGenderRules,
+  });
+
+  const isApproved = profile?.registrationStatus === "APPROVED";
+
   const [form, setForm] = useState({
     firstName: "", lastName: "", gender: "", dob: "", phone: "", email: "",
     homeAddress: "", town: "", region: "", nationality: "", idNumber: "",
     nextOfKinName: "", nextOfKinRelation: "", nextOfKinPhone: "", nextOfKinAddress: "",
     emergencyContactName: "", emergencyContactPhone: "",
     medicalNotes: "", allergies: "", bloodGroup: "", photoUrl: "",
+    heightCm: "" as string | number, weightKg: "" as string | number,
   });
 
   useEffect(() => {
@@ -49,15 +81,43 @@ export default function ProfileSetup() {
         emergencyContactName: profile.emergencyContactName || "", emergencyContactPhone: profile.emergencyContactPhone || "",
         medicalNotes: profile.medicalNotes || "", allergies: profile.allergies || "",
         bloodGroup: profile.bloodGroup || "", photoUrl: profile.photoUrl || "",
+        heightCm: profile.heightCm || "", weightKg: profile.weightKg || "",
       });
     }
   }, [profile, user?.email]);
+
+  const age = calculateAge(form.dob as string);
+  const weightOverdue = isWeightOverdue(profile?.lastWeightUpdatedAt);
+
+  const currentTeamName = useMemo(() => {
+    const teamId = profile?.teamId || profile?.requestedTeamId;
+    if (!teamId) return null;
+    const team = teams.find((t: any) => t.id === teamId);
+    return team?.name || null;
+  }, [profile, teams]);
+
+  const genderLockedByTeam = useMemo(() => {
+    if (!currentTeamName) return null;
+    const rule = teamGenderRules[currentTeamName];
+    if (!rule) return null;
+    return rule;
+  }, [currentTeamName, teamGenderRules]);
+
+  useEffect(() => {
+    if (genderLockedByTeam && form.gender !== genderLockedByTeam) {
+      setForm(prev => ({ ...prev, gender: genderLockedByTeam }));
+    }
+  }, [genderLockedByTeam]);
 
   const updateMut = useMutation({
     mutationFn: (data: any) => api.updateMyProfile(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/players/me"] });
-      toast({ title: "Profile saved!", description: "Your information has been updated." });
+      if (isApproved) {
+        toast({ title: "Update submitted for admin approval", description: "Your changes will be reviewed by management." });
+      } else {
+        toast({ title: "Profile saved!", description: "Your information has been updated." });
+      }
       setLocation("/dashboard");
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -65,10 +125,21 @@ export default function ProfileSetup() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    updateMut.mutate(form);
+    const payload: any = { ...form };
+    if (payload.heightCm !== "" && payload.heightCm !== undefined) {
+      payload.heightCm = parseInt(String(payload.heightCm), 10);
+    } else {
+      delete payload.heightCm;
+    }
+    if (payload.weightKg !== "" && payload.weightKg !== undefined) {
+      payload.weightKg = parseInt(String(payload.weightKg), 10);
+    } else {
+      delete payload.weightKg;
+    }
+    updateMut.mutate(payload);
   };
 
-  const set = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));
+  const set = (field: string, value: string | number) => setForm(prev => ({ ...prev, [field]: value }));
 
   if (isLoading) return <Layout><div className="text-center py-16">Loading...</div></Layout>;
 
@@ -80,6 +151,16 @@ export default function ProfileSetup() {
           <p className="text-muted-foreground mt-2">Please fill in your details to complete your registration</p>
         </div>
 
+        {isApproved && (
+          <div className="flex items-start gap-3 p-4 rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950" data-testid="banner-approval-required">
+            <Info className="h-5 w-5 text-blue-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">Profile changes require admin approval</p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">Your profile has been approved. Any changes you make will be submitted for review by management before being applied.</p>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <Card>
             <CardHeader>
@@ -89,16 +170,26 @@ export default function ProfileSetup() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div><Label>First Name *</Label><Input value={form.firstName} onChange={e => set("firstName", e.target.value)} required data-testid="input-firstName" /></div>
                 <div><Label>Last Name *</Label><Input value={form.lastName} onChange={e => set("lastName", e.target.value)} required data-testid="input-lastName" /></div>
-                <div><Label>Gender</Label>
-                  <Select value={form.gender} onValueChange={v => set("gender", v)}>
+                <div>
+                  <Label>Gender</Label>
+                  <Select value={form.gender} onValueChange={v => set("gender", v)} disabled={!!genderLockedByTeam}>
                     <SelectTrigger data-testid="select-gender"><SelectValue placeholder="Select gender" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Male">Male</SelectItem>
-                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="MALE">Male</SelectItem>
+                      <SelectItem value="FEMALE">Female</SelectItem>
                     </SelectContent>
                   </Select>
+                  {genderLockedByTeam && (
+                    <p className="text-[10px] text-muted-foreground mt-1">Gender is set by your team ({currentTeamName})</p>
+                  )}
                 </div>
-                <div><Label>Date of Birth</Label><Input type="date" value={form.dob} onChange={e => set("dob", e.target.value)} data-testid="input-dob" /></div>
+                <div>
+                  <Label>Date of Birth</Label>
+                  <Input type="date" value={form.dob} onChange={e => set("dob", e.target.value)} data-testid="input-dob" />
+                  {age !== null && (
+                    <p className="text-xs text-muted-foreground mt-1" data-testid="text-computed-age">Age: {age} years</p>
+                  )}
+                </div>
                 <div><Label>Nationality</Label><Input value={form.nationality} onChange={e => set("nationality", e.target.value)} data-testid="input-nationality" /></div>
                 <div><Label>ID/Passport Number</Label><Input value={form.idNumber} onChange={e => set("idNumber", e.target.value)} data-testid="input-idNumber" /></div>
               </div>
@@ -107,8 +198,60 @@ export default function ProfileSetup() {
                 <CameraCapture
                   onCapture={(dataUrl) => set("photoUrl", dataUrl)}
                   onClose={() => {}}
-                  currentPhoto={form.photoUrl || null}
+                  currentPhoto={form.photoUrl as string || null}
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base"><Ruler className="h-4 w-4 text-primary" /> Physical Measurements</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label>Height (cm) *</Label>
+                  <Input
+                    type="number"
+                    min={50}
+                    max={250}
+                    value={form.heightCm}
+                    onChange={e => set("heightCm", e.target.value)}
+                    placeholder="e.g. 175"
+                    data-testid="input-heightCm"
+                  />
+                </div>
+                <div>
+                  <Label className="flex items-center gap-1">
+                    <span>Weight (kg) *</span>
+                    {weightOverdue && (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0" data-testid="badge-weight-overdue">
+                        <AlertTriangle className="h-3 w-3 mr-0.5" />
+                        Overdue
+                      </Badge>
+                    )}
+                  </Label>
+                  <Input
+                    type="number"
+                    min={20}
+                    max={200}
+                    value={form.weightKg}
+                    onChange={e => set("weightKg", e.target.value)}
+                    placeholder="e.g. 70"
+                    data-testid="input-weightKg"
+                  />
+                  {profile?.lastWeightUpdatedAt ? (
+                    <p className={`text-[10px] mt-1 ${weightOverdue ? "text-destructive" : "text-muted-foreground"}`} data-testid="text-last-weight-update">
+                      Last updated: {new Date(profile.lastWeightUpdatedAt).toLocaleDateString()}
+                      {weightOverdue && " — Please update your weight"}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] mt-1 text-destructive" data-testid="text-last-weight-update">
+                      Weight has never been recorded
+                    </p>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -182,7 +325,7 @@ export default function ProfileSetup() {
             </Button>
             <Button type="submit" disabled={updateMut.isPending} data-testid="button-save-profile">
               <CheckCircle className="mr-2 h-4 w-4" />
-              {updateMut.isPending ? "Saving..." : "Save Profile"}
+              {updateMut.isPending ? "Saving..." : isApproved ? "Submit for Approval" : "Save Profile"}
             </Button>
           </div>
         </form>

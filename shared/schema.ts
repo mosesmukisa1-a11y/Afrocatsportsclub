@@ -111,6 +111,9 @@ export const players = pgTable("players", {
   membershipNo: text("membership_no"),
   maritalStatus: text("marital_status"),
   facebookName: text("facebook_name"),
+  heightCm: integer("height_cm"),
+  weightKg: integer("weight_kg"),
+  lastWeightUpdatedAt: timestamp("last_weight_updated_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -661,3 +664,19 @@ export const matchEvents = pgTable("match_events", {
 export const insertMatchEventSchema = createInsertSchema(matchEvents).omit({ id: true, createdAt: true });
 export type InsertMatchEvent = z.infer<typeof insertMatchEventSchema>;
 export type MatchEvent = typeof matchEvents.$inferSelect;
+
+export const playerUpdateRequests = pgTable("player_update_requests", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  patchJson: jsonb("patch_json").notNull(),
+  status: text("status").notNull().default("PENDING"),
+  submittedAt: timestamp("submitted_at").defaultNow(),
+  submittedBy: varchar("submitted_by", { length: 36 }),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: varchar("reviewed_by", { length: 36 }),
+  reviewNote: text("review_note"),
+});
+
+export const insertPlayerUpdateRequestSchema = createInsertSchema(playerUpdateRequests).omit({ id: true, submittedAt: true });
+export type InsertPlayerUpdateRequest = z.infer<typeof insertPlayerUpdateRequestSchema>;
+export type PlayerUpdateRequest = typeof playerUpdateRequests.$inferSelect;

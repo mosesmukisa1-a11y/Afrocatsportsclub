@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Mail, Clock } from "lucide-react";
+import { CheckCircle, Mail, Clock, AlertTriangle } from "lucide-react";
 import { CameraCapture } from "@/components/CameraCapture";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -20,6 +20,15 @@ const ROLES = [
   { value: "MEDICAL", label: "Medical Staff", desc: "Manage injuries & wellness" },
   { value: "FINANCE", label: "Finance", desc: "Manage club finances" },
 ];
+
+const TEAM_GENDER_RULES: Record<string, string> = {
+  "Afrocat D": "MALE",
+  "Afrocat C": "MALE",
+  "Afrocat E": "MALE",
+  "Afrocat V": "MALE",
+  "Afrocat Ladies": "FEMALE",
+  "Afrocat Titans": "FEMALE",
+};
 
 function calculateAge(dob: string): number {
   const birthDate = new Date(dob);
@@ -46,10 +55,14 @@ export default function Register() {
   const [requestedTeamId, setRequestedTeamId] = useState("");
   const [requestedPosition, setRequestedPosition] = useState("");
   const [requestedJerseyNo, setRequestedJerseyNo] = useState("");
+  const [gender, setGender] = useState("");
+  const [heightCm, setHeightCm] = useState("");
+  const [weightKg, setWeightKg] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [registered, setRegistered] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
+  const [genderLocked, setGenderLocked] = useState(false);
 
   const age = dob ? calculateAge(dob) : null;
   const isMinor = age !== null && age < 17;
@@ -59,6 +72,40 @@ export default function Register() {
     queryKey: ["/api/public/teams"],
     queryFn: api.getPublicTeams,
   });
+
+  const filteredTeams = gender
+    ? teams.filter((t: any) => {
+        const rule = TEAM_GENDER_RULES[t.name];
+        if (!rule) return true;
+        return rule === gender;
+      })
+    : teams;
+
+  const handleTeamChange = (teamId: string) => {
+    setRequestedTeamId(teamId);
+    const team = teams.find((t: any) => t.id === teamId);
+    if (team) {
+      const rule = TEAM_GENDER_RULES[team.name];
+      if (rule) {
+        setGender(rule);
+        setGenderLocked(true);
+      } else {
+        setGenderLocked(false);
+      }
+    }
+  };
+
+  const handleGenderChange = (val: string) => {
+    setGender(val);
+    setGenderLocked(false);
+    const selectedTeam = teams.find((t: any) => t.id === requestedTeamId);
+    if (selectedTeam) {
+      const rule = TEAM_GENDER_RULES[selectedTeam.name];
+      if (rule && rule !== val) {
+        setRequestedTeamId("");
+      }
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -81,6 +128,9 @@ export default function Register() {
     if (password.length < 6) { toast({ title: "Password must be at least 6 characters", variant: "destructive" }); return; }
 
     if (selectedRole === "PLAYER") {
+      if (!heightCm || parseInt(heightCm) < 50 || parseInt(heightCm) > 250) { toast({ title: "Please enter a valid height (50-250 cm)", variant: "destructive" }); return; }
+      if (!weightKg || parseInt(weightKg) < 20 || parseInt(weightKg) > 200) { toast({ title: "Please enter a valid weight (20-200 kg)", variant: "destructive" }); return; }
+      if (!gender) { toast({ title: "Please select your gender", variant: "destructive" }); return; }
       if (!requestedTeamId) { toast({ title: "Please select a team", variant: "destructive" }); return; }
       if (!requestedPosition) { toast({ title: "Please select a position", variant: "destructive" }); return; }
       if (!requestedJerseyNo) { toast({ title: "Please enter a jersey number", variant: "destructive" }); return; }
@@ -100,6 +150,9 @@ export default function Register() {
         if (requestedTeamId) extra.requestedTeamId = requestedTeamId;
         if (requestedPosition) extra.requestedPosition = requestedPosition;
         if (requestedJerseyNo) extra.requestedJerseyNo = parseInt(requestedJerseyNo);
+        if (heightCm) extra.heightCm = parseInt(heightCm);
+        if (weightKg) extra.weightKg = parseInt(weightKg);
+        if (gender) extra.gender = gender;
       }
 
       const result = await register(fullName, email, password, extra);
@@ -251,20 +304,54 @@ export default function Register() {
 
               {selectedRole === "PLAYER" && (
                 <div className="border-t border-afrocat-border pt-4 mt-2">
-                  <p className="text-xs text-afrocat-muted mb-3">Team & position preferences <span className="text-afrocat-red">*</span></p>
+                  <p className="text-xs text-afrocat-muted mb-3">Player details <span className="text-afrocat-red">*</span></p>
                   <div className="space-y-3">
                     <div className="space-y-2">
+                      <Label className="text-afrocat-muted text-sm">Gender <span className="text-afrocat-red">*</span></Label>
+                      <Select value={gender} onValueChange={handleGenderChange} disabled={genderLocked}>
+                        <SelectTrigger data-testid="select-gender" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
+                          <SelectValue placeholder="Select gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MALE">Male</SelectItem>
+                          <SelectItem value="FEMALE">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {genderLocked && (
+                        <p className="text-[10px] text-afrocat-gold flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Auto-set based on selected team
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="heightCm" className="text-afrocat-muted text-sm">Height (cm) <span className="text-afrocat-red">*</span></Label>
+                        <Input id="heightCm" type="number" min={50} max={250} value={heightCm} onChange={e => setHeightCm(e.target.value)} required placeholder="e.g. 175" data-testid="input-height"
+                          className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="weightKg" className="text-afrocat-muted text-sm">Weight (kg) <span className="text-afrocat-red">*</span></Label>
+                        <Input id="weightKg" type="number" min={20} max={200} value={weightKg} onChange={e => setWeightKg(e.target.value)} required placeholder="e.g. 70" data-testid="input-weight"
+                          className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
                       <Label className="text-afrocat-muted text-sm">Preferred Team <span className="text-afrocat-red">*</span></Label>
-                      <Select value={requestedTeamId} onValueChange={setRequestedTeamId}>
+                      <Select value={requestedTeamId} onValueChange={handleTeamChange}>
                         <SelectTrigger data-testid="select-team" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
                           <SelectValue placeholder="Select team" />
                         </SelectTrigger>
                         <SelectContent>
-                          {teams.map((t: any) => (
+                          {filteredTeams.map((t: any) => (
                             <SelectItem key={t.id} value={t.id}>{t.name} ({t.category})</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {gender && filteredTeams.length < teams.length && (
+                        <p className="text-[10px] text-afrocat-muted">Showing teams matching your gender selection</p>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">

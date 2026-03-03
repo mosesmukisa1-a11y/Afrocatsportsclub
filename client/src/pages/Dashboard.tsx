@@ -5,7 +5,7 @@ import {
   Users, Trophy, DollarSign, Activity, ArrowUpRight, ArrowDownRight,
   Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
   User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
-  FileText, Bell, ChevronRight, MessageCircle, Cake, PartyPopper, Gift
+  FileText, Bell, ChevronRight, MessageCircle, Cake, PartyPopper, Gift, Scale
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -77,6 +77,12 @@ export default function Dashboard() {
     enabled: !!user,
   });
 
+  const { data: weightStatus } = useQuery({
+    queryKey: ["/api/players/me/weight-status"],
+    queryFn: api.getWeightStatus,
+    enabled: isPlayerView && !!user,
+  });
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -128,6 +134,25 @@ export default function Dashboard() {
               <Link href="/club-contract">
                 <span className="px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-sm hover:bg-afrocat-teal/80 transition-colors cursor-pointer" data-testid="link-confirm-contract">
                   Confirm Contract
+                </span>
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {isPlayerView && weightStatus?.isOverdue && (
+          <div className="afrocat-card border border-afrocat-gold/30 overflow-hidden" data-testid="card-weight-update-warning">
+            <div className="bg-afrocat-gold-soft px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <Scale className="h-5 w-5 text-afrocat-gold shrink-0" />
+                <div>
+                  <p className="font-bold text-sm text-afrocat-text" data-testid="text-weight-update-title">Weight Update Required</p>
+                  <p className="text-xs text-afrocat-muted" data-testid="text-weight-update-message">Please update your weight for {weightStatus.quarterKey}</p>
+                </div>
+              </div>
+              <Link href="/profile-setup">
+                <span className="px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-sm hover:bg-afrocat-teal/80 transition-colors cursor-pointer" data-testid="link-update-weight">
+                  Update Weight
                 </span>
               </Link>
             </div>
@@ -676,6 +701,18 @@ export default function Dashboard() {
                     {playerDash.player?.teamName && (
                       <Badge className="bg-afrocat-white-10 text-afrocat-text border-0" data-testid="badge-team">{playerDash.player.teamName}</Badge>
                     )}
+                    {playerDash.player?.dob && (() => {
+                      const birth = new Date(playerDash.player.dob);
+                      const today = new Date();
+                      let age = today.getFullYear() - birth.getFullYear();
+                      const m = today.getMonth() - birth.getMonth();
+                      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+                      return (
+                        <Badge className="bg-afrocat-gold-soft text-afrocat-gold border-0" data-testid="badge-age">
+                          Age: {age}
+                        </Badge>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>

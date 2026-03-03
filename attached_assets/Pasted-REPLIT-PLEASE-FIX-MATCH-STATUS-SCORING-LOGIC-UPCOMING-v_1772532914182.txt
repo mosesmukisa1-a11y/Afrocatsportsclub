@@ -1,0 +1,178 @@
+REPLIT – PLEASE FIX MATCH STATUS & SCORING LOGIC (UPCOMING vs RECENT vs PLAYED) + REMINDERS + LOCK RULES
+
+PROBLEM:
+- Future matches are showing under “Recent Matches”
+- Some finished matches still show as “Scheduled”
+- Score is still being required during scheduling (should NOT for future matches)
+- System not consistently recognising correct status
+
+GOAL:
+Make match status deterministic from startTime + completion. Use ONE source of truth and update all queries/UI labels accordingly.
+
+========================================================
+1) DEFINE STATUS RULES (SINGLE SOURCE OF TRUTH)
+========================================================
+
+Add/ensure these fields on Match:
+
+- startTime (DateTime) REQUIRED
+- status (enum): UPCOMING | LIVE | PLAYED | CANCELLED
+- homeScore (Int nullable)
+- awayScore (Int nullable)
+- statsEntered (Boolean default false)
+- scoreSource (NONE | MANUAL | STATS) default NONE
+- scoreLocked (Boolean default false)
+
+STATUS RULES (must be applied everywhere):
+
+A) UPCOMING:
+- startTime > now
+- status must be "UPCOMING"
+- score NOT required and must be null
+- statsEntered=false
+- scoreLocked=false
+
+B) PLAYED:
+- statsEntered=true  OR  scoreLocked=true (manual final score)
+- status must be "PLAYED"
+- score exists (from STATS or MANUAL)
+
+C) LIVE (optional):
+- now between startTime and startTime + duration window (e.g., 2 hours)
+- status "LIVE" (optional)
+
+IMPORTANT: Do NOT keep old label “SCHEDULED”. If it exists, migrate it.
+
+========================================================
+2) MIGRATION / CLEANUP (FIX EXISTING WRONG STATUS)
+========================================================
+
+On server startup run a “status normalizer” once:
+
+FOR EACH match:
+IF match.startTime > now:
+  set status="UPCOMING"
+  set homeScore=null, awayScore=null
+  set scoreSource="NONE"
+  set scoreLocked=false
+  set statsEntered=false
+ELSE IF match.statsEntered==true OR match.scoreLocked==true OR match.scoreSource in ("STATS","MANUAL"):
+  set status="PLAYED"
+ELSE:
+  set status="LIVE" OR "PLAYED" depending on your rule (but do NOT leave as "SCHEDULED")
+
+This will fix matches that are stuck as “Scheduled”.
+
+========================================================
+3) MATCH CREATE / SCHEDULING (NO SCORE FOR UPCOMING)
+========================================================
+
+When creating a match:
+
+IF startTime > now:
+  status="UPCOMING"
+  homeScore=null
+  awayScore=null
+  scoreSource="NONE"
+  scoreLocked=false
+  statsEntered=false
+
+Validation:
+- DO NOT require score fields for UPCOMING matches.
+- Reject if user tries to submit score for UPCOMING match (optional).
+
+========================================================
+4) “RECENT MATCHES” vs “UPCOMING MATCHES” QUERIES (FIX UI)
+========================================================
+
+A) UPCOMING LIST:
+Query must be:
+WHERE status="UPCOMING" AND startTime > now
+ORDER BY startTime ASC
+
+B) RECENT / PLAYED LIST:
+Query must be:
+WHERE status="PLAYED"
+ORDER BY startTime DESC
+
+C) Remove logic that uses “createdAt” for deciding recent/upcoming.
+It must depend on startTime + status.
+
+This is why future matches are currently appearing as “Recent”.
+
+========================================================
+5) SCORE FROM STATS + LOCKING RULES
+========================================================
+
+When match stats are entered:
+- compute official score from stats
+- set:
+  homeScore, awayScore = computed
+  scoreSource="STATS"
+  scoreLocked=true
+  statsEntered=true
+  status="PLAYED"
+
+Manual score update (ONLY allowed if NO stats):
+Allow coach/admin to set final score only if:
+- startTime < now
+- statsEntered==false
+- scoreSource != "STATS"
+- scoreLocked==false
+
+Then set:
+- scoreSource="MANUAL"
+- scoreLocked=true
+- status="PLAYED"
+
+If statsEntered==true:
+- BLOCK any score edits with error: “Score locked: stats already entered”
+
+========================================================
+6) UPCOMING MATCH REMINDERS (COACHES + ADMINS + PLAYERS)
+========================================================
+
+Create in-app reminders:
+- 48h, 24h, 2h before match start
+- and TODAY reminder
+
+Target recipients:
+- Admins
+- Coaches assigned to either team
+- Players registered in either team
+
+Avoid duplicates using unique key:
+(matchId + reminderType + dateKey)
+
+========================================================
+7) REQUIRED UI CHANGES
+========================================================
+
+On match card:
+- If status="UPCOMING": show badge UPCOMING, hide score
+- If status="PLAYED": show FINAL SCORE badge
+- If statsEntered=true: show “Score Locked (From Stats)”
+
+On scheduling form:
+- When date is in future:
+  hide/disable score inputs
+  do not require score validation
+
+On match list pages:
+- Replace the “Recent Matches” query with PLAYED-only.
+- Add separate “Upcoming Matches” section.
+
+========================================================
+8) IMPLEMENTATION CHECKLIST (WHAT TO VERIFY)
+========================================================
+
+1) Create a match with future date → appears ONLY under Upcoming
+2) Create a match with past date → appears under Played only when stats entered or manual final score saved
+3) Enter stats → score auto-computed and match becomes PLAYED, score locked
+4) Attempt manual score edit after stats → blocked
+5) Manual score edit allowed only if no stats were entered
+6) Reminders appear on dashboards for relevant users
+
+========================================================
+END – PLEASE IMPLEMENT EXACTLY
+========================================================

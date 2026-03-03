@@ -40,7 +40,7 @@ A full-stack management portal for the Afrocat Volleyball Club. Manages match st
 - Used in: Register.tsx (required photo), Players.tsx (player photo), ProfileSetup.tsx (profile photo)
 
 ## Key Entities
-Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, ContractIssuedItems, ContractTransportBenefits, NvfTransferFeeSchedules, PlayerTransferCases, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments, ShopItems, MediaPosts, MediaTags, MediaTagRequests, MatchEvents
+Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdatedAt), Matches, PlayerMatchStats, SmartFocus, AttendanceSessions, AttendanceRecords, DisciplineCases, FinanceTxns, Injuries, Awards, ScoutingReports, CoachAssignments, CoachPerformanceSnapshots, PlayerContracts, ContractIssuedItems, ContractTransportBenefits, NvfTransferFeeSchedules, PlayerTransferCases, TeamOfficials, MatchDocuments, MatchSquads, MatchSquadEntries, PlayerReports, PlayerDocuments, ShopItems, MediaPosts, MediaTags, MediaTagRequests, MatchEvents, PlayerUpdateRequests
 
 ## RBAC Roles
 - **Super Admin**: mosesmukisa1@gmail.com — only user who can assign roles to others. Flagged via `isSuperAdmin` in DB.
@@ -77,6 +77,10 @@ Users, Teams, Players (with full biodata), Matches, PlayerMatchStats, SmartFocus
 - **Shop System**: Admin CRUD for merchandise, public display
 - **Attendance Self-Check-In**: Players self-mark → coach confirms
 - **Attendance Locking**: Save attendance auto-closes and locks the session (`status: CLOSED`, `lockedAt`, `lockedBy`). Once closed: no edits for coach/admin/players; UI shows "Attendance Closed" badge. Only Super Admin can edit locked sessions via "Edit Attendance" button. Backend enforces lock on all routes (POST records, POST save, checkin). Routes: `POST /api/attendance/sessions/:id/save` (save+close), `PATCH /api/attendance/sessions/:id` (super admin edit)
+- **Team↔Gender Rules**: Afrocat D/C/E/V = MALE only; Afrocat Ladies/Titans = FEMALE only. Enforced in registration, profile edit, team approval. `TEAM_GENDER_RULES` in routes.ts. `GET /api/team-gender-rules` public endpoint. Frontend auto-fills gender from team, filters teams by gender.
+- **Height/Weight**: Required on registration (heightCm, weightKg). Weight tracked with `lastWeightUpdatedAt`. Weight-only updates bypass approval for approved players.
+- **Quarterly Weight Update**: Daily cron at 08:00 checks for overdue weight (>90 days). Creates WEIGHT_UPDATE notification per quarter (YYYY-Qx). Dashboard shows weight update warning with link to profile.
+- **Admin Re-Approval Workflow**: After initial registration approval, profile edits create `PlayerUpdateRequest` (PENDING) instead of direct update. Admin reviews in "Profile Updates" tab of AdminRegistrations. Approve applies patchJson to player record. Reject with optional note. `playerUpdateRequests` table tracks all requests.
 
 ## Brand & Theme
 - Primary: teal `#0F8B7D`, Accent: gold `#F2B705`

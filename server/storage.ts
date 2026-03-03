@@ -28,7 +28,8 @@ import type {
   FundRaisingActivity, InsertFundRaisingActivity,
   PlayerFundRaisingContribution, InsertPlayerFundRaisingContribution,
   MatchSetStat, InsertMatchSetStat,
-  MatchEvent, InsertMatchEvent
+  MatchEvent, InsertMatchEvent,
+  PlayerUpdateRequest, InsertPlayerUpdateRequest
 } from "@shared/schema";
 
 export interface IStorage {
@@ -184,6 +185,12 @@ export interface IStorage {
   getMatchEvent(id: string): Promise<MatchEvent | undefined>;
   createMatchEvent(event: InsertMatchEvent): Promise<MatchEvent>;
   deleteMatchEvent(id: string): Promise<void>;
+  getPlayerUpdateRequests(playerId: string): Promise<PlayerUpdateRequest[]>;
+  getPendingUpdateRequests(): Promise<PlayerUpdateRequest[]>;
+  createPlayerUpdateRequest(data: InsertPlayerUpdateRequest): Promise<PlayerUpdateRequest>;
+  approvePlayerUpdateRequest(id: string, reviewedBy: string, reviewNote?: string): Promise<PlayerUpdateRequest | undefined>;
+  rejectPlayerUpdateRequest(id: string, reviewedBy: string, reviewNote?: string): Promise<PlayerUpdateRequest | undefined>;
+  getPlayersWithOverdueWeight(): Promise<Player[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -874,6 +881,70 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteMatchEvent(id: string) {
     await db.delete(schema.matchEvents).where(eq(schema.matchEvents.id, id));
+  }
+  async getPlayerUpdateRequests(playerId: string) {
+    return db.select().from(schema.playerUpdateRequests)
+      .where(eq(schema.playerUpdateRequests.playerId, playerId))
+      .orderBy(desc(schema.playerUpdateRequests.submittedAt));
+  }
+  async getPendingUpdateRequests() {
+    return db.select().from(schema.playerUpdateRequests)
+      .where(eq(schema.playerUpdateRequests.status, "PENDING"))
+      .orderBy(desc(schema.playerUpdateRequests.submittedAt));
+  }
+  async createPlayerUpdateRequest(data: InsertPlayerUpdateRequest) {
+    const [created] = await db.insert(schema.playerUpdateRequests).values(data).returning();
+    return created;
+  }
+  async approvePlayerUpdateRequest(id: string, reviewedBy: string, reviewNote?: string) {
+    const [request] = await db.select().from(schema.playerUpdateRequests)
+      .where(eq(schema.playerUpdateRequests.id, id));
+    if (!request || request.status !== "PENDING") return undefined;
+
+    const ALLOWED_FIELDS = new Set([
+      "firstName", "lastName", "gender", "dob", "phone", "email",
+      "homeAddress", "town", "region", "nationality", "idNumber",
+      "nextOfKinName", "nextOfKinRelation", "nextOfKinPhone", "nextOfKinAddress",
+      "emergencyContactName", "emergencyContactPhone",
+      "medicalNotes", "allergies", "bloodGroup", "photoUrl",
+      "heightCm", "weightKg", "maritalStatus", "facebookName",
+    ]);
+
+    const patch = request.patchJson as Record<string, any>;
+    const updateData: Record<string, any> = {};
+    for (const [key, value] of Object.entries(patch)) {
+      if (ALLOWED_FIELDS.has(key)) updateData[key] = value;
+    }
+    if (updateData.weightKg !== undefined) {
+      updateData.lastWeightUpdatedAt = new Date();
+    }
+    if (Object.keys(updateData).length > 0) {
+      await db.update(schema.players).set(updateData).where(eq(schema.players.id, request.playerId));
+    }
+
+    const [updated] = await db.update(schema.playerUpdateRequests).set({
+      status: "APPROVED",
+      reviewedAt: new Date(),
+      reviewedBy,
+      reviewNote: reviewNote || null,
+    }).where(eq(schema.playerUpdateRequests.id, id)).returning();
+    return updated;
+  }
+  async rejectPlayerUpdateRequest(id: string, reviewedBy: string, reviewNote?: string) {
+    const [updated] = await db.update(schema.playerUpdateRequests).set({
+      status: "REJECTED",
+      reviewedAt: new Date(),
+      reviewedBy,
+      reviewNote: reviewNote || null,
+    }).where(eq(schema.playerUpdateRequests.id, id)).returning();
+    return updated;
+  }
+  async getPlayersWithOverdueWeight() {
+    const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    const allPlayers = await db.select().from(schema.players);
+    return allPlayers.filter(p =>
+      !p.lastWeightUpdatedAt || new Date(p.lastWeightUpdatedAt) < ninetyDaysAgo
+    );
   }
 }
 

@@ -276,4 +276,13 @@ export const api = {
     apiFetch<any>(`/matches/${matchId}/events`, { method: "POST", body: JSON.stringify(data) }),
   deleteMatchEvent: (matchId: string, eventId: string) =>
     apiFetch<any>(`/matches/${matchId}/events/${eventId}`, { method: "DELETE" }),
+
+  getTeamGenderRules: () => apiFetch<Record<string, string>>("/team-gender-rules"),
+  getPendingUpdateRequests: () => apiFetch<any[]>("/player-update-requests/pending"),
+  getMyUpdateRequests: () => apiFetch<any[]>("/player-update-requests/mine"),
+  approveUpdateRequest: (id: string, reviewNote?: string) =>
+    apiFetch<any>(`/player-update-requests/${id}/approve`, { method: "POST", body: JSON.stringify({ reviewNote }) }),
+  rejectUpdateRequest: (id: string, reviewNote?: string) =>
+    apiFetch<any>(`/player-update-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ reviewNote }) }),
+  getWeightStatus: () => apiFetch<any>("/players/me/weight-status"),
 };

@@ -9,6 +9,37 @@ import crypto from "crypto";
 import cron from "node-cron";
 import { eq, and } from "drizzle-orm";
 
+const TEAM_GENDER_RULES: Record<string, string> = {
+  "Afrocat D": "MALE",
+  "Afrocat C": "MALE",
+  "Afrocat E": "MALE",
+  "Afrocat V": "MALE",
+  "Afrocat Ladies": "FEMALE",
+  "Afrocat Titans": "FEMALE",
+};
+
+function validateTeamGender(teamName: string, gender: string): { ok: boolean; error?: string } {
+  const reqGender = TEAM_GENDER_RULES[teamName];
+  if (!reqGender) return { ok: true };
+  if (reqGender !== gender) return { ok: false, error: `${teamName} is ${reqGender} only.` };
+  return { ok: true };
+}
+
+function calcAge(dobISO: string): number {
+  const dob = new Date(dobISO);
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+function getQuarterKey(): string {
+  const now = new Date();
+  const q = Math.ceil((now.getMonth() + 1) / 3);
+  return `${now.getFullYear()}-Q${q}`;
+}
+
 function esc(str: string | null | undefined): string {
   if (!str) return "—";
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -76,6 +107,9 @@ export async function registerRoutes(
         nationality: z.string().optional(),
         idNumber: z.string().optional(),
         photo: z.string().optional(),
+        gender: z.enum(["MALE", "FEMALE"]).optional(),
+        heightCm: z.number().int().min(50).max(250).optional(),
+        weightKg: z.number().int().min(20).max(200).optional(),
         role: z.enum(["PLAYER", "COACH", "STATISTICIAN", "MEDICAL", "FINANCE"]).optional().default("PLAYER"),
         requestedTeamId: z.string().optional(),
         requestedPosition: z.enum(["SETTER", "LIBERO", "MIDDLE", "OUTSIDE", "OPPOSITE"]).optional(),
@@ -84,6 +118,14 @@ export async function registerRoutes(
 
       const existing = await storage.getUserByEmail(body.email);
       if (existing) return res.status(400).json({ message: "Email already registered" });
+
+      if (body.role === "PLAYER" && body.requestedTeamId && body.gender) {
+        const team = await storage.getTeam(body.requestedTeamId);
+        if (team) {
+          const gv = validateTeamGender(team.name, body.gender);
+          if (!gv.ok) return res.status(400).json({ message: gv.error });
+        }
+      }
 
       const settings = await storage.getSecuritySettings();
 
@@ -108,9 +150,13 @@ export async function registerRoutes(
           email: body.email,
           phone: body.phone || null,
           dob: body.dob || null,
+          gender: body.gender || null,
           nationality: body.nationality || null,
           idNumber: body.idNumber || null,
           photoUrl: body.photo || null,
+          heightCm: body.heightCm || null,
+          weightKg: body.weightKg || null,
+          lastWeightUpdatedAt: body.weightKg ? new Date() : null,
           status: "ACTIVE",
           eligibilityStatus: "PENDING",
           requestedTeamId: body.requestedTeamId || null,
@@ -895,9 +941,62 @@ export async function registerRoutes(
         emergencyContactName: z.string().optional(), emergencyContactPhone: z.string().optional(),
         medicalNotes: z.string().optional(), allergies: z.string().optional(),
         bloodGroup: z.string().optional(), photoUrl: z.string().optional(),
+        heightCm: z.number().int().min(50).max(250).optional(),
+        weightKg: z.number().int().min(20).max(200).optional(),
+        maritalStatus: z.string().optional(), facebookName: z.string().optional(),
       }).parse(req.body);
 
-      const updated = await storage.updatePlayer(user.playerId, allowedFields);
+      const player = await storage.getPlayer(user.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      if (allowedFields.gender) {
+        const teamId = player.teamId || player.requestedTeamId;
+        if (teamId) {
+          const team = await storage.getTeam(teamId);
+          if (team) {
+            const gv = validateTeamGender(team.name, allowedFields.gender);
+            if (!gv.ok) return res.status(400).json({ message: gv.error });
+          }
+        }
+      }
+
+      if (player.registrationStatus === "APPROVED") {
+        const cleanPatch: Record<string, any> = {};
+        for (const [k, v] of Object.entries(allowedFields)) {
+          if (v !== undefined) cleanPatch[k] = v;
+        }
+        if (Object.keys(cleanPatch).length === 0) {
+          return res.status(400).json({ message: "No changes to submit" });
+        }
+
+        if (cleanPatch.weightKg !== undefined && Object.keys(cleanPatch).length === 1) {
+          await storage.updatePlayer(user.playerId, {
+            weightKg: cleanPatch.weightKg,
+            lastWeightUpdatedAt: new Date(),
+          } as any);
+          const updatedPlayer = await storage.getPlayer(user.playerId);
+          return res.json(updatedPlayer);
+        }
+
+        const request = await storage.createPlayerUpdateRequest({
+          playerId: user.playerId,
+          patchJson: cleanPatch,
+          submittedBy: user.id,
+          status: "PENDING",
+        });
+
+        return res.json({
+          message: "Update submitted for admin approval",
+          updateRequest: request,
+          requiresApproval: true,
+        });
+      }
+
+      const updateData: any = { ...allowedFields };
+      if (allowedFields.weightKg !== undefined) {
+        updateData.lastWeightUpdatedAt = new Date();
+      }
+      const updated = await storage.updatePlayer(user.playerId, updateData);
       res.json(updated);
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
@@ -3264,6 +3363,11 @@ th{background:#0d7377;color:white}
       const team = await storage.getTeam(teamId);
       if (!team) return res.status(400).json({ message: "Team not found" });
 
+      if (player.gender) {
+        const gv = validateTeamGender(team.name, player.gender);
+        if (!gv.ok) return res.status(400).json({ message: gv.error });
+      }
+
       await storage.updatePlayer(player.id, {
         teamId,
         teamApprovalStatus: "APPROVED",
@@ -3839,6 +3943,119 @@ th{background:#0d7377;color:white}
         }),
       });
     } catch (e) { next(e); }
+  });
+
+  // ─── TEAM GENDER RULES API ────────────────────
+  app.get("/api/team-gender-rules", (_req, res) => {
+    res.json(TEAM_GENDER_RULES);
+  });
+
+  // ─── PLAYER UPDATE REQUESTS ────────────────────
+  app.get("/api/player-update-requests/pending", requireAuth, requireRole(["ADMIN", "MANAGER"]), async (req, res, next) => {
+    try {
+      const requests = await storage.getPendingUpdateRequests();
+      const enriched = await Promise.all(requests.map(async (r) => {
+        const player = await storage.getPlayer(r.playerId);
+        const submitter = r.submittedBy ? await storage.getUser(r.submittedBy) : null;
+        const patchFields = typeof r.patchJson === "string" ? JSON.parse(r.patchJson) : (r.patchJson || {});
+        const currentValues: Record<string, any> = {};
+        if (player) {
+          for (const key of Object.keys(patchFields)) {
+            currentValues[key] = (player as any)[key] ?? null;
+          }
+        }
+        return {
+          ...r,
+          playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
+          playerPhotoUrl: player?.photoUrl || null,
+          submitterName: submitter?.fullName || null,
+          currentValues,
+        };
+      }));
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/player-update-requests/mine", requireAuth, async (req, res, next) => {
+    try {
+      const user = await storage.getUser(req.user!.userId);
+      if (!user?.playerId) return res.json([]);
+      const requests = await storage.getPlayerUpdateRequests(user.playerId);
+      res.json(requests);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/player-update-requests/:id/approve", requireAuth, requireRole(["ADMIN", "MANAGER"]), async (req, res, next) => {
+    try {
+      const { reviewNote } = req.body || {};
+      const updated = await storage.approvePlayerUpdateRequest(req.params.id, req.user!.userId, reviewNote);
+      if (!updated) return res.status(404).json({ message: "Request not found or already processed" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/player-update-requests/:id/reject", requireAuth, requireRole(["ADMIN", "MANAGER"]), async (req, res, next) => {
+    try {
+      const { reviewNote } = req.body || {};
+      const updated = await storage.rejectPlayerUpdateRequest(req.params.id, req.user!.userId, reviewNote);
+      if (!updated) return res.status(404).json({ message: "Request not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── WEIGHT STATUS API ────────────────────
+  app.get("/api/players/me/weight-status", requireAuth, async (req, res, next) => {
+    try {
+      const user = await storage.getUser(req.user!.userId);
+      if (!user?.playerId) return res.status(404).json({ message: "No player profile linked" });
+      const player = await storage.getPlayer(user.playerId);
+      if (!player) return res.status(404).json({ message: "Player not found" });
+
+      const lastUpdate = player.lastWeightUpdatedAt ? new Date(player.lastWeightUpdatedAt) : null;
+      const isOverdue = !lastUpdate || (Date.now() - lastUpdate.getTime()) > 90 * 24 * 60 * 60 * 1000;
+      const quarterKey = getQuarterKey();
+
+      res.json({
+        weightKg: player.weightKg,
+        heightCm: player.heightCm,
+        lastWeightUpdatedAt: player.lastWeightUpdatedAt,
+        isOverdue,
+        quarterKey,
+      });
+    } catch (e) { next(e); }
+  });
+
+  // ─── WEIGHT UPDATE NOTIFICATION CRON (daily at 08:00) ────────────────────
+  cron.schedule("0 8 * * *", async () => {
+    try {
+      console.log("[CRON] Running weight update notification check...");
+      const overduePlayers = await storage.getPlayersWithOverdueWeight();
+      const quarterKey = getQuarterKey();
+
+      for (const player of overduePlayers) {
+        const user = await storage.getUserByPlayerId(player.id);
+        if (!user) continue;
+
+        const existingNotifs = await storage.getNotifications(user.id);
+        const isDuplicate = existingNotifs.some((n: any) => {
+          const meta = n.metadata as any;
+          return n.type === "WEIGHT_UPDATE" && meta?.quarterKey === quarterKey;
+        });
+        if (isDuplicate) continue;
+
+        await storage.createNotification({
+          userId: user.id,
+          playerId: player.id,
+          type: "WEIGHT_UPDATE",
+          title: "Weight Update Required",
+          message: `Please update your weight for ${quarterKey}. Regular weight tracking helps monitor your fitness.`,
+          metadata: { quarterKey },
+        });
+        console.log(`[CRON] Weight notification sent to ${user.email} for ${quarterKey}`);
+      }
+    } catch (err) {
+      console.error("[CRON] Weight notification error:", err);
+    }
   });
 
   // ─── MATCH REMINDER CRON (every 15 minutes) ────────────────────
