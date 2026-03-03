@@ -6,6 +6,7 @@ import * as schema from "@shared/schema";
 import { hashPassword, comparePassword, signToken, requireAuth, requireRole } from "./auth";
 import { z } from "zod";
 import crypto from "crypto";
+import cron from "node-cron";
 
 function esc(str: string | null | undefined): string {
   if (!str) return "—";
@@ -1073,12 +1074,31 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     try {
       const body = z.object({
         teamId: z.string(), opponent: z.string(), matchDate: z.string(),
+        startTime: z.string().optional(),
         venue: z.string(), competition: z.string(),
         result: z.enum(["W","L"]).optional().nullable(),
         setsFor: z.number().optional(), setsAgainst: z.number().optional(),
         notes: z.string().optional().nullable(),
       }).parse(req.body);
-      const match = await storage.createMatch(body);
+
+      let status: "SCHEDULED" | "UPCOMING" = "SCHEDULED";
+      const startTimeParsed = body.startTime ? new Date(body.startTime) : null;
+      if (startTimeParsed && startTimeParsed > new Date()) {
+        status = "UPCOMING";
+      }
+
+      const matchData: any = {
+        ...body,
+        startTime: startTimeParsed,
+        status,
+        homeScore: status === "UPCOMING" ? null : (body.setsFor ?? null),
+        awayScore: status === "UPCOMING" ? null : (body.setsAgainst ?? null),
+        scoreSource: "NONE",
+        scoreLocked: false,
+        statsEntered: false,
+      };
+
+      const match = await storage.createMatch(matchData);
       if (match.result) {
         await recomputeCoachPerformance(match.teamId, match.matchDate);
       }
@@ -1091,13 +1111,137 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
 
   app.put("/api/matches/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
-      const updated = await storage.updateMatch(req.params.id, req.body);
+      const existing = await storage.getMatch(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Match not found" });
+
+      const body = z.object({
+        teamId: z.string().optional(),
+        opponent: z.string().optional(),
+        matchDate: z.string().optional(),
+        startTime: z.string().optional().nullable(),
+        venue: z.string().optional(),
+        competition: z.string().optional(),
+        result: z.enum(["W","L"]).optional().nullable(),
+        setsFor: z.number().optional(),
+        setsAgainst: z.number().optional(),
+        notes: z.string().optional().nullable(),
+      }).parse(req.body);
+
+      const updateData: any = { ...body };
+      if (body.startTime !== undefined) {
+        updateData.startTime = body.startTime ? new Date(body.startTime) : null;
+        if (updateData.startTime && updateData.startTime > new Date() && existing.status !== "PLAYED") {
+          updateData.status = "UPCOMING";
+        }
+      }
+
+      const updated = await storage.updateMatch(req.params.id, updateData);
       if (!updated) return res.status(404).json({ message: "Match not found" });
       if (updated.result) {
         await recomputeCoachPerformance(updated.teamId, updated.matchDate);
       }
       res.json(updated);
-    } catch (e) { next(e); }
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.post("/api/matches/:id/score", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const match = await storage.getMatch(req.params.id);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      if (match.startTime && new Date(match.startTime) > new Date()) {
+        return res.status(400).json({ message: "Cannot set score for upcoming match" });
+      }
+      if (match.statsEntered) {
+        return res.status(400).json({ message: "Score locked: stats already entered" });
+      }
+      if (match.scoreLocked && match.scoreSource === "STATS") {
+        return res.status(400).json({ message: "Score locked: stats already entered" });
+      }
+
+      const body = z.object({
+        homeScore: z.number(),
+        awayScore: z.number(),
+        result: z.enum(["W","L"]).optional(),
+        setsFor: z.number().optional(),
+        setsAgainst: z.number().optional(),
+      }).parse(req.body);
+
+      const result = body.result || (body.homeScore > body.awayScore ? "W" : "L");
+      const updated = await storage.updateMatch(req.params.id, {
+        homeScore: body.homeScore,
+        awayScore: body.awayScore,
+        setsFor: body.setsFor ?? body.homeScore,
+        setsAgainst: body.setsAgainst ?? body.awayScore,
+        result,
+        scoreSource: "MANUAL",
+        scoreLocked: true,
+        status: "PLAYED",
+        lastScoreUpdatedBy: req.user!.userId,
+        lastScoreUpdatedAt: new Date(),
+      } as any);
+
+      if (updated) {
+        await recomputeCoachPerformance(updated.teamId, updated.matchDate);
+      }
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.post("/api/matches/:id/set-stats", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const match = await storage.getMatch(req.params.id);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      const body = z.object({
+        sets: z.array(z.object({
+          homePoints: z.number(),
+          awayPoints: z.number(),
+        })),
+      }).parse(req.body);
+
+      const setStats = await storage.createMatchSetStats({
+        matchId: req.params.id,
+        sets: body.sets,
+        enteredBy: req.user!.userId,
+      });
+
+      let homeSets = 0, awaySets = 0;
+      for (const s of body.sets) {
+        if (s.homePoints > s.awayPoints) homeSets++;
+        else if (s.awayPoints > s.homePoints) awaySets++;
+      }
+
+      const result: "W" | "L" = homeSets > awaySets ? "W" : "L";
+      await storage.updateMatch(req.params.id, {
+        homeScore: homeSets,
+        awayScore: awaySets,
+        setsFor: homeSets,
+        setsAgainst: awaySets,
+        result,
+        scoreSource: "STATS",
+        scoreLocked: true,
+        statsEntered: true,
+        status: "PLAYED",
+        lastScoreUpdatedBy: req.user!.userId,
+        lastScoreUpdatedAt: new Date(),
+      } as any);
+
+      const updated = await storage.getMatch(req.params.id);
+      if (updated) {
+        await recomputeCoachPerformance(updated.teamId, updated.matchDate);
+      }
+      res.json({ setStats, match: updated });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
   });
 
   app.delete("/api/matches/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
@@ -1149,6 +1293,13 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
           await storage.createSmartFocus({ playerId: stat.playerId, matchId, focusAreas });
         }
       }
+
+      await storage.updateMatch(matchId, {
+        statsEntered: true,
+        lastScoreUpdatedBy: req.user!.userId,
+        lastScoreUpdatedAt: new Date(),
+      } as any);
+
       res.json(results);
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
@@ -3454,6 +3605,86 @@ th{background:#0d7377;color:white}
       birthdays.sort((a, b) => a.daysUntil - b.daysUntil);
       res.json(birthdays);
     } catch (e) { next(e); }
+  });
+
+  // ─── MATCH REMINDER CRON (every 15 minutes) ────────────────────
+  cron.schedule("*/15 * * * *", async () => {
+    try {
+      const now = new Date();
+      const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+      const upcomingMatches = await storage.getUpcomingMatches(now, in48h);
+
+      for (const match of upcomingMatches) {
+        if (!match.startTime) continue;
+        const startTime = new Date(match.startTime);
+        const diffMs = startTime.getTime() - now.getTime();
+        const diffHours = diffMs / (1000 * 60 * 60);
+
+        const reminders: Array<{ type: string; label: string; withinHours: number }> = [
+          { type: "48H", label: "48 hours", withinHours: 48 },
+          { type: "24H", label: "24 hours", withinHours: 24 },
+          { type: "2H", label: "2 hours", withinHours: 2 },
+          { type: "TODAY", label: "today", withinHours: 24 },
+        ];
+
+        for (const reminder of reminders) {
+          if (reminder.type === "TODAY") {
+            const matchDay = startTime.toISOString().split("T")[0];
+            const today = now.toISOString().split("T")[0];
+            if (matchDay !== today) continue;
+          } else {
+            if (diffHours > reminder.withinHours) continue;
+          }
+
+          const team = await storage.getTeam(match.teamId);
+          const teamName = team?.name || "your team";
+          const title = `Match Reminder`;
+          const message = `${teamName} vs ${match.opponent} is ${reminder.type === "TODAY" ? "today" : `in ${reminder.label}`}! ${match.venue} — ${match.competition}`;
+
+          const existingNotifs = await storage.getNotifications();
+          const isDuplicate = existingNotifs.some((n: any) => {
+            const meta = n.metadata as any;
+            return meta?.matchId === match.id && meta?.reminderType === reminder.type;
+          });
+          if (isDuplicate) continue;
+
+          const adminUsers = await storage.getUsersByRole("ADMIN");
+          const managerUsers = await storage.getUsersByRole("MANAGER");
+          const allRecipients = [...adminUsers, ...managerUsers];
+
+          const coachAssignments = await storage.getCoachAssignmentsByTeam(match.teamId);
+          for (const ca of coachAssignments) {
+            if (ca.active) {
+              const coachUser = await storage.getUser(ca.coachUserId);
+              if (coachUser && !allRecipients.find(u => u.id === coachUser.id)) {
+                allRecipients.push(coachUser);
+              }
+            }
+          }
+
+          const teamPlayers = await storage.getPlayersByTeam(match.teamId);
+          for (const player of teamPlayers) {
+            const playerUser = await storage.getUserByPlayerId(player.id);
+            if (playerUser && !allRecipients.find(u => u.id === playerUser.id)) {
+              allRecipients.push(playerUser);
+            }
+          }
+
+          for (const user of allRecipients) {
+            await storage.createNotification({
+              userId: user.id,
+              type: "MATCH_REMINDER",
+              title,
+              message,
+              metadata: { matchId: match.id, reminderType: reminder.type },
+            });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Match reminder cron error:", err);
+    }
   });
 
   return httpServer;

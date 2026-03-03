@@ -26,7 +26,8 @@ import type {
   Notification, InsertNotification,
   ContractContribution, InsertContractContribution,
   FundRaisingActivity, InsertFundRaisingActivity,
-  PlayerFundRaisingContribution, InsertPlayerFundRaisingContribution
+  PlayerFundRaisingContribution, InsertPlayerFundRaisingContribution,
+  MatchSetStat, InsertMatchSetStat
 } from "@shared/schema";
 
 export interface IStorage {
@@ -55,6 +56,9 @@ export interface IStorage {
   createMatch(match: InsertMatch): Promise<Match>;
   updateMatch(id: string, data: Partial<InsertMatch>): Promise<Match | undefined>;
   deleteMatch(id: string): Promise<void>;
+  getMatchSetStats(matchId: string): Promise<MatchSetStat | undefined>;
+  createMatchSetStats(stat: InsertMatchSetStat): Promise<MatchSetStat>;
+  getUpcomingMatches(from: Date, to: Date): Promise<Match[]>;
   getStatsByMatch(matchId: string): Promise<PlayerMatchStat[]>;
   getStatsByPlayer(playerId: string): Promise<PlayerMatchStat[]>;
   upsertStat(stat: InsertPlayerMatchStat): Promise<PlayerMatchStat>;
@@ -275,6 +279,26 @@ export class DatabaseStorage implements IStorage {
   }
   async deleteMatch(id: string) {
     await db.delete(schema.matches).where(eq(schema.matches.id, id));
+  }
+  async getMatchSetStats(matchId: string) {
+    const [stat] = await db.select().from(schema.matchSetStats).where(eq(schema.matchSetStats.matchId, matchId));
+    return stat;
+  }
+  async createMatchSetStats(stat: InsertMatchSetStat) {
+    const existing = await db.select().from(schema.matchSetStats).where(eq(schema.matchSetStats.matchId, stat.matchId));
+    if (existing.length > 0) {
+      const [updated] = await db.update(schema.matchSetStats).set(stat).where(eq(schema.matchSetStats.id, existing[0].id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(schema.matchSetStats).values(stat).returning();
+    return created;
+  }
+  async getUpcomingMatches(from: Date, to: Date) {
+    return db.select().from(schema.matches)
+      .where(and(
+        eq(schema.matches.status, "UPCOMING"),
+        gte(schema.matches.startTime, from),
+      ));
   }
 
   async getStatsByMatch(matchId: string) {

@@ -1,0 +1,174 @@
+AFROCAT APP – MATCH SCHEDULING, SCORING & REMINDER RULES (IMPLEMENT EXACTLY)
+
+====================================================
+1) MATCH MODEL UPDATES (ADD THESE FIELDS)
+====================================================
+
+Add to Match table/model:
+
+- startTime: DateTime (required)
+- status: enum ["SCHEDULED","UPCOMING","LIVE","PLAYED","CANCELLED"]
+- homeScore: Int (nullable)
+- awayScore: Int (nullable)
+- scoreSource: enum ["NONE","MANUAL","STATS"] (default "NONE")
+- scoreLocked: Boolean (default false)
+- statsEntered: Boolean (default false)
+- lastScoreUpdatedBy: String/UserId (nullable)
+- lastScoreUpdatedAt: DateTime (nullable)
+
+Create MatchStats table:
+
+- id
+- matchId (FK)
+- sets (JSON)  // [{homePoints, awayPoints}]
+- enteredBy
+- enteredAt
+
+====================================================
+2) MATCH CREATE / SCHEDULE RULES
+====================================================
+
+When creating or updating a match:
+
+IF new Date(startTime) > new Date()
+    status = "UPCOMING"
+    homeScore = null
+    awayScore = null
+    scoreSource = "NONE"
+    scoreLocked = false
+    statsEntered = false
+ELSE
+    status = "SCHEDULED"
+
+Score must NOT be required when scheduling future matches.
+
+====================================================
+3) ENTER MATCH STATS (LOCK SCORE)
+====================================================
+
+Function to compute official score from stats:
+
+function computeScoreFromStats(sets) {
+  let homeSets = 0;
+  let awaySets = 0;
+
+  for (const s of sets) {
+    if (s.homePoints > s.awayPoints) homeSets++;
+    else if (s.awayPoints > s.homePoints) awaySets++;
+  }
+
+  return { homeScore: homeSets, awayScore: awaySets };
+}
+
+When stats are submitted:
+
+1. Save MatchStats
+2. Compute score using computeScoreFromStats
+3. Update Match:
+
+homeScore = computed.homeScore
+awayScore = computed.awayScore
+scoreSource = "STATS"
+scoreLocked = true
+statsEntered = true
+status = "PLAYED"
+lastScoreUpdatedBy = currentUserId
+lastScoreUpdatedAt = new Date()
+
+After this:
+Manual score editing MUST be blocked.
+
+====================================================
+4) MANUAL SCORE UPDATE (STRICT CONDITIONS)
+====================================================
+
+Allow ONLY IF:
+
+- match.startTime < now
+- statsEntered === false
+- scoreLocked === false
+- scoreSource !== "STATS"
+
+If allowed:
+
+homeScore = input.homeScore
+awayScore = input.awayScore
+scoreSource = "MANUAL"
+scoreLocked = true
+status = "PLAYED"
+lastScoreUpdatedBy = currentUserId
+lastScoreUpdatedAt = new Date()
+
+If statsEntered === true:
+Return error: "Score locked: stats already entered"
+
+If match is in future:
+Return error: "Cannot set score for upcoming match"
+
+====================================================
+5) UPCOMING MATCH REMINDERS (IN-APP)
+====================================================
+
+Install:
+npm install node-cron
+
+Add scheduler:
+
+import cron from "node-cron";
+
+cron.schedule("*/15 * * * *", async () => {
+
+  const now = new Date();
+  const in48h = new Date(now.getTime() + 48*60*60*1000);
+  const in24h = new Date(now.getTime() + 24*60*60*1000);
+  const in2h  = new Date(now.getTime() +  2*60*60*1000);
+
+  const matches = await db.match.findMany({
+    where: {
+      status: "UPCOMING",
+      startTime: { gte: now, lte: in48h }
+    },
+    include: { homeTeam: true, awayTeam: true }
+  });
+
+  for (const m of matches) {
+    await createReminderIfDue(m, now, in48h, in24h, in2h);
+  }
+});
+
+Reminder logic:
+
+- 48 hours before match
+- 24 hours before match
+- 2 hours before match
+- On the day of match (Today)
+
+Create Notification entries for:
+- Admins
+- Coaches assigned to teams
+- Players belonging to both teams
+
+Prevent duplicates using:
+- matchId
+- reminderType ("48H","24H","2H","TODAY")
+
+====================================================
+6) FRONTEND RULES (MUST MATCH BACKEND)
+====================================================
+
+When scheduling:
+
+IF startTime > now:
+- Hide score fields
+- Display badge: "UPCOMING"
+
+If match is past AND statsEntered === false:
+- Show "Enter Final Score" button
+
+If statsEntered === true:
+- Display label: "Score Locked (From Stats)"
+- Disable score editing
+
+====================================================
+END OF IMPLEMENTATION RULES
+====================================================

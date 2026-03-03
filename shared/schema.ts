@@ -7,6 +7,8 @@ export const roleEnum = pgEnum("role", ["ADMIN", "MANAGER", "COACH", "STATISTICI
 export const teamCategoryEnum = pgEnum("team_category", ["MEN", "WOMEN", "VETERANS", "JUNIORS"]);
 export const playerStatusEnum = pgEnum("player_status", ["ACTIVE", "SUSPENDED", "INJURED", "SUSPENDED_CONTRACT"]);
 export const matchResultEnum = pgEnum("match_result", ["W", "L"]);
+export const matchStatusEnum = pgEnum("match_status", ["SCHEDULED", "UPCOMING", "LIVE", "PLAYED", "CANCELLED"]);
+export const scoreSourceEnum = pgEnum("score_source", ["NONE", "MANUAL", "STATS"]);
 export const sessionTypeEnum = pgEnum("session_type", ["TRAINING", "MATCH", "GYM"]);
 export const attendanceStatusEnum = pgEnum("attendance_status", ["PRESENT", "LATE", "ABSENT", "EXCUSED"]);
 export const txnTypeEnum = pgEnum("txn_type", ["INCOME", "EXPENSE"]);
@@ -125,13 +127,30 @@ export const matches = pgTable("matches", {
   teamId: varchar("team_id", { length: 36 }).notNull(),
   opponent: text("opponent").notNull(),
   matchDate: text("match_date").notNull(),
+  startTime: timestamp("start_time"),
   venue: text("venue").notNull(),
   competition: text("competition").notNull(),
   result: matchResultEnum("result"),
   setsFor: integer("sets_for").default(0),
   setsAgainst: integer("sets_against").default(0),
+  status: matchStatusEnum("status").notNull().default("SCHEDULED"),
+  homeScore: integer("home_score"),
+  awayScore: integer("away_score"),
+  scoreSource: scoreSourceEnum("score_source").notNull().default("NONE"),
+  scoreLocked: boolean("score_locked").notNull().default(false),
+  statsEntered: boolean("stats_entered").notNull().default(false),
+  lastScoreUpdatedBy: varchar("last_score_updated_by", { length: 36 }),
+  lastScoreUpdatedAt: timestamp("last_score_updated_at"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const matchSetStats = pgTable("match_set_stats", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  matchId: varchar("match_id", { length: 36 }).notNull(),
+  sets: jsonb("sets").notNull().$type<Array<{ homePoints: number; awayPoints: number }>>(),
+  enteredBy: varchar("entered_by", { length: 36 }).notNull(),
+  enteredAt: timestamp("entered_at").defaultNow(),
 });
 
 export const playerMatchStats = pgTable("player_match_stats", {
@@ -448,6 +467,7 @@ export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, creat
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true, createdAt: true });
 export const insertMatchSchema = createInsertSchema(matches).omit({ id: true, createdAt: true });
 export const insertPlayerMatchStatSchema = createInsertSchema(playerMatchStats).omit({ id: true });
+export const insertMatchSetStatSchema = createInsertSchema(matchSetStats).omit({ id: true, enteredAt: true });
 export const insertSmartFocusSchema = createInsertSchema(smartFocus).omit({ id: true, generatedAt: true });
 export const insertAttendanceSessionSchema = createInsertSchema(attendanceSessions).omit({ id: true });
 export const insertAttendanceRecordSchema = createInsertSchema(attendanceRecords).omit({ id: true });
@@ -480,6 +500,8 @@ export type InsertMatch = z.infer<typeof insertMatchSchema>;
 export type Match = typeof matches.$inferSelect;
 export type InsertPlayerMatchStat = z.infer<typeof insertPlayerMatchStatSchema>;
 export type PlayerMatchStat = typeof playerMatchStats.$inferSelect;
+export type InsertMatchSetStat = z.infer<typeof insertMatchSetStatSchema>;
+export type MatchSetStat = typeof matchSetStats.$inferSelect;
 export type InsertSmartFocus = z.infer<typeof insertSmartFocusSchema>;
 export type SmartFocus = typeof smartFocus.$inferSelect;
 export type InsertAttendanceSession = z.infer<typeof insertAttendanceSessionSchema>;

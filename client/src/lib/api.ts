@@ -81,6 +81,8 @@ export const api = {
   getMatch: (id: string) => apiFetch<any>(`/matches/${id}`),
   createMatch: (data: any) => apiFetch<any>("/matches", { method: "POST", body: JSON.stringify(data) }),
   updateMatch: (id: string, data: any) => apiFetch<any>(`/matches/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  submitMatchScore: (id: string, data: any) => apiFetch<any>(`/matches/${id}/score`, { method: "POST", body: JSON.stringify(data) }),
+  submitMatchSetStats: (id: string, data: any) => apiFetch<any>(`/matches/${id}/set-stats`, { method: "POST", body: JSON.stringify(data) }),
 
   getStatsByMatch: (matchId: string) => apiFetch<any[]>(`/stats/match/${matchId}`),
   getStatsByPlayer: (playerId: string) => apiFetch<any[]>(`/stats/player/${playerId}`),

@@ -1,0 +1,172 @@
+AFROCAT APP – ATTENDANCE LOCKING RULES (IMPLEMENT EXACTLY)
+
+========================================
+1) ATTENDANCE DATA MODEL UPDATES
+========================================
+
+Add to AttendanceSession (or AttendanceRecord if you use one table):
+
+- id
+- teamId
+- sessionDate (Date)
+- sessionType (enum: TRAINING | MATCH | OTHER)
+- status (enum: OPEN | CLOSED)   // default OPEN
+- lockedAt (DateTime, nullable)
+- lockedBy (UserId, nullable)
+- createdBy (UserId)
+- createdAt (DateTime)
+
+Add to AttendanceLine (per player):
+
+- id
+- attendanceSessionId (FK)
+- playerId
+- present (Boolean)
+- note (String, nullable)
+
+Optional (recommended):
+- unique constraint: (attendanceSessionId, playerId)
+
+========================================
+2) SAVE / CLOSE LOGIC (NO CHANGES AFTER SAVE)
+========================================
+
+Rule:
+- When coach/admin clicks "Save Attendance" -> it MUST also CLOSE attendance.
+- Once CLOSED:
+  - No edits allowed for coach/admin/players
+  - UI must show "Attendance Closed"
+  - Only SUPER_ADMIN can update (re-open NOT required unless you want it)
+
+On Save Attendance:
+- create/update attendance lines (one per player)
+- set session.status = "CLOSED"
+- set session.lockedAt = now
+- set session.lockedBy = currentUserId
+
+========================================
+3) BACKEND ENFORCEMENT (MUST)
+========================================
+
+A) Create/Save Attendance endpoint (COACH/ADMIN allowed only if OPEN)
+
+POST /api/attendance/sessions/:id/save
+
+Validation:
+- if session.status === "CLOSED" -> reject 403 "Attendance closed"
+- else allow save, then close session
+
+B) Update Attendance endpoint
+
+PATCH /api/attendance/sessions/:id
+
+Validation:
+- if session.status === "CLOSED" AND user.role !== "SUPER_ADMIN"
+    reject 403 "Attendance closed"
+- if user.role === "SUPER_ADMIN"
+    allow update (including editing lines)
+
+========================================
+4) EXPRESS/NODE PASTE CODE (ROLE + LOCK CHECKS)
+========================================
+
+Add helper:
+
+function requireRole(roles) {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({ ok:false, error:"Forbidden" });
+    }
+    next();
+  };
+}
+
+SAVE + AUTO-CLOSE:
+
+app.post("/api/attendance/sessions/:id/save", requireRole(["ADMIN","COACH","SUPER_ADMIN"]), async (req, res) => {
+  const id = req.params.id;
+  const { lines } = req.body; // [{playerId, present, note?}]
+
+  const session = await db.attendanceSession.findUnique({ where: { id } });
+  if (!session) return res.status(404).json({ ok:false, error:"Session not found" });
+
+  if (session.status === "CLOSED") {
+    return res.status(403).json({ ok:false, error:"Attendance closed" });
+  }
+
+  if (!Array.isArray(lines) || lines.length === 0) {
+    return res.status(400).json({ ok:false, error:"Attendance lines required" });
+  }
+
+  // Save lines (upsert style)
+  for (const l of lines) {
+    await db.attendanceLine.upsert({
+      where: { attendanceSessionId_playerId: { attendanceSessionId: id, playerId: l.playerId } },
+      update: { present: !!l.present, note: l.note || null },
+      create: { attendanceSessionId: id, playerId: l.playerId, present: !!l.present, note: l.note || null },
+    });
+  }
+
+  // CLOSE attendance immediately after save
+  const updatedSession = await db.attendanceSession.update({
+    where: { id },
+    data: {
+      status: "CLOSED",
+      lockedAt: new Date(),
+      lockedBy: req.user.id,
+    },
+  });
+
+  return res.json({ ok:true, session: updatedSession });
+});
+
+SUPER_ADMIN ONLY EDIT (AFTER CLOSED):
+
+app.patch("/api/attendance/sessions/:id", requireRole(["ADMIN","COACH","SUPER_ADMIN"]), async (req, res) => {
+  const id = req.params.id;
+  const session = await db.attendanceSession.findUnique({ where: { id } });
+  if (!session) return res.status(404).json({ ok:false, error:"Session not found" });
+
+  if (session.status === "CLOSED" && req.user.role !== "SUPER_ADMIN") {
+    return res.status(403).json({ ok:false, error:"Attendance closed" });
+  }
+
+  // SUPER_ADMIN may update session metadata and/or lines
+  const { sessionDate, sessionType, lines } = req.body;
+
+  const updated = await db.attendanceSession.update({
+    where: { id },
+    data: {
+      sessionDate: sessionDate ? new Date(sessionDate) : undefined,
+      sessionType: sessionType || undefined,
+    },
+  });
+
+  if (Array.isArray(lines)) {
+    for (const l of lines) {
+      await db.attendanceLine.upsert({
+        where: { attendanceSessionId_playerId: { attendanceSessionId: id, playerId: l.playerId } },
+        update: { present: !!l.present, note: l.note || null },
+        create: { attendanceSessionId: id, playerId: l.playerId, present: !!l.present, note: l.note || null },
+      });
+    }
+  }
+
+  return res.json({ ok:true, session: updated });
+});
+
+========================================
+5) FRONTEND UI RULES
+========================================
+
+- If session.status === "CLOSED":
+  - show badge/text: "Attendance Closed"
+  - disable all checkboxes/inputs + hide Save button
+  - show: "Only Super Admin can edit this attendance"
+
+- If user.role === "SUPER_ADMIN":
+  - show "Edit Attendance" button even when CLOSED
+
+========================================
+END
+========================================
