@@ -287,4 +287,5 @@ export const api = {
   rejectUpdateRequest: (id: string, reviewNote?: string) =>
     apiFetch<any>(`/player-update-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ reviewNote }) }),
   getWeightStatus: () => apiFetch<any>("/players/me/weight-status"),
+  getPlayerSpotlight: () => apiFetch<any>("/player-spotlight"),
 };

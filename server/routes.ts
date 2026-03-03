@@ -4078,6 +4078,63 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  // ─── PLAYER SPOTLIGHT (daily rotation) ────────────────────
+  app.get("/api/player-spotlight", requireAuth, async (_req, res, next) => {
+    try {
+      const allPlayers = await storage.getPlayers();
+      const approved = allPlayers
+        .filter((p: any) => p.registrationStatus === "APPROVED" && p.status === "ACTIVE")
+        .sort((a: any, b: any) => a.id.localeCompare(b.id));
+      if (approved.length === 0) return res.json(null);
+
+      const today = new Date();
+      const dayIndex = Math.floor(today.getTime() / (1000 * 60 * 60 * 24));
+      const player = approved[dayIndex % approved.length];
+
+      const team = player.teamId ? await storage.getTeam(player.teamId) : null;
+
+      const allStats = await db.select().from(schema.playerMatchStats)
+        .where(eq(schema.playerMatchStats.playerId, player.id));
+
+      const careerStats = {
+        matchesPlayed: allStats.length,
+        totalKills: allStats.reduce((s, st) => s + (st.spikesKill || 0), 0),
+        totalAces: allStats.reduce((s, st) => s + (st.servesAce || 0), 0),
+        totalBlocks: allStats.reduce((s, st) => s + (st.blocksSolo || 0) + (st.blocksAssist || 0), 0),
+        totalDigs: allStats.reduce((s, st) => s + (st.digs || 0), 0),
+        totalAssists: allStats.reduce((s, st) => s + (st.settingAssist || 0), 0),
+        totalPoints: allStats.reduce((s, st) => s + (st.pointsTotal || 0), 0),
+      };
+
+      const playerAwards = await db.select().from(schema.awards)
+        .where(eq(schema.awards.playerId, player.id));
+
+      const age = calcAge(player.dob);
+
+      res.json({
+        id: player.id,
+        fullName: player.fullName,
+        firstName: player.firstName,
+        lastName: player.lastName,
+        photoUrl: player.photoUrl,
+        position: player.position,
+        jerseyNo: player.jerseyNo,
+        teamName: team?.name || null,
+        age,
+        heightCm: player.heightCm,
+        weightKg: player.weightKg,
+        nationality: player.nationality,
+        careerStats,
+        awards: playerAwards.map((a: any) => ({
+          id: a.id,
+          awardType: a.awardType,
+          awardMonth: a.awardMonth,
+          notes: a.notes,
+        })),
+      });
+    } catch (e) { next(e); }
+  });
+
   // ─── TEAM GENDER RULES API ────────────────────
   app.get("/api/team-gender-rules", (_req, res) => {
     res.json(TEAM_GENDER_RULES);

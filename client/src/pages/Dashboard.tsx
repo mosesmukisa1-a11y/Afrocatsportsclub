@@ -5,7 +5,8 @@ import {
   Users, Trophy, DollarSign, Activity, ArrowUpRight, ArrowDownRight,
   Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
   User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
-  FileText, Bell, ChevronRight, MessageCircle, Cake, PartyPopper, Gift, Scale
+  FileText, Bell, ChevronRight, MessageCircle, Cake, PartyPopper, Gift, Scale,
+  Star, Crosshair, Sparkles
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -81,6 +82,12 @@ export default function Dashboard() {
     queryKey: ["/api/players/me/weight-status"],
     queryFn: api.getWeightStatus,
     enabled: isPlayerView && !!user,
+  });
+
+  const { data: spotlight } = useQuery({
+    queryKey: ["/api/player-spotlight"],
+    queryFn: api.getPlayerSpotlight,
+    enabled: !!user,
   });
 
   const queryClient = useQueryClient();
@@ -306,6 +313,102 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {spotlight && (
+          <div className="afrocat-card overflow-hidden" data-testid="card-player-spotlight">
+            <div className="bg-gradient-to-r from-afrocat-gold-soft via-afrocat-teal-soft to-afrocat-gold-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px]">
+              <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold" data-testid="text-spotlight-title">
+                <Star className="h-5 w-5" /> Player Spotlight
+              </h3>
+            </div>
+            <div className="p-5">
+              <div className="flex flex-col md:flex-row gap-5">
+                <div className="flex flex-col items-center shrink-0">
+                  {spotlight.photoUrl ? (
+                    <img
+                      src={spotlight.photoUrl}
+                      alt={spotlight.fullName}
+                      className="w-28 h-28 rounded-2xl object-cover border-2 border-afrocat-gold shadow-lg"
+                      data-testid="img-spotlight-photo"
+                    />
+                  ) : (
+                    <div className="w-28 h-28 rounded-2xl bg-afrocat-gold-soft flex items-center justify-center border-2 border-afrocat-gold text-3xl font-bold text-afrocat-gold" data-testid="img-spotlight-placeholder">
+                      {(spotlight.firstName?.[0] || "")}{(spotlight.lastName?.[0] || "")}
+                    </div>
+                  )}
+                  {spotlight.jerseyNo && (
+                    <Badge className="mt-2 bg-afrocat-gold text-white border-0 text-sm font-bold px-3" data-testid="badge-spotlight-jersey">
+                      #{spotlight.jerseyNo}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xl font-display font-bold text-afrocat-text" data-testid="text-spotlight-name">{spotlight.fullName}</h4>
+                    <Sparkles className="h-5 w-5 text-afrocat-gold" />
+                  </div>
+                  <div className="flex items-center gap-3 mt-1 flex-wrap text-sm text-afrocat-muted">
+                    {spotlight.position && (
+                      <span className="flex items-center gap-1" data-testid="text-spotlight-position">
+                        <Crosshair className="h-3.5 w-3.5" /> {spotlight.position}
+                      </span>
+                    )}
+                    {spotlight.teamName && (
+                      <span className="flex items-center gap-1" data-testid="text-spotlight-team">
+                        <Shield className="h-3.5 w-3.5" /> {spotlight.teamName}
+                      </span>
+                    )}
+                    {spotlight.age !== null && (
+                      <span data-testid="text-spotlight-age">Age {spotlight.age}</span>
+                    )}
+                    {spotlight.nationality && (
+                      <span data-testid="text-spotlight-nationality">{spotlight.nationality}</span>
+                    )}
+                  </div>
+
+                  {spotlight.heightCm && spotlight.weightKg && (
+                    <p className="text-xs text-afrocat-muted mt-1" data-testid="text-spotlight-physical">
+                      {spotlight.heightCm}cm / {spotlight.weightKg}kg
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4">
+                    {[
+                      { label: "Matches", value: spotlight.careerStats.matchesPlayed, icon: Trophy },
+                      { label: "Kills", value: spotlight.careerStats.totalKills, icon: Zap },
+                      { label: "Aces", value: spotlight.careerStats.totalAces, icon: Target },
+                      { label: "Blocks", value: spotlight.careerStats.totalBlocks, icon: Shield },
+                      { label: "Digs", value: spotlight.careerStats.totalDigs, icon: Heart },
+                      { label: "Assists", value: spotlight.careerStats.totalAssists, icon: Users },
+                      { label: "Points", value: spotlight.careerStats.totalPoints, icon: Star },
+                    ].filter(s => s.value > 0 || s.label === "Matches").map((stat) => (
+                      <div key={stat.label} className="text-center p-2 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid={`stat-spotlight-${stat.label.toLowerCase()}`}>
+                        <stat.icon className="h-4 w-4 mx-auto mb-1 text-afrocat-teal" />
+                        <div className="text-lg font-bold font-display text-afrocat-text">{stat.value}</div>
+                        <div className="text-[10px] text-afrocat-muted uppercase tracking-wider">{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {spotlight.awards.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Achievements</p>
+                      <div className="flex flex-wrap gap-2">
+                        {spotlight.awards.map((award: any) => (
+                          <Badge key={award.id} className="bg-afrocat-gold-soft text-afrocat-gold border-0 text-xs" data-testid={`badge-spotlight-award-${award.id}`}>
+                            <Award className="h-3 w-3 mr-1" />
+                            {award.awardType.replace(/_/g, " ")} — {award.awardMonth}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {user && !["FINANCE","MEDICAL","PLAYER"].includes(user.role) && recentPlayedMatches.length > 0 && (
           <div className="afrocat-card p-5" data-testid="card-recent-matches">
