@@ -1,0 +1,236 @@
+```text
+REPLIT – PLEASE FIX MATCH TIME LOGIC + UPCOMING/PAST/RECENT MIXUP (SINGLE SOURCE OF TRUTH) + COUNTDOWN + SCORE RULES + PLAYER DASHBOARD
+
+PROBLEM:
+- Past matches are sometimes marked as Upcoming
+- Future matches appear in Recent/Past lists
+- Scheduling asks for scores (should NOT)
+- Need countdown (days/hours/minutes left)
+- If match time ended and no stats/scores: Admin can enter final score
+- Player dashboards must show upcoming match + score (when available)
+
+GOAL:
+Make match status determined ONLY by match.startTime (and endTime) + score/stat state.
+Then update EVERY query/UI to use those rules (no more mixed labels).
+
+========================================================
+1) REQUIRED MATCH FIELDS (SOURCE OF TRUTH)
+========================================================
+
+Match fields:
+- startTime (DateTime, required)  // scheduled kickoff
+- endTime (DateTime, required)    // auto = startTime + defaultDurationMinutes if not provided
+- status (enum)                   // UPCOMING | LIVE | PAST_NO_SCORE | PLAYED | CANCELLED
+- homeScore (Int nullable)
+- awayScore (Int nullable)
+- scoreSource (enum)              // NONE | MANUAL | STATS
+- statsEntered (Boolean default false)
+- scoreLocked (Boolean default false)
+- defaultDurationMinutes (Int default 120)  // only if you need it
+
+IMPORTANT:
+Do NOT use createdAt to determine match category.
+Use startTime/endTime ONLY.
+
+========================================================
+2) STATUS RULES (MUST BE ENFORCED SERVER-SIDE)
+========================================================
+
+At read-time or via a “normalize” function, status must be:
+
+A) UPCOMING
+- now < startTime
+- scores must be NULL (homeScore=null, awayScore=null)
+- scoreSource="NONE"
+- statsEntered=false
+- scoreLocked=false
+
+B) LIVE
+- startTime <= now <= endTime
+- scores optional (usually null)
+- not editable scores unless you allow live scoring (optional)
+
+C) PAST_NO_SCORE  (ADMIN CAN ENTER FINAL SCORE)
+- now > endTime
+- statsEntered=false
+- (homeScore is null AND awayScore is null)
+- scoreSource="NONE"
+- scoreLocked=false
+
+D) PLAYED  (COMPLETED MATCH)
+- statsEntered=true  OR scoreLocked=true OR scoreSource in ("MANUAL","STATS")
+- must have homeScore & awayScore not null
+- scoreLocked=true
+
+E) CANCELLED
+- status="CANCELLED" (manual)
+
+========================================================
+3) SCHEDULING RULES (NO SCORES + NO PAST DATES)
+========================================================
+
+When scheduling (creating a match):
+- DO NOT ask for score fields (remove from UI + backend validation)
+- Reject scheduling if startTime < now (do not accept “completed matches by date”)
+  Error: “Cannot schedule a match in the past.”
+
+Auto-set:
+- endTime = startTime + defaultDurationMinutes (e.g. 120) unless provided
+
+========================================================
+4) ADMIN FINAL SCORE ENTRY (ONLY WHEN PAST_NO_SCORE)
+========================================================
+
+Admins can enter final score ONLY if:
+- now > endTime
+- statsEntered == false
+- scoreSource == "NONE"
+- scoreLocked == false
+
+Endpoint:
+PATCH /api/matches/:id/final-score
+Body: { homeScore, awayScore }
+
+When saved:
+- set homeScore, awayScore
+- scoreSource="MANUAL"
+- scoreLocked=true
+- status="PLAYED"
+
+If statsEntered=true OR scoreSource="STATS":
+- BLOCK edits
+- message: “Score locked: stats already entered.”
+
+========================================================
+5) UPCOMING COUNTDOWN (DAYS / HOURS / MINUTES LEFT)
+========================================================
+
+For matches in UPCOMING:
+Return computed fields:
+- timeLeftSeconds
+- timeLeftLabel e.g.
+  “3 days 4 hours”
+  “0 days 6 hours”
+  “2 hours 15 minutes”
+
+Backend helper:
+timeLeft = startTime - now
+days = floor(timeLeft / 86400)
+hours = floor((timeLeft % 86400) / 3600)
+minutes = floor((timeLeft % 3600) / 60)
+
+Show on:
+- Upcoming Matches page
+- Player dashboard upcoming match card
+- Coach/admin dashboard
+
+========================================================
+6) PLAYER DASHBOARD REQUIREMENT
+========================================================
+
+Each player dashboard must show:
+
+A) Upcoming Match of their team:
+- Query:
+  WHERE (teamId=player.teamId) AND now < startTime AND status="UPCOMING"
+  ORDER BY startTime ASC
+  LIMIT 1
+
+Show:
+- opponent
+- venue
+- date/time
+- countdown label
+
+B) Their match score (when available):
+- If match status is PLAYED: show final score.
+- If match status is UPCOMING/LIVE/PAST_NO_SCORE: show “Score pending”.
+
+Also show “Recent/Past matches” list:
+- WHERE status IN ("PLAYED","PAST_NO_SCORE") AND teamId=player.teamId
+- ORDER BY startTime DESC
+
+Label:
+- PLAYED -> “Past Match (Final)”
+- PAST_NO_SCORE -> “Past Match (Score Missing)”
+
+========================================================
+7) VISIBILITY IN ALL FIELDS THAT REQUIRE MATCHES
+========================================================
+
+Anywhere matches are needed (stats, documents, scheduling, lists):
+Return BOTH:
+- Upcoming list (UPCOMING)
+- Past list (PLAYED + PAST_NO_SCORE)
+- (Optional) Live list (LIVE)
+
+Do NOT hide PAST_NO_SCORE. Admins need it.
+
+========================================================
+8) FIX THE MIXUP: PAST MARKED AS UPCOMING
+========================================================
+
+This happens when:
+- server stores status once and never recalculates
+OR
+- UI uses createdAt / string dates / timezone problems
+
+Fix:
+A) Ensure all dates stored in UTC ISO.
+B) Ensure frontend uses Date objects correctly.
+C) Add a status normalizer on every match fetch:
+   normalizeMatchStatus(match, now)
+
+Normalize function must:
+- recompute status using startTime/endTime and score/stat state
+- correct wrong status before returning
+
+========================================================
+9) REQUIRED API CHANGES
+========================================================
+
+1) Schedule match (no scores, no past date):
+POST /api/matches
+Body: { homeTeamId, awayTeamId, startTime, venue, ... }
+Server sets endTime and status="UPCOMING"
+
+2) Match lists (server returns normalized + countdown):
+GET /api/matches?type=upcoming
+GET /api/matches?type=past
+GET /api/matches?type=team&teamId=...
+
+3) Admin final score:
+PATCH /api/matches/:id/final-score
+
+========================================================
+10) TEST CHECKLIST (REPLIT MUST VERIFY)
+========================================================
+
+1) Schedule match 5 days ahead:
+- shows under Upcoming only
+- shows “5 days … left”
+
+2) Schedule match today, time inside window:
+- shows LIVE (optional) or still UPCOMING until start
+- no score required
+
+3) After endTime passes and no stats/scores:
+- match becomes PAST_NO_SCORE
+- Admin can enter final score
+- Players see “Past Match (Score Missing)” until score added
+
+4) After admin enters final score:
+- match becomes PLAYED
+- players see final score
+
+5) No past-date scheduling allowed:
+- startTime < now => rejected
+
+6) Past vs Upcoming never mixed:
+- startTime > now => MUST NEVER appear in past/recent list
+- startTime < now AND score exists => MUST NEVER appear in upcoming list
+
+========================================================
+END – IMPLEMENT EXACTLY
+========================================================
+```

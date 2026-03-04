@@ -221,8 +221,17 @@ export default function PlayerDashboard() {
                             {dash.upcomingFixture.isHome ? "HOME" : "AWAY"}
                           </span>
                         </div>
+                        {dash.upcomingFixture.timeLeftLabel && (
+                          <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-afrocat-teal-soft" data-testid="text-fixture-countdown">
+                            <Clock size={14} className="text-afrocat-teal" />
+                            <span className="text-sm font-bold text-afrocat-teal">{dash.upcomingFixture.timeLeftLabel}</span>
+                          </div>
+                        )}
                         <div className="space-y-1.5 text-xs text-afrocat-muted">
                           <div className="flex items-center gap-2"><Calendar size={12} /> {new Date(dash.upcomingFixture.date + "T00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</div>
+                          {dash.upcomingFixture.startTime && (
+                            <div className="flex items-center gap-2"><Clock size={12} /> {new Date(dash.upcomingFixture.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                          )}
                           <div className="flex items-center gap-2"><MapPin size={12} /> {dash.upcomingFixture.venue}</div>
                           <div className="flex items-center gap-2"><Trophy size={12} /> {dash.upcomingFixture.competition}</div>
                           {dash.upcomingFixture.coachName && (
@@ -236,6 +245,37 @@ export default function PlayerDashboard() {
                       <div className="p-5 text-center">
                         <Swords size={24} className="mx-auto mb-2 text-afrocat-muted" />
                         <p className="text-sm text-afrocat-muted">No upcoming fixtures scheduled</p>
+                      </div>
+                    </AcCard>
+                  )}
+
+                  {dash.recentTeamMatches && dash.recentTeamMatches.length > 0 && (
+                    <AcCard>
+                      <div className="p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Trophy size={16} className="text-afrocat-gold" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-afrocat-gold">Recent Matches</span>
+                        </div>
+                        <div className="space-y-2">
+                          {dash.recentTeamMatches.map((m: any) => (
+                            <div key={m.matchId} className="flex items-center justify-between p-2 rounded-lg bg-afrocat-white-3" data-testid={`recent-match-${m.matchId}`}>
+                              <div>
+                                <p className="text-xs font-bold text-afrocat-text">vs {m.opponent}</p>
+                                <p className="text-[10px] text-afrocat-muted">{m.date} - {m.venue}</p>
+                              </div>
+                              <div className="text-right">
+                                {m.status === "PLAYED" ? (
+                                  <span className={`text-sm font-bold ${m.result === "W" ? "text-afrocat-green" : "text-afrocat-red"}`} data-testid={`score-${m.matchId}`}>
+                                    {m.homeScore} - {m.awayScore}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-yellow-400" data-testid={`score-pending-${m.matchId}`}>Score pending</span>
+                                )}
+                                <p className="text-[10px] text-afrocat-muted">{m.statusLabel}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </AcCard>
                   )}

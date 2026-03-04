@@ -14,6 +14,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { ALL_ENUMS, SKILL_TYPES, OUTCOME } from "./devstats/enums";
 import { generateDevelopmentReport } from "./devstats/report";
 import { generateO2BISPdf, validateLiberoRule, autoSelectLiberos } from "./o2bis";
+import { normalizeMatchStatus, addCountdown, enrichMatch } from "./match-utils";
 
 const TEAM_GENDER_RULES: Record<string, string> = {
   "Afrocat D": "MALE",
@@ -1168,16 +1169,19 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
 
   // ─── MATCHES ─────────────────────────────────────
   app.get("/api/matches", requireAuth, async (_req, res, next) => {
-    try { res.json(await storage.getMatches()); } catch (e) { next(e); }
+    try {
+      const all = await storage.getMatches();
+      res.json(all.map(enrichMatch));
+    } catch (e) { next(e); }
   });
 
   app.get("/api/matches/upcoming", requireAuth, async (_req, res, next) => {
     try {
       const all = await storage.getMatches();
-      const now = new Date();
-      const upcoming = all
-        .filter(m => m.status === "UPCOMING" && m.startTime && new Date(m.startTime) > now)
-        .sort((a, b) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
+      const enriched = all.map(enrichMatch);
+      const upcoming = enriched
+        .filter((m: any) => m.status === "UPCOMING")
+        .sort((a: any, b: any) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime());
       res.json(upcoming);
     } catch (e) { next(e); }
   });
@@ -1185,9 +1189,10 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
   app.get("/api/matches/played", requireAuth, async (_req, res, next) => {
     try {
       const all = await storage.getMatches();
-      const played = all
-        .filter(m => m.status === "PLAYED")
-        .sort((a, b) => new Date(b.startTime || b.matchDate).getTime() - new Date(a.startTime || a.matchDate).getTime());
+      const enriched = all.map(enrichMatch);
+      const played = enriched
+        .filter((m: any) => m.status === "PLAYED" || m.status === "PAST_NO_SCORE")
+        .sort((a: any, b: any) => new Date(b.startTime || b.matchDate).getTime() - new Date(a.startTime || a.matchDate).getTime());
       res.json(played);
     } catch (e) { next(e); }
   });
@@ -1196,7 +1201,7 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     try {
       const match = await storage.getMatch(req.params.id);
       if (!match) return res.status(404).json({ message: "Match not found" });
-      res.json(match);
+      res.json(enrichMatch(match));
     } catch (e) { next(e); }
   });
 
@@ -1204,32 +1209,34 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     try {
       const body = z.object({
         teamId: z.string(), opponent: z.string(), matchDate: z.string(),
-        startTime: z.string().optional(),
+        startTime: z.string(),
         venue: z.string(), competition: z.string(),
-        result: z.enum(["W","L"]).optional().nullable(),
-        setsFor: z.number().optional(), setsAgainst: z.number().optional(),
         notes: z.string().optional().nullable(),
+        round: z.string().optional().nullable(),
       }).parse(req.body);
 
-      const startTimeParsed = body.startTime ? new Date(body.startTime) : null;
-      const isFuture = startTimeParsed ? startTimeParsed > new Date() : false;
+      const startTimeParsed = new Date(body.startTime);
+
+      if (startTimeParsed < new Date()) {
+        return res.status(400).json({ message: "Cannot schedule a match in the past." });
+      }
+
+      const endTimeParsed = new Date(startTimeParsed.getTime() + 120 * 60 * 1000);
 
       const matchData: any = {
         ...body,
         startTime: startTimeParsed,
-        status: isFuture ? "UPCOMING" : "UPCOMING",
-        homeScore: isFuture ? null : (body.setsFor ?? null),
-        awayScore: isFuture ? null : (body.setsAgainst ?? null),
+        endTime: endTimeParsed,
+        status: "UPCOMING",
+        homeScore: null,
+        awayScore: null,
         scoreSource: "NONE",
         scoreLocked: false,
         statsEntered: false,
       };
 
       const match = await storage.createMatch(matchData);
-      if (match.result) {
-        await recomputeCoachPerformance(match.teamId, match.matchDate);
-      }
-      res.status(201).json(match);
+      res.status(201).json(enrichMatch(match));
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
@@ -1439,6 +1446,53 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         await recomputeCoachPerformance(updated.teamId, updated.matchDate);
       }
       res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  app.patch("/api/matches/:id/final-score", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const match = await storage.getMatch(req.params.id);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      const normalized = normalizeMatchStatus(match);
+      if (normalized.status !== "PAST_NO_SCORE") {
+        if (match.statsEntered || match.scoreSource === "STATS") {
+          return res.status(400).json({ message: "Score locked: stats already entered." });
+        }
+        if (match.scoreLocked) {
+          return res.status(400).json({ message: "Score already locked." });
+        }
+        if (normalized.status === "UPCOMING" || normalized.status === "LIVE") {
+          return res.status(400).json({ message: "Match has not ended yet." });
+        }
+      }
+
+      const body = z.object({
+        homeScore: z.number().min(0),
+        awayScore: z.number().min(0),
+      }).parse(req.body);
+
+      const result = body.homeScore > body.awayScore ? "W" : "L";
+      const updated = await storage.updateMatch(req.params.id, {
+        homeScore: body.homeScore,
+        awayScore: body.awayScore,
+        setsFor: body.homeScore,
+        setsAgainst: body.awayScore,
+        result,
+        scoreSource: "MANUAL",
+        scoreLocked: true,
+        status: "PLAYED",
+        lastScoreUpdatedBy: req.user!.userId,
+        lastScoreUpdatedAt: new Date(),
+      } as any);
+
+      if (updated) {
+        await recomputeCoachPerformance(updated.teamId, updated.matchDate);
+      }
+      res.json(enrichMatch(updated!));
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
@@ -3450,11 +3504,28 @@ th{background:#0d7377;color:white}
       const contracts = await storage.getPlayerContracts(playerId);
       const activeContract = contracts.find((c: any) => c.status === "ACTIVE");
 
-      const today = new Date().toISOString().split("T")[0];
       const teamMatches = player.teamId ? await storage.getMatchesByTeam(player.teamId) : [];
-      const upcomingFixture = teamMatches
-        .filter(m => m.matchDate >= today && !m.result)
-        .sort((a, b) => a.matchDate.localeCompare(b.matchDate))[0] || null;
+      const enrichedTeamMatches = teamMatches.map(enrichMatch);
+
+      const upcomingFixture = enrichedTeamMatches
+        .filter((m: any) => m.status === "UPCOMING")
+        .sort((a: any, b: any) => new Date(a.startTime!).getTime() - new Date(b.startTime!).getTime())[0] || null;
+
+      const recentTeamMatches = enrichedTeamMatches
+        .filter((m: any) => m.status === "PLAYED" || m.status === "PAST_NO_SCORE")
+        .sort((a: any, b: any) => new Date(b.startTime || b.matchDate).getTime() - new Date(a.startTime || a.matchDate).getTime())
+        .slice(0, 5)
+        .map((m: any) => ({
+          matchId: m.id,
+          opponent: m.opponent,
+          date: m.matchDate,
+          venue: m.venue,
+          homeScore: m.homeScore,
+          awayScore: m.awayScore,
+          result: m.result,
+          status: m.status,
+          statusLabel: m.status === "PLAYED" ? "Past Match (Final)" : "Past Match (Score Missing)",
+        }));
 
       let upcomingCoachName: string | null = null;
       if (upcomingFixture && player.teamId) {
@@ -3525,13 +3596,17 @@ th{background:#0d7377;color:white}
         upcomingFixture: upcomingFixture ? {
           matchId: upcomingFixture.id,
           date: upcomingFixture.matchDate,
+          startTime: upcomingFixture.startTime,
           venue: upcomingFixture.venue,
           competition: upcomingFixture.competition,
           opponent: upcomingFixture.opponent,
           teamName: playerTeam?.name || null,
           isHome: upcomingFixture.venue === "Home",
           coachName: upcomingCoachName,
+          timeLeftLabel: upcomingFixture.timeLeftLabel || null,
+          timeLeftSeconds: upcomingFixture.timeLeftSeconds || null,
         } : null,
+        recentTeamMatches,
       });
     } catch (e) { next(e); }
   });

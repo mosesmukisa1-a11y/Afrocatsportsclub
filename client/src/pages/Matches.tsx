@@ -16,6 +16,7 @@ import { SquadSelector } from "@/components/SquadSelector";
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   UPCOMING: { bg: "bg-afrocat-teal-soft", text: "text-afrocat-teal", label: "Upcoming" },
   LIVE: { bg: "bg-afrocat-red-soft", text: "text-afrocat-red", label: "Live" },
+  PAST_NO_SCORE: { bg: "bg-yellow-500/10", text: "text-yellow-400", label: "Score Missing" },
   PLAYED: { bg: "bg-afrocat-green-soft", text: "text-afrocat-green", label: "Played" },
   CANCELLED: { bg: "bg-afrocat-red-soft", text: "text-afrocat-red", label: "Cancelled" },
 };
@@ -31,8 +32,7 @@ export default function Matches() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     teamId: "", opponent: "", matchDate: "", startTime: "",
-    venue: "Home", competition: "", result: "" as string,
-    setsFor: 0, setsAgainst: 0,
+    venue: "Home", competition: "", round: "",
   });
   const [squadMatchId, setSquadMatchId] = useState<string | null>(null);
   const [squadTeamId, setSquadTeamId] = useState<string | null>(null);
@@ -59,23 +59,37 @@ export default function Matches() {
     queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
   };
 
+  const [finalScoreModal, setFinalScoreModal] = useState<string | null>(null);
+  const [finalScoreForm, setFinalScoreForm] = useState({ homeScore: 0, awayScore: 0 });
+
   const createMut = useMutation({
     mutationFn: () => {
       const startTimeISO = form.startTime ? new Date(`${form.matchDate}T${form.startTime}`).toISOString() : undefined;
-      const isFutureMatch = startTimeISO ? new Date(startTimeISO) > new Date() : new Date(form.matchDate) > new Date();
       return api.createMatch({
-        ...form,
+        teamId: form.teamId,
+        opponent: form.opponent,
+        matchDate: form.matchDate,
         startTime: startTimeISO,
-        result: isFutureMatch ? null : (form.result || null),
-        setsFor: isFutureMatch ? 0 : Number(form.setsFor),
-        setsAgainst: isFutureMatch ? 0 : Number(form.setsAgainst),
+        venue: form.venue,
+        competition: form.competition,
+        round: form.round || undefined,
       });
     },
     onSuccess: () => {
       invalidateAll();
       setOpen(false);
-      setForm({ teamId: "", opponent: "", matchDate: "", startTime: "", venue: "Home", competition: "", result: "", setsFor: 0, setsAgainst: 0 });
+      setForm({ teamId: "", opponent: "", matchDate: "", startTime: "", venue: "Home", competition: "", round: "" });
       toast({ title: "Match created" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const finalScoreMut = useMutation({
+    mutationFn: () => api.submitFinalScore(finalScoreModal!, finalScoreForm),
+    onSuccess: () => {
+      invalidateAll();
+      setFinalScoreModal(null);
+      toast({ title: "Final score saved" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
@@ -201,23 +215,18 @@ export default function Matches() {
   const canAssignStaff = user && ["ADMIN", "MANAGER", "COACH"].includes(user.role);
   const canGenerateO2bis = user && ["ADMIN", "MANAGER", "COACH"].includes(user.role);
 
-  const formIsFuture = form.startTime
-    ? new Date(`${form.matchDate}T${form.startTime}`) > new Date()
-    : form.matchDate ? new Date(form.matchDate) > new Date() : false;
-
   const isLoading = loadingUpcoming || loadingPlayed;
 
   const renderMatchCard = (match: any, isUpcoming: boolean) => {
     const team = teams.find((t: any) => t.id === match.teamId);
     const isWin = match.result === "W";
     const showingSquad = squadMatchId === match.id && squadTeamId === match.teamId;
-    const matchIsPast = match.startTime ? new Date(match.startTime) < new Date() : new Date(match.matchDate) < new Date();
-    const canEnterScore = canScore && matchIsPast && !match.statsEntered && !match.scoreLocked;
+    const isPastNoScore = match.status === "PAST_NO_SCORE";
+    const canEnterScore = canScore && !isUpcoming && !match.statsEntered && !match.scoreLocked;
+    const canEnterFinalScore = isAdmin && isPastNoScore;
     const isScoreLocked = match.scoreLocked || match.statsEntered;
 
-    const statusStyle = isUpcoming
-      ? STATUS_STYLES.UPCOMING
-      : STATUS_STYLES[match.status] || STATUS_STYLES.PLAYED;
+    const statusStyle = STATUS_STYLES[match.status] || STATUS_STYLES.UPCOMING;
 
     return (
       <div key={match.id} className="afrocat-card overflow-hidden" data-testid={`card-match-${match.id}`}>
@@ -253,8 +262,15 @@ export default function Matches() {
                     <h3 className="text-xl font-bold font-display text-afrocat-text">{team?.name || "Team"}</h3>
                   </div>
                   {isUpcoming ? (
-                    <div className="px-4 py-2 bg-afrocat-white-5 rounded-lg flex items-center justify-center min-w-[100px] border border-afrocat-border">
+                    <div className="px-4 py-2 bg-afrocat-white-5 rounded-lg flex flex-col items-center justify-center min-w-[100px] border border-afrocat-border">
                       <span className="text-sm font-medium text-afrocat-muted">vs</span>
+                      {match.timeLeftLabel && (
+                        <span className="text-xs text-afrocat-teal mt-1" data-testid={`text-countdown-${match.id}`}>{match.timeLeftLabel}</span>
+                      )}
+                    </div>
+                  ) : isPastNoScore ? (
+                    <div className="px-4 py-2 bg-yellow-500/5 rounded-lg flex items-center justify-center min-w-[100px] border border-yellow-500/20">
+                      <span className="text-sm font-medium text-yellow-400" data-testid={`text-score-pending-${match.id}`}>Score pending</span>
                     </div>
                   ) : (
                     <div className="px-4 py-2 bg-afrocat-white-5 rounded-lg flex items-center justify-center min-w-[100px] border border-afrocat-border">
@@ -277,7 +293,17 @@ export default function Matches() {
               </div>
 
               <div className="flex flex-col gap-2 shrink-0">
-                {canEnterScore && (
+                {canEnterFinalScore && (
+                  <Button
+                    size="sm"
+                    className="bg-afrocat-gold hover:bg-afrocat-gold/80 text-black"
+                    onClick={() => { setFinalScoreModal(match.id); setFinalScoreForm({ homeScore: 0, awayScore: 0 }); }}
+                    data-testid={`button-final-score-${match.id}`}
+                  >
+                    <Trophy className="h-4 w-4 mr-1" /> Enter Final Score
+                  </Button>
+                )}
+                {canEnterScore && !isPastNoScore && (
                   <>
                     <Button
                       size="sm"
@@ -444,35 +470,10 @@ export default function Matches() {
                     </div>
                   </div>
 
-                  {!formIsFuture && (
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <Label className="text-afrocat-muted text-xs uppercase">Result</Label>
-                        <Select value={form.result} onValueChange={v => setForm({ ...form, result: v })}>
-                          <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="select-match-result"><SelectValue placeholder="—" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="W">Win</SelectItem>
-                            <SelectItem value="L">Loss</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label className="text-afrocat-muted text-xs uppercase">Sets For</Label>
-                        <Input type="number" value={form.setsFor} onChange={e => setForm({ ...form, setsFor: Number(e.target.value) })} className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-sets-for" />
-                      </div>
-                      <div>
-                        <Label className="text-afrocat-muted text-xs uppercase">Sets Against</Label>
-                        <Input type="number" value={form.setsAgainst} onChange={e => setForm({ ...form, setsAgainst: Number(e.target.value) })} className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-sets-against" />
-                      </div>
-                    </div>
-                  )}
-
-                  {formIsFuture && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-afrocat-teal-soft text-afrocat-teal text-sm" data-testid="text-future-match-note">
-                      <Clock className="h-4 w-4" />
-                      <span>Score will be available after match is played</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-afrocat-teal-soft text-afrocat-teal text-sm" data-testid="text-future-match-note">
+                    <Clock className="h-4 w-4" />
+                    <span>Score will be available after match is played</span>
+                  </div>
 
                   <Button type="submit" disabled={createMut.isPending} className="w-full bg-afrocat-teal hover:bg-afrocat-teal/80" data-testid="button-submit-match">
                     {createMut.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating...</> : "Create Match"}
@@ -752,6 +753,56 @@ export default function Matches() {
           </DialogContent>
         </Dialog>
       </div>
+
+      <Dialog open={!!finalScoreModal} onOpenChange={(open) => !open && setFinalScoreModal(null)}>
+        <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text max-w-md">
+          <DialogTitle className="text-lg font-display font-bold text-afrocat-gold">Enter Final Score</DialogTitle>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label className="text-afrocat-muted text-sm">Home Score</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
+                  value={finalScoreForm.homeScore}
+                  onChange={e => setFinalScoreForm(p => ({ ...p, homeScore: Number(e.target.value) }))}
+                  data-testid="input-final-home-score"
+                />
+              </div>
+              <div>
+                <Label className="text-afrocat-muted text-sm">Away Score</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
+                  value={finalScoreForm.awayScore}
+                  onChange={e => setFinalScoreForm(p => ({ ...p, awayScore: Number(e.target.value) }))}
+                  data-testid="input-final-away-score"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
+                onClick={() => setFinalScoreModal(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-afrocat-gold hover:bg-afrocat-gold/80 text-black"
+                onClick={() => finalScoreMut.mutate()}
+                disabled={finalScoreMut.isPending}
+                data-testid="button-submit-final-score"
+              >
+                {finalScoreMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trophy className="h-4 w-4 mr-1" />}
+                Save Final Score
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!liberoModal} onOpenChange={(open) => !open && setLiberoModal(null)}>
         <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text max-w-md">

@@ -7,7 +7,7 @@ export const roleEnum = pgEnum("role", ["ADMIN", "MANAGER", "COACH", "STATISTICI
 export const teamCategoryEnum = pgEnum("team_category", ["MEN", "WOMEN", "VETERANS", "JUNIORS"]);
 export const playerStatusEnum = pgEnum("player_status", ["ACTIVE", "SUSPENDED", "INJURED", "SUSPENDED_CONTRACT"]);
 export const matchResultEnum = pgEnum("match_result", ["W", "L"]);
-export const matchStatusEnum = pgEnum("match_status", ["SCHEDULED", "UPCOMING", "LIVE", "PLAYED", "CANCELLED"]);
+export const matchStatusEnum = pgEnum("match_status", ["SCHEDULED", "UPCOMING", "LIVE", "PAST_NO_SCORE", "PLAYED", "CANCELLED"]);
 export const scoreSourceEnum = pgEnum("score_source", ["NONE", "MANUAL", "STATS"]);
 export const sessionTypeEnum = pgEnum("session_type", ["TRAINING", "MATCH", "GYM"]);
 export const attendanceSessionStatusEnum = pgEnum("attendance_session_status", ["OPEN", "CLOSED"]);
@@ -132,6 +132,7 @@ export const matches = pgTable("matches", {
   opponent: text("opponent").notNull(),
   matchDate: text("match_date").notNull(),
   startTime: timestamp("start_time"),
+  endTime: timestamp("end_time"),
   venue: text("venue").notNull(),
   competition: text("competition").notNull(),
   result: matchResultEnum("result"),
