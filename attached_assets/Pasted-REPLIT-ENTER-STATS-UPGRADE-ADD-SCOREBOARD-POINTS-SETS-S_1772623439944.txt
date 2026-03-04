@@ -1,0 +1,201 @@
+REPLIT – ENTER STATS UPGRADE (ADD SCOREBOARD: POINTS + SETS + SCORER NAME) + NEW ERROR/OPTIONS
+
+APPLY ON THE MAIN TOUCH ENTER STATS PAGE.
+
+========================================================
+1) ADD SCOREBOARD AT THE TOP (LIVE)
+========================================================
+
+Show a fixed “Scoreboard” header:
+
+- Home Team Name  |  Points (P)  |  Sets Won (S)
+- Away Team Name  |  Points (P)  |  Sets Won (S)
+
+Also show:
+- Current Set Number (Set 1..5)
+- Scorer Name (the logged in user recording stats)
+  Example: “Scorer: Moses Mukisa”
+
+Required Match fields:
+- homePoints (int) default 0
+- awayPoints (int) default 0
+- homeSetsWon (int) default 0
+- awaySetsWon (int) default 0
+- currentSetNumber (int) default 1
+- scorerUserId (store who is scoring)
+- scoringStartedAt (optional)
+
+RULE:
+- Points update automatically from stat events (recommended)
+  OR provide manual “+1 Home / +1 Away / Undo point” buttons.
+
+========================================================
+2) SET SCORING LOGIC (SETS WON)
+========================================================
+
+Add simple set win controls:
+- Button: “End Set – Home Wins”
+- Button: “End Set – Away Wins”
+
+When clicked:
+- increment homeSetsWon or awaySetsWon
+- increment currentSetNumber by 1
+- reset homePoints and awayPoints to 0
+- keep events stored with setNumber for analysis
+
+Add to MatchEvent:
+- setNumber (int) = match.currentSetNumber at time of save
+
+========================================================
+3) ADD NEW SERVE/NET/BLOCK ERRORS
+========================================================
+
+Add these options in appropriate action flip panels:
+
+A) NET TOUCH ERROR (general)
+- Use for BLOCK / ATTACK / SET (and optionally any skill)
+Outcome:
+- MINUS
+OutcomeDetail:
+- "NET_TOUCH"
+
+B) OVERREACH (blocking fault / reaching over net)
+SkillType:
+- BLOCK
+Outcome:
+- MINUS
+OutcomeDetail:
+- "OVERREACH"
+
+C) BLOCK OUT (ball touches block then out)
+SkillType:
+- BLOCK (or ATTACK outcomeDetail)
+Outcome:
+- PLUS for attacking team, MINUS for blocking team depends on who you attribute it to.
+Simpler rule:
+- record as ATTACK outcomeDetail="TOOL_BLOCK" or "BLOCK_OUT"
+- For block event: outcomeDetail="BLOCK_OUT" and outcome="ZERO" (touch but lost point) OR outcome="MINUS"
+(Choose one system and apply consistently)
+
+RECOMMENDED:
+- If tracking blocker: BLOCK_OUT = outcome="ZERO" (touch) + outcomeDetail="BLOCK_OUT"
+- If tracking attacker: ATTACK success option “TOOL_BLOCK/BLOCK_OUT” = outcome="PLUS"
+
+========================================================
+4) SETTER OPTIONS (OUT OF SYSTEM / OUT / NET TOUCH)
+========================================================
+
+In SET action panels:
+
+SET SUCCESS options:
+- PERFECT
+- SLIGHTLY_OFF
+- COMBINATION: ONE, ZERO, FAST_BALL  (NEW)
+  (store in tempo / combinationType fields)
+
+SET ERROR options:
+- SET_OUT_OF_SYSTEM   (NEW)
+- SET_OUT             (NEW)
+- NET_TOUCH           (NEW)
+- DOUBLE_TOUCH
+- LIFT
+
+Mapping:
+- SET_OUT_OF_SYSTEM:
+  skillType="SET"
+  outcome="MINUS" or "ZERO" (recommend ZERO if playable but off-system; MINUS if it loses point)
+  outcomeDetail="SET_OUT_OF_SYSTEM"
+- SET_OUT:
+  skillType="SET"
+  outcome="MINUS"
+  outcomeDetail="SET_OUT"
+- NET_TOUCH:
+  skillType="SET"
+  outcome="MINUS"
+  outcomeDetail="NET_TOUCH"
+
+========================================================
+5) SUCCESS “COMBINATION” OPTIONS (ONE / ZERO / FAST BALL)
+========================================================
+
+Add field on MatchEvent:
+- combinationType (string nullable)
+Values:
+- ONE
+- ZERO
+- FAST_BALL
+
+In SET SUCCESS flip:
+After selecting success quality, show quick combo taps:
+[ONE] [ZERO] [FAST BALL] [SKIP]
+
+Save event with:
+- combinationType = selected
+
+If SKIP:
+- combinationType = null
+
+========================================================
+6) POINTS AUTO-UPDATE (RECOMMENDED)
+========================================================
+
+Add point attribution for each event:
+
+Add MatchEvent field:
+- pointWonByTeamId (nullable)
+
+Rule of thumb:
+- Any “MINUS” that results in immediate fault can set pointWonByTeamId=opponentTeamId
+- Any “PLUS” kill/ace can set pointWonByTeamId=playerTeamId
+
+Minimum reliable point triggers:
+- SERVE ACE => point to server team
+- SERVE NET/OUT => point to receiving team
+- ATTACK KILL => point to attacker team
+- ATTACK OUT/NET/BLOCKED => point to defender team
+- BLOCK STUFF => point to blocker team
+- RECEIVE 0_ERROR that ends rally => point to opponent team
+
+When pointWonByTeamId is set:
+- increment match.homePoints or match.awayPoints
+
+Also provide Manual Buttons:
+- “+1 Home”
+- “+1 Away”
+- “Undo Last Point”
+for cases where rally outcome wasn’t captured.
+
+========================================================
+7) SCORER NAME
+========================================================
+
+On init endpoint:
+Return logged-in user name.
+
+On UI:
+Display “Scorer: {firstName lastName}”
+
+Also store on match:
+- scorerUserId (set on first event save)
+
+========================================================
+8) WHAT TO ADD TO THE TOUCH UI (NO CONFUSION)
+========================================================
+
+At TOP:
+- Scoreboard (Points + Sets + current set)
+- Fullscreen button
+
+In action tiles:
+- Add “SET” panel with:
+  Success -> Perfect / Slightly off + combo (one/zero/fast)
+  Error -> Out of system / Out / Net touch / Double / Lift
+
+In block panel errors:
+- Net touch
+- Overreach
+- Block out
+
+========================================================
+END – IMPLEMENT EXACTLY
+========================================================
