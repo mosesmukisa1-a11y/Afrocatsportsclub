@@ -5287,6 +5287,24 @@ th{background:#0d7377;color:white}
     } catch (err) { next(err); }
   });
 
+  app.post("/api/matches/:matchId/scoreboard/decrement", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const { side } = req.body;
+      if (!["home", "away"].includes(side)) return res.status(400).json({ error: "side must be 'home' or 'away'" });
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+      const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
+      if (isLocked) return res.status(403).json({ error: "Match is locked" });
+      const hp = (match as any).liveHomePoints || 0;
+      const ap = (match as any).liveAwayPoints || 0;
+      if (side === "home" && hp > 0) await storage.updateMatch(matchId, { liveHomePoints: hp - 1 } as any);
+      else if (side === "away" && ap > 0) await storage.updateMatch(matchId, { liveAwayPoints: ap - 1 } as any);
+      const updated = await storage.getMatch(matchId);
+      res.json(updated);
+    } catch (err) { next(err); }
+  });
+
   app.post("/api/matches/:matchId/scoreboard/end-set", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
       const { matchId } = req.params;
@@ -5309,6 +5327,79 @@ th{background:#0d7377;color:white}
 
       const updated = await storage.getMatch(matchId);
       res.json(updated);
+    } catch (err) { next(err); }
+  });
+
+  app.get("/api/matches/:matchId/report", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+
+      const team = await storage.getTeam(match.teamId);
+      const stats = await storage.getStatsByMatch(matchId);
+      const events = await storage.getMatchEvents(matchId);
+      const squadRows = await db.select().from(schema.matchSquadEntries).where(eq(schema.matchSquadEntries.matchId, matchId));
+      const staffRows = await db.select().from(schema.matchStaffAssignments).where(eq(schema.matchStaffAssignments.matchId, matchId));
+      const staff = staffRows[0] || null;
+
+      const playerIds = [...new Set([...stats.map((s: any) => s.playerId), ...squadRows.map((s: any) => s.playerId)])];
+      const playersRaw = await Promise.all(playerIds.map(id => storage.getPlayer(id)));
+      const players = playersRaw.filter(Boolean);
+
+      const staffUsers: Record<string, any> = {};
+      if (staff) {
+        for (const key of ["headCoachUserId", "assistantCoachUserId", "medicUserId", "teamManagerUserId"]) {
+          const uid = (staff as any)[key];
+          if (uid) {
+            const u = await storage.getUser(uid);
+            if (u) staffUsers[key.replace("UserId", "")] = { firstName: u.firstName, lastName: u.lastName };
+          }
+        }
+      }
+
+      const setBreakdown: Record<number, { homePoints: number; awayPoints: number }> = {};
+      for (const ev of events) {
+        const sn = (ev as any).setNumber || 1;
+        if (!setBreakdown[sn]) setBreakdown[sn] = { homePoints: 0, awayPoints: 0 };
+        if ((ev as any).pointWonByTeamId === match.teamId) setBreakdown[sn].homePoints++;
+        else if ((ev as any).pointWonByTeamId) setBreakdown[sn].awayPoints++;
+      }
+
+      const playerDetails = players.map((p: any) => {
+        const pStats = stats.find((s: any) => s.playerId === p.id);
+        const squadEntry = squadRows.find((s: any) => s.playerId === p.id);
+        return {
+          id: p.id, firstName: p.firstName, lastName: p.lastName,
+          jerseyNo: p.jerseyNo, position: p.position,
+          photoUrl: p.photoUrl || null, isLibero: squadEntry?.isLibero || false,
+          stats: pStats ? {
+            spikesKill: pStats.spikesKill, spikesError: pStats.spikesError,
+            servesAce: pStats.servesAce, servesError: pStats.servesError,
+            blocksSolo: pStats.blocksSolo, blocksAssist: pStats.blocksAssist,
+            receivePerfect: pStats.receivePerfect, receiveError: pStats.receiveError,
+            digs: pStats.digs, settingAssist: pStats.settingAssist, settingError: pStats.settingError,
+            pointsTotal: pStats.pointsTotal,
+          } : null,
+        };
+      });
+
+      res.json({
+        match: {
+          id: match.id, matchDate: match.matchDate, opponent: match.opponent,
+          venue: match.venue, competition: match.competition, round: (match as any).round,
+          result: match.result, homeScore: match.homeScore, awayScore: match.awayScore,
+          homeSetsWon: (match as any).homeSetsWon, awaySetsWon: (match as any).awaySetsWon,
+          matchDurationMinutes: (match as any).matchDurationMinutes,
+          scoringStartedAt: (match as any).scoringStartedAt,
+          scoringEndedAt: (match as any).scoringEndedAt,
+        },
+        team: team ? { id: team.id, name: team.name } : null,
+        staff: staffUsers,
+        setBreakdown,
+        players: playerDetails,
+        totalEvents: events.length,
+      });
     } catch (err) { next(err); }
   });
 
@@ -5380,7 +5471,20 @@ th{background:#0d7377;color:white}
         }
       }
 
-      await storage.updateMatch(matchId, { statsEntered: true, scoreSource: "STATS" });
+      const updateData: any = { statsEntered: true, scoreSource: "STATS", scoringEndedAt: new Date() };
+      if ((match as any).scoringStartedAt) {
+        const start = new Date((match as any).scoringStartedAt).getTime();
+        const end = Date.now();
+        updateData.matchDurationMinutes = Math.round((end - start) / 60000);
+      }
+      updateData.homeScore = (match as any).homeSetsWon || 0;
+      updateData.awayScore = (match as any).awaySetsWon || 0;
+      updateData.setsFor = (match as any).homeSetsWon || 0;
+      updateData.setsAgainst = (match as any).awaySetsWon || 0;
+      if (updateData.homeScore > updateData.awayScore) updateData.result = "W";
+      else if (updateData.homeScore < updateData.awayScore) updateData.result = "L";
+      
+      await storage.updateMatch(matchId, updateData);
 
       res.json({ ok: true, synced: results.length, stats: results });
     } catch (err) { next(err); }

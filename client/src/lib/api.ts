@@ -290,6 +290,9 @@ export const api = {
     apiFetch<any>(`/matches/${matchId}/scoreboard/undo-point`, { method: "POST" }),
   scoreboardEndSet: (matchId: string, winner: "home" | "away") =>
     apiFetch<any>(`/matches/${matchId}/scoreboard/end-set`, { method: "POST", body: JSON.stringify({ winner }) }),
+  scoreboardDecrement: (matchId: string, side: "home" | "away") =>
+    apiFetch<any>(`/matches/${matchId}/scoreboard/decrement`, { method: "POST", body: JSON.stringify({ side }) }),
+  getMatchReport: (matchId: string) => apiFetch<any>(`/matches/${matchId}/report`),
 
   getDevStatsInit: (matchId: string, teamId: string) =>
     apiFetch<any>(`/matches/${matchId}/devstats/init?teamId=${teamId}`),

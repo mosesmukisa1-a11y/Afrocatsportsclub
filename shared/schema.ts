@@ -155,6 +155,8 @@ export const matches = pgTable("matches", {
   currentSetNumber: integer("current_set_number").default(1),
   scorerUserId: varchar("scorer_user_id", { length: 36 }),
   scoringStartedAt: timestamp("scoring_started_at"),
+  scoringEndedAt: timestamp("scoring_ended_at"),
+  matchDurationMinutes: integer("match_duration_minutes"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

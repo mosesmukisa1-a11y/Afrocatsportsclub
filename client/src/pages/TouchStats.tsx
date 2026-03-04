@@ -3,11 +3,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Zap, Target, Shield, Hand, ArrowUpCircle, CircleDot,
   Undo2, Lock, Unlock, User, Trophy, Upload, CheckCircle2,
-  Plus, Minus, Maximize, Minimize
+  Plus, Minus, Maximize, Minimize, ArrowLeftRight, Clock,
+  FileText, ChevronDown, ChevronUp, Printer
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -19,12 +20,6 @@ const ACTIONS = [
   { key: "BLOCK", label: "Block", icon: Shield, color: "text-afrocat-teal", bg: "bg-afrocat-teal-soft", border: "border-afrocat-teal/30" },
   { key: "DIG", label: "Dig", icon: Hand, color: "text-afrocat-green", bg: "bg-afrocat-green-soft", border: "border-afrocat-green/30" },
   { key: "FREEBALL", label: "Free Ball", icon: CircleDot, color: "text-afrocat-muted", bg: "bg-afrocat-white-5", border: "border-afrocat-border" },
-];
-
-const OUTCOMES = [
-  { key: "PLUS", label: "+", hint: "Point / Success", bg: "bg-afrocat-green-soft", border: "border-afrocat-green/40", text: "text-afrocat-green" },
-  { key: "ZERO", label: "0", hint: "Neutral", bg: "bg-afrocat-white-5", border: "border-afrocat-border", text: "text-afrocat-muted" },
-  { key: "MINUS", label: "−", hint: "Error / Lost", bg: "bg-afrocat-red-soft", border: "border-afrocat-red/40", text: "text-afrocat-red" },
 ];
 
 type OutcomeDetailOption = { label: string; value: string; outcome: string; pointTo?: "home" | "away" };
@@ -91,8 +86,15 @@ function getInitials(firstName: string, lastName: string): string {
 
 function outcomeBadge(outcome: string) {
   if (outcome === "PLUS") return <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-afrocat-green-soft text-afrocat-green">+</span>;
-  if (outcome === "MINUS") return <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-afrocat-red-soft text-afrocat-red">−</span>;
+  if (outcome === "MINUS") return <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-afrocat-red-soft text-afrocat-red">-</span>;
   return <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-afrocat-white-5 text-afrocat-muted">0</span>;
+}
+
+function formatDuration(minutes: number | null | undefined): string {
+  if (!minutes) return "-";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 export default function TouchStats() {
@@ -110,9 +112,22 @@ export default function TouchStats() {
   const [showCombo, setShowCombo] = useState(false);
   const [pendingSetEvent, setPendingSetEvent] = useState<any | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [recordingSide, setRecordingSide] = useState<"home" | "away">("home");
+  const [showReport, setShowReport] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState("");
 
   const selectedMatch = matches.find((m: any) => m.id === selectedMatchId);
   const [syncResetKey, setSyncResetKey] = useState(0);
+
+  const eligibleMatches = useMemo(() => {
+    return matches.filter((m: any) => {
+      if (m.status === "CANCELLED") return false;
+      if (m.scoreLocked) return false;
+      if (m.statsEntered) return false;
+      if (m.scoreSource === "STATS") return false;
+      return true;
+    });
+  }, [matches]);
 
   const handleMatchChange = useCallback((matchId: string) => {
     setSelectedMatchId(matchId);
@@ -120,6 +135,8 @@ export default function TouchStats() {
     setSelectedAction(null);
     setRecentEvents([]);
     setSyncResetKey(k => k + 1);
+    setRecordingSide("home");
+    setShowReport(false);
     const match = matches.find((m: any) => m.id === matchId);
     if (match?.teamId) setSelectedTeamId(match.teamId);
   }, [matches]);
@@ -131,16 +148,41 @@ export default function TouchStats() {
     refetchInterval: 10000,
   });
 
+  const { data: matchReport } = useQuery({
+    queryKey: ["/api/matches/report", selectedMatchId],
+    queryFn: () => api.getMatchReport(selectedMatchId),
+    enabled: !!selectedMatchId && showReport,
+  });
+
   const players = touchInit?.players || [];
   const matchData = touchInit?.match;
   const isLocked = !!matchData?.isLocked;
   const teamName = touchInit?.teamName || "Home";
-  const scorerName = touchInit?.scorerName || "—";
+  const scorerName = touchInit?.scorerName || "-";
   const homePoints = matchData?.liveHomePoints || 0;
   const awayPoints = matchData?.liveAwayPoints || 0;
   const homeSets = matchData?.homeSetsWon || 0;
   const awaySets = matchData?.awaySetsWon || 0;
   const currentSet = matchData?.currentSetNumber || 1;
+
+  useEffect(() => {
+    if (!matchData?.scoringStartedAt) { setElapsedTime(""); return; }
+    const start = new Date(matchData.scoringStartedAt).getTime();
+    if (matchData?.scoringEndedAt) {
+      const end = new Date(matchData.scoringEndedAt).getTime();
+      const mins = Math.round((end - start) / 60000);
+      setElapsedTime(formatDuration(mins));
+      return;
+    }
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const mins = Math.round((now - start) / 60000);
+      setElapsedTime(formatDuration(mins));
+    }, 30000);
+    const now = Date.now();
+    setElapsedTime(formatDuration(Math.round((now - start) / 60000)));
+    return () => clearInterval(interval);
+  }, [matchData?.scoringStartedAt, matchData?.scoringEndedAt]);
 
   const selectedPlayer = useMemo(
     () => players.find((p: any) => p.id === selectedPlayerId),
@@ -149,7 +191,6 @@ export default function TouchStats() {
 
   const serverEvents = touchInit?.events || [];
   const allEvents = useMemo(() => {
-    const serverIds = new Set(serverEvents.map((e: any) => e.id));
     return [...recentEvents.filter((e: any) => e.id.startsWith("temp_")), ...serverEvents].sort(
       (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
@@ -186,13 +227,19 @@ export default function TouchStats() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
-      toast({ title: "Stats Synced!", description: `${data.synced} player stats saved to database. Smart Focus generated.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      toast({ title: "Stats Synced!", description: `${data.synced} player stats saved. Match duration recorded.` });
     },
     onError: (err: any) => toast({ title: "Sync Failed", description: err.message, variant: "destructive" }),
   });
 
   const pointMut = useMutation({
     mutationFn: ({ side }: { side: "home" | "away" }) => api.scoreboardPoint(selectedMatchId, side),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] }),
+  });
+
+  const decrementMut = useMutation({
+    mutationFn: ({ side }: { side: "home" | "away" }) => api.scoreboardDecrement(selectedMatchId, side),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] }),
   });
 
@@ -212,19 +259,24 @@ export default function TouchStats() {
   const handleDetailedOutcome = useCallback((detail: OutcomeDetailOption) => {
     if (!selectedPlayerId || !selectedAction || isLocked) return;
 
+    const adjustedDetail = { ...detail };
+    if (recordingSide === "away") {
+      if (detail.pointTo === "home") adjustedDetail.pointTo = "away";
+      else if (detail.pointTo === "away") adjustedDetail.pointTo = "home";
+    }
+
     if (selectedAction === "SET" && (detail.outcome === "PLUS" || detail.outcome === "ZERO") && detail.value !== "SET_OUT_OF_SYSTEM") {
-      setPendingSetEvent(detail);
+      setPendingSetEvent(adjustedDetail);
       setShowCombo(true);
       return;
     }
 
-    fireEvent(detail, null);
-  }, [selectedPlayerId, selectedAction, isLocked, selectedMatchId, selectedTeamId, selectedPlayer]);
+    fireEvent(adjustedDetail, null);
+  }, [selectedPlayerId, selectedAction, isLocked, recordingSide, selectedMatchId, selectedTeamId, selectedPlayer]);
 
   const fireEvent = useCallback((detail: OutcomeDetailOption, combo: string | null) => {
     if (!selectedPlayerId || !selectedAction) return;
 
-    const matchTeamId = matchData?.teamId || selectedTeamId;
     let pointSide: string | null = null;
     if (detail.pointTo === "home") pointSide = "home";
     else if (detail.pointTo === "away") pointSide = "away";
@@ -255,7 +307,7 @@ export default function TouchStats() {
     setSelectedAction(null);
     setShowCombo(false);
     setPendingSetEvent(null);
-  }, [selectedPlayerId, selectedAction, selectedMatchId, selectedTeamId, selectedPlayer, matchData, eventMut]);
+  }, [selectedPlayerId, selectedAction, selectedMatchId, selectedTeamId, selectedPlayer, eventMut]);
 
   const handleCombo = useCallback((combo: string | null) => {
     if (!pendingSetEvent) return;
@@ -293,10 +345,27 @@ export default function TouchStats() {
     }
   }, []);
 
+  const handleSwitchSide = useCallback(() => {
+    const newSide = recordingSide === "home" ? "away" : "home";
+    setRecordingSide(newSide);
+    setSelectedPlayerId(null);
+    setSelectedAction(null);
+    setShowCombo(false);
+    setPendingSetEvent(null);
+    toast({
+      title: `Court Side Switched`,
+      description: newSide === "home"
+        ? `Points for your players go to ${teamName}`
+        : `Points for your players go to ${selectedMatch?.opponent || "opponent"}`,
+    });
+  }, [recordingSide, toast, teamName, selectedMatch]);
+
   const currentActionDetails = selectedAction ? (OUTCOME_DETAILS[selectedAction] || []) : [];
 
+  const Wrapper = fullscreen ? ({ children }: { children: React.ReactNode }) => <div className="min-h-screen bg-afrocat-bg p-4">{children}</div> : Layout;
+
   return (
-    <Layout>
+    <Wrapper>
       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="afrocat-card p-4">
           <div className="flex items-center justify-between">
@@ -304,14 +373,21 @@ export default function TouchStats() {
               <img src={logo} alt="Afrocat Logo" className="w-10 h-10 object-contain" data-testid="img-touch-logo" />
               <div>
                 <h1 className="text-xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-touch-title">
-                  Touch Stats Entry
+                  Enter Stats
                 </h1>
-                <p className="text-xs text-afrocat-muted">Player → Action → Detail</p>
+                <p className="text-xs text-afrocat-muted">Player &rarr; Action &rarr; Detail</p>
               </div>
             </div>
-            <button onClick={toggleFullscreen} className="p-2 rounded-lg hover:bg-afrocat-white-5 text-afrocat-muted cursor-pointer" data-testid="button-fullscreen">
-              {fullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-            </button>
+            <div className="flex items-center gap-2">
+              {elapsedTime && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-afrocat-white-5 text-afrocat-muted text-[10px] font-bold" data-testid="text-elapsed-time">
+                  <Clock className="w-3 h-3" /> {elapsedTime}
+                </div>
+              )}
+              <button onClick={toggleFullscreen} className="p-2 rounded-lg hover:bg-afrocat-white-5 text-afrocat-muted cursor-pointer" data-testid="button-fullscreen">
+                {fullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -325,14 +401,17 @@ export default function TouchStats() {
                     <SelectValue placeholder="Select a match" />
                   </SelectTrigger>
                   <SelectContent>
-                    {matches.map((m: any) => {
+                    {eligibleMatches.map((m: any) => {
                       const team = teams.find((t: any) => t.id === m.teamId);
                       return (
                         <SelectItem key={m.id} value={m.id} data-testid={`select-touch-match-${m.id}`}>
-                          {m.matchDate} — {team?.name || "?"} vs {m.opponent}
+                          {m.matchDate} - {team?.name || "?"} vs {m.opponent}
                         </SelectItem>
                       );
                     })}
+                    {eligibleMatches.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-afrocat-muted">No available matches to enter stats for.</div>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -361,7 +440,14 @@ export default function TouchStats() {
             <div className="bg-gradient-to-r from-afrocat-bg via-afrocat-card to-afrocat-bg p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-gold">Live Scoreboard</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-teal" data-testid="text-current-set">Set {currentSet}</span>
+                <div className="flex items-center gap-3">
+                  {matchData?.matchDurationMinutes && (
+                    <span className="text-[10px] font-bold text-afrocat-muted" data-testid="text-match-duration">
+                      Duration: {formatDuration(matchData.matchDurationMinutes)}
+                    </span>
+                  )}
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-teal" data-testid="text-current-set">Set {currentSet}</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
@@ -395,7 +481,7 @@ export default function TouchStats() {
                   <User className="w-3 h-3" />
                   <span data-testid="text-scorer-name">Scorer: {scorerName}</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-wrap">
                   <button
                     onClick={() => pointMut.mutate({ side: "home" })}
                     disabled={isLocked}
@@ -403,11 +489,23 @@ export default function TouchStats() {
                     data-testid="button-point-home"
                   >+1 Home</button>
                   <button
+                    onClick={() => decrementMut.mutate({ side: "home" })}
+                    disabled={isLocked || homePoints <= 0}
+                    className="px-2 py-1 rounded text-[10px] font-bold bg-afrocat-red-soft text-afrocat-red hover:bg-afrocat-red/20 disabled:opacity-40 cursor-pointer"
+                    data-testid="button-decrement-home"
+                  >-1 Home</button>
+                  <button
                     onClick={() => pointMut.mutate({ side: "away" })}
                     disabled={isLocked}
                     className="px-2 py-1 rounded text-[10px] font-bold bg-afrocat-gold-soft text-afrocat-gold hover:bg-afrocat-gold/20 disabled:opacity-40 cursor-pointer"
                     data-testid="button-point-away"
                   >+1 Away</button>
+                  <button
+                    onClick={() => decrementMut.mutate({ side: "away" })}
+                    disabled={isLocked || awayPoints <= 0}
+                    className="px-2 py-1 rounded text-[10px] font-bold bg-afrocat-red-soft text-afrocat-red hover:bg-afrocat-red/20 disabled:opacity-40 cursor-pointer"
+                    data-testid="button-decrement-away"
+                  >-1 Away</button>
                   <button
                     onClick={() => undoPointMut.mutate()}
                     disabled={isLocked}
@@ -424,13 +522,26 @@ export default function TouchStats() {
                     disabled={endSetMut.isPending}
                     className="flex-1 py-2 rounded-lg text-xs font-bold bg-afrocat-teal text-white hover:bg-afrocat-teal/80 disabled:opacity-50 cursor-pointer"
                     data-testid="button-end-set-home"
-                  >End Set — Home Wins</button>
+                  >End Set - Home Wins</button>
                   <button
                     onClick={() => endSetMut.mutate({ winner: "away" })}
                     disabled={endSetMut.isPending}
                     className="flex-1 py-2 rounded-lg text-xs font-bold bg-afrocat-gold text-white hover:bg-afrocat-gold/80 disabled:opacity-50 cursor-pointer"
                     data-testid="button-end-set-away"
-                  >End Set — Away Wins</button>
+                  >End Set - Away Wins</button>
+                </div>
+              )}
+
+              {!isLocked && (
+                <div className="mt-3 pt-3 border-t border-afrocat-border">
+                  <button
+                    onClick={handleSwitchSide}
+                    className="w-full py-2 rounded-lg text-xs font-bold bg-afrocat-white-5 text-afrocat-text hover:bg-afrocat-white-10 border border-afrocat-border flex items-center justify-center gap-2 cursor-pointer"
+                    data-testid="button-switch-side"
+                  >
+                    <ArrowLeftRight className="w-4 h-4" />
+                    Recording: {recordingSide === "home" ? teamName : (selectedMatch?.opponent || "Away")} — Tap to Switch
+                  </button>
                 </div>
               )}
             </div>
@@ -441,7 +552,7 @@ export default function TouchStats() {
           <>
             <div>
               <h3 className="text-sm font-bold text-afrocat-muted uppercase tracking-wider mb-3" data-testid="text-step-player">
-                1. Select Player
+                1. Select Player ({recordingSide === "home" ? teamName : selectedMatch?.opponent || "Away"})
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {players.map((p: any) => {
@@ -478,7 +589,7 @@ export default function TouchStats() {
                           <div className="font-bold text-xs text-afrocat-text truncate uppercase">
                             {p.firstName} {p.lastName}
                           </div>
-                          <div className="text-[10px] text-afrocat-muted">{p.position || "—"}</div>
+                          <div className="text-[10px] text-afrocat-muted">{p.position || "-"}</div>
                           {pStats && (
                             <div className="flex gap-1 mt-1">
                               {pStats.plus > 0 && <span className="text-[9px] font-bold text-afrocat-green">+{pStats.plus}</span>}
@@ -509,6 +620,9 @@ export default function TouchStats() {
                       {selectedPlayer?.firstName} {selectedPlayer?.lastName}
                     </span>
                     <span className="ml-2 text-xs text-afrocat-teal font-bold">#{selectedPlayer?.jerseyNo}</span>
+                    {recordingSide === "away" && (
+                      <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-afrocat-gold-soft text-afrocat-gold font-bold">AWAY</span>
+                    )}
                   </div>
                 </div>
 
@@ -551,6 +665,9 @@ export default function TouchStats() {
                           : d.outcome === "MINUS"
                             ? "bg-afrocat-red-soft border-afrocat-red/40 text-afrocat-red"
                             : "bg-afrocat-white-5 border-afrocat-border text-afrocat-muted";
+                        const displayPointTo = recordingSide === "away"
+                          ? (d.pointTo === "home" ? "away" : d.pointTo === "away" ? "home" : undefined)
+                          : d.pointTo;
                         return (
                           <button
                             key={d.value}
@@ -563,8 +680,8 @@ export default function TouchStats() {
                           >
                             <div className="text-sm font-black">{d.label}</div>
                             <div className="text-[10px] mt-0.5 opacity-70">
-                              {d.outcome === "PLUS" ? "+" : d.outcome === "MINUS" ? "−" : "0"}
-                              {d.pointTo ? ` → ${d.pointTo === "home" ? "us" : "opp"}` : ""}
+                              {d.outcome === "PLUS" ? "+" : d.outcome === "MINUS" ? "-" : "0"}
+                              {displayPointTo ? ` -> ${displayPointTo === "home" ? "us" : "opp"}` : ""}
                             </div>
                           </button>
                         );
@@ -632,11 +749,152 @@ export default function TouchStats() {
             )}
 
             {isLocked && allEvents.length > 0 && (
-              <div className="afrocat-card p-4 flex items-center gap-3 border-afrocat-green/30">
-                <CheckCircle2 className="w-5 h-5 text-afrocat-green shrink-0" />
-                <p className="text-sm text-afrocat-green font-medium" data-testid="text-stats-synced">
-                  Stats have been synced to player records. Match is locked.
-                </p>
+              <div className="space-y-3">
+                <div className="afrocat-card p-4 flex items-center gap-3 border-afrocat-green/30">
+                  <CheckCircle2 className="w-5 h-5 text-afrocat-green shrink-0" />
+                  <p className="text-sm text-afrocat-green font-medium" data-testid="text-stats-synced">
+                    Stats have been synced to player records. Match is locked.
+                    {matchData?.matchDurationMinutes && ` Duration: ${formatDuration(matchData.matchDurationMinutes)}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowReport(!showReport)}
+                  className="w-full afrocat-card p-4 flex items-center justify-between hover:border-afrocat-teal/30 transition-all cursor-pointer"
+                  data-testid="button-toggle-report"
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-afrocat-teal" />
+                    <span className="text-sm font-bold text-afrocat-text">Match Report</span>
+                  </div>
+                  {showReport ? <ChevronUp className="w-4 h-4 text-afrocat-muted" /> : <ChevronDown className="w-4 h-4 text-afrocat-muted" />}
+                </button>
+
+                {showReport && matchReport && (
+                  <div className="afrocat-card p-5 space-y-5" data-testid="match-report" id="match-report-printable">
+                    <div className="flex items-center justify-between pb-3 border-b border-afrocat-border">
+                      <div>
+                        <h2 className="font-display font-bold text-lg text-afrocat-text">
+                          {matchReport.team?.name} vs {matchReport.match.opponent}
+                        </h2>
+                        <p className="text-xs text-afrocat-muted mt-1">
+                          {matchReport.match.matchDate} | {matchReport.match.venue} | {matchReport.match.competition}
+                          {matchReport.match.round ? ` - ${matchReport.match.round}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-black text-afrocat-text">
+                          {matchReport.match.homeSetsWon} - {matchReport.match.awaySetsWon}
+                        </div>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                          matchReport.match.result === "W" ? "bg-afrocat-green-soft text-afrocat-green" :
+                          matchReport.match.result === "L" ? "bg-afrocat-red-soft text-afrocat-red" :
+                          "bg-afrocat-white-5 text-afrocat-muted"
+                        }`}>{matchReport.match.result === "W" ? "WIN" : matchReport.match.result === "L" ? "LOSS" : "N/A"}</span>
+                      </div>
+                    </div>
+
+                    {matchReport.match.matchDurationMinutes && (
+                      <div className="flex items-center gap-2 text-xs text-afrocat-muted">
+                        <Clock className="w-3.5 h-3.5" /> Match Duration: {formatDuration(matchReport.match.matchDurationMinutes)}
+                      </div>
+                    )}
+
+                    {Object.keys(matchReport.setBreakdown || {}).length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-2">Set Breakdown</h4>
+                        <div className="grid grid-cols-5 gap-2">
+                          {Object.entries(matchReport.setBreakdown).map(([setNum, data]: any) => (
+                            <div key={setNum} className="afrocat-card p-2 text-center">
+                              <div className="text-[10px] text-afrocat-muted">Set {setNum}</div>
+                              <div className="font-bold text-sm text-afrocat-text">{data.homePoints} - {data.awayPoints}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {Object.keys(matchReport.staff || {}).length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-2">Match Staff</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                          {matchReport.staff.headCoach && (
+                            <div className="bg-afrocat-white-5 rounded-lg p-2">
+                              <div className="text-afrocat-muted">Head Coach</div>
+                              <div className="font-bold text-afrocat-text">{matchReport.staff.headCoach.firstName} {matchReport.staff.headCoach.lastName}</div>
+                            </div>
+                          )}
+                          {matchReport.staff.assistantCoach && (
+                            <div className="bg-afrocat-white-5 rounded-lg p-2">
+                              <div className="text-afrocat-muted">Assistant Coach</div>
+                              <div className="font-bold text-afrocat-text">{matchReport.staff.assistantCoach.firstName} {matchReport.staff.assistantCoach.lastName}</div>
+                            </div>
+                          )}
+                          {matchReport.staff.medic && (
+                            <div className="bg-afrocat-white-5 rounded-lg p-2">
+                              <div className="text-afrocat-muted">Medic</div>
+                              <div className="font-bold text-afrocat-text">{matchReport.staff.medic.firstName} {matchReport.staff.medic.lastName}</div>
+                            </div>
+                          )}
+                          {matchReport.staff.teamManager && (
+                            <div className="bg-afrocat-white-5 rounded-lg p-2">
+                              <div className="text-afrocat-muted">Team Manager</div>
+                              <div className="font-bold text-afrocat-text">{matchReport.staff.teamManager.firstName} {matchReport.staff.teamManager.lastName}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-3">Player Performance</h4>
+                      <div className="space-y-2">
+                        {matchReport.players.map((p: any) => (
+                          <div key={p.id} className="bg-afrocat-white-3 rounded-xl border border-afrocat-border p-3" data-testid={`report-player-${p.id}`}>
+                            <div className="flex items-center gap-3">
+                              {p.photoUrl ? (
+                                <img src={p.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-afrocat-teal/20" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-afrocat-white-5 flex items-center justify-center text-sm font-bold text-afrocat-muted border border-afrocat-teal/20">
+                                  {getInitials(p.firstName, p.lastName)}
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-sm text-afrocat-text">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
+                                  <span className="text-[10px] text-afrocat-muted">{p.position}</span>
+                                  {p.isLibero && <span className="text-[10px] px-1.5 py-0.5 rounded bg-afrocat-gold-soft text-afrocat-gold font-bold">L</span>}
+                                </div>
+                                {p.stats ? (
+                                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
+                                    <span className="text-afrocat-green font-bold">K:{p.stats.spikesKill}</span>
+                                    <span className="text-afrocat-teal font-bold">A:{p.stats.servesAce}</span>
+                                    <span className="text-afrocat-gold font-bold">B:{p.stats.blocksSolo + p.stats.blocksAssist}</span>
+                                    <span className="text-afrocat-green font-bold">D:{p.stats.digs}</span>
+                                    <span className="text-afrocat-teal font-bold">SA:{p.stats.settingAssist}</span>
+                                    <span className="text-afrocat-red">E:{(p.stats.spikesError || 0) + (p.stats.servesError || 0) + (p.stats.receiveError || 0) + (p.stats.settingError || 0)}</span>
+                                    <span className="font-black text-afrocat-text">Pts:{p.stats.pointsTotal}</span>
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-afrocat-muted mt-1">No stats recorded</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="pt-3 border-t border-afrocat-border flex justify-end">
+                      <button
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-xs hover:bg-afrocat-teal/90 cursor-pointer"
+                        data-testid="button-print-report"
+                      >
+                        <Printer className="w-4 h-4" /> Print Report
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -680,7 +938,7 @@ export default function TouchStats() {
                           <div>
                             <div className="font-bold text-xs text-afrocat-text">{pName}</div>
                             <div className="text-[10px] text-afrocat-muted">
-                              {e.action}{e.outcomeDetail ? ` · ${e.outcomeDetail}` : ""} • {new Date(e.createdAt).toLocaleTimeString()}
+                              {e.action}{e.outcomeDetail ? ` - ${e.outcomeDetail}` : ""} | {new Date(e.createdAt).toLocaleTimeString()}
                             </div>
                           </div>
                         </div>
@@ -706,6 +964,6 @@ export default function TouchStats() {
           </div>
         )}
       </div>
-    </Layout>
+    </Wrapper>
   );
 }
