@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { Save, RotateCcw, Plus, Minus, Trophy, AlertTriangle, CheckCircle2, Zap, Shield, Target, Hand, ArrowUpCircle, Loader2 } from "lucide-react";
+import { Save, RotateCcw, Plus, Minus, Trophy, AlertTriangle, CheckCircle2, Zap, Shield, Target, Hand, ArrowUpCircle, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -332,9 +332,18 @@ export default function Stats() {
     }));
   }, [matchPlayers, statsData]);
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasUserEdited = useRef(false);
+
+  const eligibleMatches = useMemo(() => {
+    return matches.filter((m: any) => {
+      if (m.status === "PLAYED" || m.status === "CANCELLED") return false;
+      if (m.scoreLocked) return false;
+      return true;
+    });
+  }, [matches]);
 
   useEffect(() => {
     if (!selectedMatchId || matchPlayers.length === 0 || !hasUserEdited.current) return;
@@ -378,23 +387,34 @@ export default function Stats() {
       toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  return (
-    <Layout>
+  const content = (
+    <div className={isFullscreen ? "fixed inset-0 z-50 bg-afrocat-bg overflow-auto p-4 md:p-6" : ""}>
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="afrocat-card p-6">
-          <div className="flex items-center gap-4">
-            <img src={logo} alt="Afrocat Logo" className="w-16 h-16 object-contain" data-testid="img-afrocat-logo" />
-            <div>
-              <h1 className="text-2xl md:text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-club-name">
-                AFROCAT VOLLEYBALL CLUB
-              </h1>
-              <p className="text-sm text-afrocat-muted italic mt-0.5" data-testid="text-motto">
-                One Team One Dream — Passion Discipline Victory
-              </p>
-              <p className="text-lg font-display font-semibold text-afrocat-teal mt-1" data-testid="text-page-title">
-                Enter Match Statistics
-              </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <img src={logo} alt="Afrocat Logo" className="w-16 h-16 object-contain" data-testid="img-afrocat-logo" />
+              <div>
+                <h1 className="text-2xl md:text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-club-name">
+                  AFROCAT VOLLEYBALL CLUB
+                </h1>
+                <p className="text-sm text-afrocat-muted italic mt-0.5" data-testid="text-motto">
+                  One Team One Dream — Passion Discipline Victory
+                </p>
+                <p className="text-lg font-display font-semibold text-afrocat-teal mt-1" data-testid="text-page-title">
+                  Enter Match Statistics
+                </p>
+              </div>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              data-testid="button-fullscreen-toggle"
+            >
+              {isFullscreen ? <><Minimize2 className="h-4 w-4 mr-1" /> Exit Fullscreen</> : <><Maximize2 className="h-4 w-4 mr-1" /> Fullscreen</>}
+            </Button>
           </div>
         </div>
 
@@ -411,11 +431,15 @@ export default function Stats() {
                     <SelectValue placeholder="Select a match" />
                   </SelectTrigger>
                   <SelectContent>
-                    {matches.map((m: any) => {
+                    {eligibleMatches.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-afrocat-muted">No eligible matches available</div>
+                    )}
+                    {eligibleMatches.map((m: any) => {
                       const team = teams.find((t: any) => t.id === m.teamId);
+                      const statusLabel = m.status === "UPCOMING" ? "Upcoming" : m.status === "LIVE" ? "Live" : m.status === "PAST_NO_SCORE" ? "Score Missing" : m.status;
                       return (
                         <SelectItem key={m.id} value={m.id} data-testid={`select-match-option-${m.id}`}>
-                          {m.matchDate} — {team?.name || "?"} vs {m.opponent}
+                          {m.matchDate} — {team?.name || "?"} vs {m.opponent} ({statusLabel})
                         </SelectItem>
                       );
                     })}
@@ -616,6 +640,14 @@ export default function Stats() {
           </div>
         )}
       </div>
+    </div>
+  );
+
+  if (isFullscreen) return content;
+
+  return (
+    <Layout>
+      {content}
     </Layout>
   );
 }
