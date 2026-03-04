@@ -1571,55 +1571,6 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     try { res.json(await storage.getStatsByPlayer(req.params.playerId)); } catch (e) { next(e); }
   });
 
-  app.post("/api/stats/match/:matchId", requireAuth, requireRole(["ADMIN","MANAGER","STATISTICIAN","COACH","PLAYER"]), async (req, res, next) => {
-    try {
-      const matchId = req.params.matchId;
-      const statsArray = z.array(z.object({
-        playerId: z.string(),
-        spikesKill: z.number().default(0), spikesError: z.number().default(0),
-        servesAce: z.number().default(0), servesError: z.number().default(0),
-        blocksSolo: z.number().default(0), blocksAssist: z.number().default(0),
-        receivePerfect: z.number().default(0), receiveError: z.number().default(0),
-        digs: z.number().default(0), settingAssist: z.number().default(0), settingError: z.number().default(0),
-        minutesPlayed: z.number().default(0),
-      })).parse(req.body);
-
-      const results = [];
-      for (const stat of statsArray) {
-        const pointsTotal =
-          (stat.spikesKill * 2) + (stat.servesAce * 2) + (stat.blocksSolo * 2) +
-          stat.blocksAssist + stat.digs + stat.settingAssist -
-          (stat.spikesError * 2) - (stat.servesError * 2) - (stat.receiveError * 2) - (stat.settingError * 2);
-
-        const saved = await storage.upsertStat({ ...stat, matchId, pointsTotal });
-        results.push(saved);
-
-        const player = await storage.getPlayer(stat.playerId);
-        const focusAreas: string[] = [];
-        if (stat.servesError >= 3) focusAreas.push("Serving consistency");
-        if (stat.spikesError >= 3) focusAreas.push("Attack control");
-        if (stat.receiveError >= 3) focusAreas.push("Serve reception");
-        if (stat.settingError >= 3) focusAreas.push("Setting accuracy");
-        if (player && player.position.toLowerCase().includes("middle") && (stat.blocksSolo + stat.blocksAssist) < 2) {
-          focusAreas.push("Blocking timing");
-        }
-        if (focusAreas.length > 0) {
-          await storage.createSmartFocus({ playerId: stat.playerId, matchId, focusAreas });
-        }
-      }
-
-      await storage.updateMatch(matchId, {
-        statsEntered: true,
-        lastScoreUpdatedBy: req.user!.userId,
-        lastScoreUpdatedAt: new Date(),
-      } as any);
-
-      res.json(results);
-    } catch (e: any) {
-      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
-      next(e);
-    }
-  });
 
   // ─── SMART FOCUS ─────────────────────────────────
   app.get("/api/smart-focus/player/:playerId", requireAuth, async (req, res, next) => {

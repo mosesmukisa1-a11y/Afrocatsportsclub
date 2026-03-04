@@ -14,7 +14,6 @@ import Dashboard from "@/pages/Dashboard";
 import Teams from "@/pages/Teams";
 import Players from "@/pages/Players";
 import Matches from "@/pages/Matches";
-import Stats from "@/pages/Stats";
 import Attendance from "@/pages/Attendance";
 import Finance from "@/pages/Finance";
 import Injuries from "@/pages/Injuries";
@@ -67,8 +66,7 @@ function Router() {
       <Route path="/teams">{() => <ProtectedRoute component={Teams} />}</Route>
       <Route path="/players">{() => <ProtectedRoute component={Players} />}</Route>
       <Route path="/matches">{() => <ProtectedRoute component={Matches} />}</Route>
-      <Route path="/stats">{() => <ProtectedRoute component={Stats} />}</Route>
-      <Route path="/touch-stats">{() => <ProtectedRoute component={TouchStats} />}</Route>
+      <Route path="/stats">{() => <ProtectedRoute component={TouchStats} />}</Route>
       <Route path="/dev-stats">{() => <ProtectedRoute component={DevStats} />}</Route>
       <Route path="/coach-dashboard">{() => <ProtectedRoute component={CoachDashboard} />}</Route>
       <Route path="/attendance">{() => <ProtectedRoute component={Attendance} />}</Route>

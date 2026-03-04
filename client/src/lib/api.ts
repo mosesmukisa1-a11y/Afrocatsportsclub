@@ -90,8 +90,6 @@ export const api = {
 
   getStatsByMatch: (matchId: string) => apiFetch<any[]>(`/stats/match/${matchId}`),
   getStatsByPlayer: (playerId: string) => apiFetch<any[]>(`/stats/player/${playerId}`),
-  submitStats: (matchId: string, data: any[]) =>
-    apiFetch<any[]>(`/stats/match/${matchId}`, { method: "POST", body: JSON.stringify(data) }),
 
   getAttendanceSessions: (teamId?: string) => apiFetch<any[]>(`/attendance/sessions${teamId ? `?teamId=${teamId}` : ""}`),
   createAttendanceSession: (data: any) => apiFetch<any>("/attendance/sessions", { method: "POST", body: JSON.stringify(data) }),
