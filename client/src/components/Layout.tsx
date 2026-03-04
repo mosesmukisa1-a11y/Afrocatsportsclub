@@ -6,7 +6,7 @@ import {
   LogOut, ShieldAlert, Award, Menu, X, Star,
   ScrollText, FolderOpen, UserCircle, UserCheck,
   BarChart3, MessageCircle, Gamepad2, FileSpreadsheet,
-  Microscope, Gauge
+  Microscope, Gauge, ChevronDown, RefreshCw
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import logo from "@assets/afrocate_logo_1772226294597.png";
@@ -41,13 +41,33 @@ const allNavItems = [
   { icon: ShieldAlert, label: "User Management", href: "/admin/users", roles: ["ADMIN"] },
 ];
 
+const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
+  ADMIN: { bg: "bg-afrocat-gold-soft", text: "text-afrocat-gold" },
+  MANAGER: { bg: "bg-purple-500/10", text: "text-purple-400" },
+  COACH: { bg: "bg-afrocat-teal-soft", text: "text-afrocat-teal" },
+  CAPTAIN: { bg: "bg-blue-500/10", text: "text-blue-400" },
+  STATISTICIAN: { bg: "bg-cyan-500/10", text: "text-cyan-400" },
+  FINANCE: { bg: "bg-emerald-500/10", text: "text-emerald-400" },
+  MEDICAL: { bg: "bg-rose-500/10", text: "text-rose-400" },
+  PLAYER: { bg: "bg-afrocat-green-soft", text: "text-afrocat-green" },
+};
+
 export function Layout({ children }: { children: ReactNode }) {
   const [location] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, activeRole, switchRole } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
 
   const userRoles = user?.roles && user.roles.length > 0 ? user.roles : user ? [user.role] : [];
-  const navItems = allNavItems.filter(item => user && item.roles.some(r => userRoles.includes(r)));
+  const hasMultipleRoles = userRoles.length > 1;
+  const currentRoleColor = ROLE_COLORS[activeRole || user?.role || ""] || ROLE_COLORS.PLAYER;
+  const effectiveRole = activeRole || user?.role || "";
+  const navItems = allNavItems.filter(item => {
+    if (!user) return false;
+    if (user.isSuperAdmin) return true;
+    if (item.roles.includes(effectiveRole)) return true;
+    return false;
+  });
 
   return (
     <div className="min-h-screen bg-afrocat-bg text-afrocat-text flex flex-col md:flex-row">
@@ -94,16 +114,62 @@ export function Layout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-afrocat-border">
-          <div className="flex items-center gap-3 mb-4 px-2">
-            <div className="w-8 h-8 rounded-full bg-afrocat-teal-soft flex items-center justify-center border border-afrocat-teal/20">
-              <ShieldAlert size={16} className="text-afrocat-teal" />
+        <div className="p-4 border-t border-afrocat-border space-y-3">
+          <div className="flex items-center gap-3 px-2">
+            <div className={`w-8 h-8 rounded-full ${currentRoleColor.bg} flex items-center justify-center border border-afrocat-border`}>
+              <ShieldAlert size={16} className={currentRoleColor.text} />
             </div>
-            <div>
-              <p className="text-sm font-semibold text-afrocat-text">{user?.fullName}</p>
-              <p className="text-xs text-afrocat-muted">{userRoles.join(" · ")}</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-afrocat-text truncate">{user?.fullName}</p>
+              <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${currentRoleColor.bg} ${currentRoleColor.text} uppercase tracking-wider`} data-testid="badge-active-role">
+                {activeRole || user?.role}
+              </span>
             </div>
           </div>
+
+          {hasMultipleRoles && (
+            <div className="relative">
+              <button
+                onClick={() => setRoleSwitcherOpen(!roleSwitcherOpen)}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border hover:bg-afrocat-white-10 transition-colors text-sm"
+                data-testid="button-role-switcher"
+              >
+                <RefreshCw size={14} className="text-afrocat-teal shrink-0" />
+                <span className="text-afrocat-text font-medium flex-1 text-left">Switch Role</span>
+                <ChevronDown size={14} className={`text-afrocat-muted transition-transform ${roleSwitcherOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {roleSwitcherOpen && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 bg-afrocat-card border border-afrocat-border rounded-lg shadow-lg overflow-hidden z-50" data-testid="dropdown-role-switcher">
+                  <div className="p-2 border-b border-afrocat-border">
+                    <p className="text-[10px] font-bold text-afrocat-muted uppercase tracking-wider px-2">Switch Active Role</p>
+                  </div>
+                  <div className="p-1">
+                    {userRoles.map((role) => {
+                      const isActive = role === (activeRole || user?.role);
+                      const rc = ROLE_COLORS[role] || ROLE_COLORS.PLAYER;
+                      return (
+                        <button
+                          key={role}
+                          onClick={() => { switchRole(role); setRoleSwitcherOpen(false); }}
+                          className={`flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                            isActive
+                              ? `${rc.bg} ${rc.text}`
+                              : "text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
+                          }`}
+                          data-testid={`button-switch-role-${role.toLowerCase()}`}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${isActive ? rc.text.replace('text-', 'bg-') : 'bg-afrocat-white-10'}`} />
+                          {role}
+                          {isActive && <span className="ml-auto text-[10px] opacity-70">Active</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={logout}
             data-testid="nav-link-logout"

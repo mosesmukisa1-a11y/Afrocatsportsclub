@@ -45,6 +45,7 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 ## RBAC Roles
 - **Super Admin**: mosesmukisa1@gmail.com — only user who can assign roles to others. Flagged via `isSuperAdmin` in DB.
 - **Multi-Role Support**: Users can have multiple roles (stored in `roles` text[] column). The `role` column holds the primary role. JWT includes `roles[]`. Sidebar, `requireRole` middleware, and route guards check the full `roles` array.
+- **Role Switcher**: Users with multiple roles see a "Switch Role" button in the sidebar. Switching changes `activeRole` (persisted in localStorage per user), updates `user.role` in auth context, filters nav items to the active role's scope, and redirects to Dashboard. Super admins always see all nav items regardless of active role.
 - **Admin/Manager**: Full access to all modules, add/edit/delete players, generate profile PDFs, manage shop/media
 - **Coach**: Teams, players, matches, attendance, stats, awards, contracts (read), documents
 - **Captain**: View players/teams, contact players by email/phone. Assigned as additional role via User Management (not self-registered)
