@@ -20,7 +20,16 @@ export function normalizeMatchStatus(match: any): any {
   if (isPlayed) {
     computedStatus = "PLAYED";
   } else if (!startTime) {
-    computedStatus = match.status || "UPCOMING";
+    if (match.matchDate) {
+      const matchDay = new Date(match.matchDate + "T23:59:59");
+      if (now > matchDay) {
+        computedStatus = "PAST_NO_SCORE";
+      } else {
+        computedStatus = "UPCOMING";
+      }
+    } else {
+      computedStatus = match.status || "UPCOMING";
+    }
   } else if (now < startTime) {
     computedStatus = "UPCOMING";
   } else if (endTime && now >= startTime && now <= endTime) {
