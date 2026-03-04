@@ -148,6 +148,13 @@ export const matches = pgTable("matches", {
   lastScoreUpdatedAt: timestamp("last_score_updated_at"),
   notes: text("notes"),
   round: text("round"),
+  liveHomePoints: integer("live_home_points").default(0),
+  liveAwayPoints: integer("live_away_points").default(0),
+  homeSetsWon: integer("home_sets_won").default(0),
+  awaySetsWon: integer("away_sets_won").default(0),
+  currentSetNumber: integer("current_set_number").default(1),
+  scorerUserId: varchar("scorer_user_id", { length: 36 }),
+  scoringStartedAt: timestamp("scoring_started_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -685,6 +692,9 @@ export const matchEvents = pgTable("match_events", {
   fatigueFlag: boolean("fatigue_flag").default(false),
   tacticalIntention: text("tactical_intention"),
   notes: text("notes"),
+  setNumber: integer("set_number"),
+  combinationType: text("combination_type"),
+  pointWonByTeamId: varchar("point_won_by_team_id", { length: 36 }),
   createdAt: timestamp("created_at").defaultNow(),
   createdBy: varchar("created_by", { length: 36 }),
 });

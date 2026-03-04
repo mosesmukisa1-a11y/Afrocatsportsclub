@@ -101,7 +101,23 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - **O2BIS Skip Modal**: Frontend shows missing info list with "Go Back & Fill" / "Skip & Generate" buttons. PDF downloaded via fetch+blob for JWT auth compatibility.
 - **Staff-Eligible Users Endpoint**: `GET /api/staff-eligible-users` for ADMIN/MANAGER/COACH to populate staff assignment dropdowns.
 - **Matches.tsx UI**: Edit button (ADMIN), Staff Assignment button, O2BIS generation button on upcoming match cards.
-- **Touch Stats Sync**: `POST /api/matches/:matchId/stats-touch/sync` — aggregates all touch events (SERVE/ATTACK/BLOCK/RECEIVE/DIG/SET with +/0/- outcomes) into `playerMatchStats` table. Calculates pointsTotal, generates Smart Focus recommendations, marks match as statsEntered. Frontend "Sync to Stats" button in TouchStats page with success/locked state indicators.
+- **Touch Stats Sync**: `POST /api/matches/:matchId/stats-touch/sync` — aggregates all touch events into `playerMatchStats` table. Calculates pointsTotal, generates Smart Focus recommendations, marks match as statsEntered.
+
+## Touch Stats Scoreboard Upgrade
+- **Live Scoreboard**: Match header shows Points (P) + Sets Won (S) for Home/Away, Current Set Number, Scorer Name. Fields: `liveHomePoints`, `liveAwayPoints`, `homeSetsWon`, `awaySetsWon`, `currentSetNumber`, `scorerUserId`, `scoringStartedAt` on matches table.
+- **Set Scoring**: "End Set — Home Wins" / "End Set — Away Wins" buttons. Increments sets, resets points to 0, advances set number. Max 5 sets.
+- **Points**: Auto-attributed from stat events (ACE→home, KILL→home, STUFF→home, serve NET/OUT→away, attack OUT/BLOCKED→away, etc.). Manual "+1 Home" / "+1 Away" / "Undo Point" buttons.
+- **Expanded Outcome Panels**: Step 3 now shows skill-specific outcome buttons (not just +/0/−). Each button shows outcome detail + point attribution.
+  - SERVE: ACE, In Play, Net, Out
+  - RECEIVE: Perfect, Positive, Off System, Error
+  - SET: Perfect, Slightly Off, Out of System, Out, Net Touch, Double Touch, Lift
+  - ATTACK: Kill, Tool Block, Dug, Blocked, Out, Net
+  - BLOCK: Stuff Block, Touch, Block Out, Net Touch, Overreach, Error
+  - DIG: Controlled, Not Controlled, Error
+- **Setter Combinations**: After SET success (Perfect/Slightly Off), shows combo picker: ONE / ZERO / FAST_BALL / SKIP. Stored in `matchEvents.combinationType`.
+- **New Event Fields**: `setNumber` (int), `combinationType` (text), `pointWonByTeamId` (varchar) on `matchEvents` table.
+- **New Enums**: NET_TOUCH/OVERREACH/BLOCK_OUT for blocks, SET_OUT_OF_SYSTEM/SET_OUT/NET_TOUCH for sets, TOOL_BLOCK/BLOCK_OUT for attacks.
+- **Endpoints**: `POST /api/matches/:matchId/scoreboard/point` (+1 side), `POST /api/matches/:matchId/scoreboard/undo-point`, `POST /api/matches/:matchId/scoreboard/end-set` (winner side). Events endpoint accepts `outcomeDetail`, `combinationType`, `pointSide`.
 
 ## Advanced Development Stats Platform
 - **Dev Stats Page** (`/dev-stats`): Full development-focused stat tracking with detailed fields per skill type (Serve types, Receive ratings, Set quality, Attack outcomes, Block types, Dig types). Error classification (Technical/Decision/Pressure/Fatigue). Pressure + Fatigue flags. Zones, tactical intentions, notes.

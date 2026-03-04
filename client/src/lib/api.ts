@@ -282,10 +282,16 @@ export const api = {
   getTouchStatsInit: (matchId: string, teamId: string) => apiFetch<any>(`/matches/${matchId}/stats-touch/init?teamId=${teamId}`),
   syncTouchStats: (matchId: string) => apiFetch<any>(`/matches/${matchId}/stats-touch/sync`, { method: "POST" }),
   getMatchEvents: (matchId: string) => apiFetch<any[]>(`/matches/${matchId}/events`),
-  createMatchEvent: (matchId: string, data: { playerId: string; action: string; outcome: string; teamId: string }) =>
+  createMatchEvent: (matchId: string, data: any) =>
     apiFetch<any>(`/matches/${matchId}/events`, { method: "POST", body: JSON.stringify(data) }),
   deleteMatchEvent: (matchId: string, eventId: string) =>
     apiFetch<any>(`/matches/${matchId}/events/${eventId}`, { method: "DELETE" }),
+  scoreboardPoint: (matchId: string, side: "home" | "away") =>
+    apiFetch<any>(`/matches/${matchId}/scoreboard/point`, { method: "POST", body: JSON.stringify({ side }) }),
+  scoreboardUndoPoint: (matchId: string) =>
+    apiFetch<any>(`/matches/${matchId}/scoreboard/undo-point`, { method: "POST" }),
+  scoreboardEndSet: (matchId: string, winner: "home" | "away") =>
+    apiFetch<any>(`/matches/${matchId}/scoreboard/end-set`, { method: "POST", body: JSON.stringify({ winner }) }),
 
   getDevStatsInit: (matchId: string, teamId: string) =>
     apiFetch<any>(`/matches/${matchId}/devstats/init?teamId=${teamId}`),

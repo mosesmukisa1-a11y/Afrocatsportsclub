@@ -5171,8 +5171,28 @@ th{background:#0d7377;color:white}
 
       const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
 
+      const team = await storage.getTeam(teamId);
+      let scorerName: string | null = null;
+      if ((match as any).scorerUserId) {
+        const scorer = await storage.getUser((match as any).scorerUserId);
+        if (scorer) scorerName = scorer.fullName;
+      } else {
+        const currentUser = await storage.getUser(req.user!.userId);
+        if (currentUser) scorerName = currentUser.fullName;
+      }
+
       res.json({
-        match: { ...match, isLocked },
+        match: {
+          ...match,
+          isLocked,
+          liveHomePoints: (match as any).liveHomePoints || 0,
+          liveAwayPoints: (match as any).liveAwayPoints || 0,
+          homeSetsWon: (match as any).homeSetsWon || 0,
+          awaySetsWon: (match as any).awaySetsWon || 0,
+          currentSetNumber: (match as any).currentSetNumber || 1,
+        },
+        teamName: team?.name || "Home",
+        scorerName,
         players: players.map((p: any) => ({
           id: p.id,
           firstName: p.firstName,
@@ -5199,7 +5219,7 @@ th{background:#0d7377;color:white}
   app.post("/api/matches/:matchId/events", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
       const { matchId } = req.params;
-      const { playerId, action, outcome, teamId } = req.body;
+      const { playerId, action, outcome, teamId, outcomeDetail, combinationType, pointWonByTeamId, pointSide } = req.body;
 
       if (!playerId || !action || !outcome || !teamId) {
         return res.status(400).json({ error: "Missing playerId, action, outcome, or teamId" });
@@ -5228,16 +5248,116 @@ th{background:#0d7377;color:white}
         return res.status(400).json({ error: "Player does not belong to this team" });
       }
 
+      if (!match.scorerUserId) {
+        await storage.updateMatch(matchId, {
+          scorerUserId: req.user!.userId,
+          scoringStartedAt: new Date(),
+        } as any);
+      }
+
+      const currentSet = (match as any).currentSetNumber || 1;
+
+      const resolvedPointSide = pointSide || (pointWonByTeamId ? (pointWonByTeamId === match.teamId ? "home" : "away") : null);
+
       const event = await storage.createMatchEvent({
         matchId,
         teamId,
         playerId,
         action,
         outcome,
-        createdBy: (req as any).user?.id || null,
+        outcomeDetail: outcomeDetail || null,
+        combinationType: combinationType || null,
+        setNumber: currentSet,
+        pointWonByTeamId: resolvedPointSide === "home" ? match.teamId : resolvedPointSide === "away" ? "OPPONENT" : null,
+        createdBy: req.user?.userId || null,
       });
 
-      res.json({ event, match });
+      if (resolvedPointSide) {
+        const isHome = resolvedPointSide === "home";
+        await storage.updateMatch(matchId, {
+          liveHomePoints: ((match as any).liveHomePoints || 0) + (isHome ? 1 : 0),
+          liveAwayPoints: ((match as any).liveAwayPoints || 0) + (isHome ? 0 : 1),
+        } as any);
+      }
+
+      const updatedMatch = await storage.getMatch(matchId);
+      res.json({ event, match: updatedMatch });
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/matches/:matchId/scoreboard/point", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const { side } = req.body;
+      if (!["home", "away"].includes(side)) return res.status(400).json({ error: "side must be 'home' or 'away'" });
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+
+      await storage.updateMatch(matchId, {
+        liveHomePoints: ((match as any).liveHomePoints || 0) + (side === "home" ? 1 : 0),
+        liveAwayPoints: ((match as any).liveAwayPoints || 0) + (side === "away" ? 1 : 0),
+      } as any);
+
+      const updated = await storage.getMatch(matchId);
+      res.json(updated);
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/matches/:matchId/scoreboard/undo-point", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+
+      const hp = (match as any).liveHomePoints || 0;
+      const ap = (match as any).liveAwayPoints || 0;
+      if (hp + ap <= 0) return res.json(match);
+
+      const events = await storage.getMatchEvents(matchId);
+      const lastWithPoint = events
+        .filter((e: any) => e.pointWonByTeamId)
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
+      if (lastWithPoint) {
+        const isHome = lastWithPoint.pointWonByTeamId === (match as any).teamId;
+        await storage.updateMatch(matchId, {
+          liveHomePoints: Math.max(0, hp - (isHome ? 1 : 0)),
+          liveAwayPoints: Math.max(0, ap - (isHome ? 0 : 1)),
+        } as any);
+      } else if (hp >= ap && hp > 0) {
+        await storage.updateMatch(matchId, { liveHomePoints: hp - 1 } as any);
+      } else if (ap > 0) {
+        await storage.updateMatch(matchId, { liveAwayPoints: ap - 1 } as any);
+      }
+
+      const updated = await storage.getMatch(matchId);
+      res.json(updated);
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/matches/:matchId/scoreboard/end-set", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const { winner } = req.body;
+      if (!["home", "away"].includes(winner)) return res.status(400).json({ error: "winner must be 'home' or 'away'" });
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+
+      const currentSet = (match as any).currentSetNumber || 1;
+      if (currentSet > 5) return res.status(400).json({ error: "Maximum 5 sets" });
+
+      await storage.updateMatch(matchId, {
+        homeSetsWon: ((match as any).homeSetsWon || 0) + (winner === "home" ? 1 : 0),
+        awaySetsWon: ((match as any).awaySetsWon || 0) + (winner === "away" ? 1 : 0),
+        currentSetNumber: currentSet + 1,
+        liveHomePoints: 0,
+        liveAwayPoints: 0,
+      } as any);
+
+      const updated = await storage.getMatch(matchId);
+      res.json(updated);
     } catch (err) { next(err); }
   });
 
