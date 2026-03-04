@@ -38,12 +38,13 @@ export default function Matches() {
   const [squadTeamId, setSquadTeamId] = useState<string | null>(null);
   const [scoreModal, setScoreModal] = useState<string | null>(null);
   const [scoreForm, setScoreForm] = useState({ homeScore: 0, awayScore: 0, result: "" });
-  const [setStatsModal, setSetStatsModal] = useState<string | null>(null);
+  const [setStatsModal, setSetStatsModal] = useState<any | null>(null);
   const [setsInput, setSetsInput] = useState<Array<{ homePoints: number; awayPoints: number }>>([
     { homePoints: 0, awayPoints: 0 },
     { homePoints: 0, awayPoints: 0 },
     { homePoints: 0, awayPoints: 0 },
   ]);
+  const [statsTimeForm, setStatsTimeForm] = useState({ startTime: "", endTime: "" });
 
   const [editModal, setEditModal] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({ startTime: "", venue: "", competition: "", round: "", notes: "", opponent: "" });
@@ -111,10 +112,21 @@ export default function Matches() {
   });
 
   const setStatsMut = useMutation({
-    mutationFn: () => api.submitMatchSetStats(setStatsModal!, { sets: setsInput }),
+    mutationFn: () => {
+      const matchDate = setStatsModal?.matchDate || "";
+      const payload: any = { sets: setsInput };
+      if (statsTimeForm.startTime) {
+        payload.startTime = new Date(`${matchDate}T${statsTimeForm.startTime}`).toISOString();
+      }
+      if (statsTimeForm.endTime) {
+        payload.endTime = new Date(`${matchDate}T${statsTimeForm.endTime}`).toISOString();
+      }
+      return api.submitMatchSetStats(setStatsModal!.id, payload);
+    },
     onSuccess: () => {
       invalidateAll();
       setSetStatsModal(null);
+      setStatsTimeForm({ startTime: "", endTime: "" });
       toast({ title: "Set stats & score saved" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -318,12 +330,17 @@ export default function Matches() {
                       variant="outline"
                       className="border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5"
                       onClick={() => {
-                        setSetStatsModal(match.id);
+                        setSetStatsModal(match);
                         setSetsInput([
                           { homePoints: 0, awayPoints: 0 },
                           { homePoints: 0, awayPoints: 0 },
                           { homePoints: 0, awayPoints: 0 },
                         ]);
+                        const existingStart = match.startTime ? new Date(match.startTime) : null;
+                        setStatsTimeForm({
+                          startTime: existingStart ? existingStart.toTimeString().slice(0,5) : "",
+                          endTime: "",
+                        });
                       }}
                       data-testid={`button-enter-sets-${match.id}`}
                     >
@@ -562,6 +579,28 @@ export default function Matches() {
           <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text max-w-lg">
             <DialogHeader><DialogTitle className="text-afrocat-text font-display">Enter Set-by-Set Stats</DialogTitle></DialogHeader>
             <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-afrocat-muted text-xs uppercase">Match Start Time</Label>
+                  <Input
+                    type="time"
+                    value={statsTimeForm.startTime}
+                    onChange={e => setStatsTimeForm(p => ({ ...p, startTime: e.target.value }))}
+                    className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
+                    data-testid="input-stats-start-time"
+                  />
+                </div>
+                <div>
+                  <Label className="text-afrocat-muted text-xs uppercase">Match End Time</Label>
+                  <Input
+                    type="time"
+                    value={statsTimeForm.endTime}
+                    onChange={e => setStatsTimeForm(p => ({ ...p, endTime: e.target.value }))}
+                    className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
+                    data-testid="input-stats-end-time"
+                  />
+                </div>
+              </div>
               <div className="space-y-3">
                 {setsInput.map((set, i) => (
                   <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-afrocat-white-3 border border-afrocat-border">
@@ -613,7 +652,7 @@ export default function Matches() {
               )}
               <div className="flex items-center gap-2 p-3 rounded-lg bg-afrocat-teal-soft text-afrocat-teal text-xs">
                 <Lock className="h-4 w-4 shrink-0" />
-                <span>Score will be computed from sets and locked. Manual editing will be blocked.</span>
+                <span>Start & end times lock the match. Score is computed from sets.</span>
               </div>
               <Button
                 onClick={() => setStatsMut.mutate()}
@@ -621,7 +660,7 @@ export default function Matches() {
                 className="w-full bg-afrocat-teal hover:bg-afrocat-teal/80"
                 data-testid="button-submit-sets"
               >
-                {setStatsMut.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save Sets & Lock Score"}
+                {setStatsMut.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : "Save Sets & Lock Match"}
               </Button>
             </div>
           </DialogContent>

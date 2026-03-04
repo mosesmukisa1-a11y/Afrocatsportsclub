@@ -1209,19 +1209,21 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     try {
       const body = z.object({
         teamId: z.string(), opponent: z.string(), matchDate: z.string(),
-        startTime: z.string(),
+        startTime: z.string().optional().nullable(),
         venue: z.string(), competition: z.string(),
         notes: z.string().optional().nullable(),
         round: z.string().optional().nullable(),
       }).parse(req.body);
 
-      const startTimeParsed = new Date(body.startTime);
+      const startTimeParsed = body.startTime ? new Date(body.startTime) : null;
 
-      if (startTimeParsed < new Date()) {
+      if (startTimeParsed && startTimeParsed < new Date()) {
         return res.status(400).json({ message: "Cannot schedule a match in the past." });
       }
 
-      const endTimeParsed = new Date(startTimeParsed.getTime() + 120 * 60 * 1000);
+      const endTimeParsed = startTimeParsed
+        ? new Date(startTimeParsed.getTime() + 120 * 60 * 1000)
+        : null;
 
       const matchData: any = {
         ...body,
@@ -1509,6 +1511,8 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
           homePoints: z.number(),
           awayPoints: z.number(),
         })),
+        startTime: z.string().optional().nullable(),
+        endTime: z.string().optional().nullable(),
       }).parse(req.body);
 
       const setStats = await storage.createMatchSetStats({
@@ -1524,7 +1528,7 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
       }
 
       const result: "W" | "L" = homeSets > awaySets ? "W" : "L";
-      await storage.updateMatch(req.params.id, {
+      const matchUpdate: any = {
         homeScore: homeSets,
         awayScore: awaySets,
         setsFor: homeSets,
@@ -1536,7 +1540,12 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         status: "PLAYED",
         lastScoreUpdatedBy: req.user!.userId,
         lastScoreUpdatedAt: new Date(),
-      } as any);
+      };
+
+      if (body.startTime) matchUpdate.startTime = new Date(body.startTime);
+      if (body.endTime) matchUpdate.endTime = new Date(body.endTime);
+
+      await storage.updateMatch(req.params.id, matchUpdate);
 
       const updated = await storage.getMatch(req.params.id);
       if (updated) {
