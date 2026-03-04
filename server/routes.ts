@@ -1292,7 +1292,7 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
   // ─── STAFF-ELIGIBLE USERS (for match staff dropdown) ────────────────────
   app.get("/api/staff-eligible-users", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (_req, res, next) => {
     try {
-      const users = await storage.getUsers();
+      const users = await storage.getAllUsers();
       const eligible = users.map((u: any) => ({
         id: u.id,
         fullName: u.fullName,
