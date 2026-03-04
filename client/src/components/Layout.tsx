@@ -6,7 +6,7 @@ import {
   LogOut, ShieldAlert, Award, Menu, X, Star,
   ScrollText, FolderOpen, UserCircle, UserCheck,
   BarChart3, MessageCircle, Gamepad2, FileSpreadsheet,
-  Microscope, Gauge, ChevronDown, RefreshCw, Megaphone, Mail
+  Microscope, Gauge, ChevronDown, RefreshCw, Megaphone, Mail, BookOpen
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import logo from "@assets/afrocate_logo_1772226294597.png";
@@ -32,6 +32,7 @@ const allNavItems = [
   { icon: ScrollText, label: "My Contract", href: "/my-contract", roles: ["PLAYER"] },
   { icon: FileText, label: "Club Contract", href: "/club-contract", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
   { icon: BarChart3, label: "Compare Stats", href: "/stats-comparison", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","PLAYER"] },
+  { icon: BookOpen, label: "Coach's Corner", href: "/coach-blog", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
   { icon: Megaphone, label: "Notice Board", href: "/notices", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
   { icon: MessageCircle, label: "Chat", href: "/chat", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","PLAYER"] },
   { icon: Mail, label: "Send Email", href: "/email-compose", roles: ["ADMIN","MANAGER"] },

@@ -7,7 +7,7 @@ import { hashPassword, comparePassword, signToken, requireAuth, requireRole } fr
 import { z } from "zod";
 import crypto from "crypto";
 import cron from "node-cron";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
@@ -5731,6 +5731,145 @@ th{background:#0d7377;color:white}
         role: u.role,
         photoUrl: u.photoUrl,
       })));
+    } catch (e) { next(e); }
+  });
+
+  // ─── COACH'S CORNER BLOG ────────────────────
+  app.get("/api/coach-blog", requireAuth, async (_req, res, next) => {
+    try {
+      const posts = await db.select().from(schema.coachBlogPosts)
+        .orderBy(desc(schema.coachBlogPosts.pinned), desc(schema.coachBlogPosts.publishedAt));
+      res.json(posts);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/coach-blog/:id", requireAuth, async (req, res, next) => {
+    try {
+      const [post] = await db.select().from(schema.coachBlogPosts)
+        .where(eq(schema.coachBlogPosts.id, req.params.id));
+      if (!post) return res.status(404).json({ message: "Post not found" });
+      const comments = await db.select().from(schema.coachBlogComments)
+        .where(eq(schema.coachBlogComments.postId, req.params.id))
+        .orderBy(schema.coachBlogComments.createdAt);
+      res.json({ ...post, comments });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/coach-blog", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        title: z.string().min(1),
+        body: z.string().min(1),
+        category: z.string().default("GENERAL"),
+        tags: z.array(z.string()).optional(),
+        pinned: z.boolean().optional(),
+      }).parse(req.body);
+
+      const author = await storage.getUser(req.user!.userId);
+      const [post] = await db.insert(schema.coachBlogPosts).values({
+        title: body.title,
+        body: body.body,
+        category: body.category,
+        tags: body.tags || [],
+        pinned: body.pinned || false,
+        authorId: req.user!.userId,
+        authorName: author?.fullName || "Coach",
+      }).returning();
+      res.status(201).json(post);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", errors: e.errors });
+      next(e);
+    }
+  });
+
+  app.patch("/api/coach-blog/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        title: z.string().min(1).optional(),
+        body: z.string().min(1).optional(),
+        category: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+        pinned: z.boolean().optional(),
+      }).parse(req.body);
+
+      const [existing] = await db.select().from(schema.coachBlogPosts)
+        .where(eq(schema.coachBlogPosts.id, req.params.id));
+      if (!existing) return res.status(404).json({ message: "Post not found" });
+
+      if (existing.authorId !== req.user!.userId && !req.user!.isSuperAdmin) {
+        const userRoles = req.user!.roles || [req.user!.role];
+        if (!userRoles.includes("ADMIN") && !userRoles.includes("MANAGER")) {
+          return res.status(403).json({ message: "Can only edit your own posts" });
+        }
+      }
+
+      const [updated] = await db.update(schema.coachBlogPosts)
+        .set({ ...body, updatedAt: new Date() })
+        .where(eq(schema.coachBlogPosts.id, req.params.id))
+        .returning();
+      res.json(updated);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
+  });
+
+  app.delete("/api/coach-blog/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const [existing] = await db.select().from(schema.coachBlogPosts)
+        .where(eq(schema.coachBlogPosts.id, req.params.id));
+      if (!existing) return res.status(404).json({ message: "Post not found" });
+
+      if (existing.authorId !== req.user!.userId && !req.user!.isSuperAdmin) {
+        const userRoles = req.user!.roles || [req.user!.role];
+        if (!userRoles.includes("ADMIN") && !userRoles.includes("MANAGER")) {
+          return res.status(403).json({ message: "Can only delete your own posts" });
+        }
+      }
+
+      await db.delete(schema.coachBlogComments).where(eq(schema.coachBlogComments.postId, req.params.id));
+      await db.delete(schema.coachBlogPosts).where(eq(schema.coachBlogPosts.id, req.params.id));
+      res.status(204).send();
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/coach-blog/:id/comments", requireAuth, async (req, res, next) => {
+    try {
+      const body = z.object({ body: z.string().min(1) }).parse(req.body);
+      const [post] = await db.select().from(schema.coachBlogPosts)
+        .where(eq(schema.coachBlogPosts.id, req.params.id));
+      if (!post) return res.status(404).json({ message: "Post not found" });
+
+      const author = await storage.getUser(req.user!.userId);
+      const [comment] = await db.insert(schema.coachBlogComments).values({
+        postId: req.params.id,
+        authorId: req.user!.userId,
+        authorName: author?.fullName || "Unknown",
+        authorRole: req.user!.role,
+        body: body.body,
+      }).returning();
+      res.status(201).json(comment);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
+  });
+
+  app.delete("/api/coach-blog/:postId/comments/:commentId", requireAuth, async (req, res, next) => {
+    try {
+      const [comment] = await db.select().from(schema.coachBlogComments)
+        .where(eq(schema.coachBlogComments.id, req.params.commentId));
+      if (!comment) return res.status(404).json({ message: "Comment not found" });
+
+      if (comment.authorId !== req.user!.userId && !req.user!.isSuperAdmin) {
+        const userRoles = req.user!.roles || [req.user!.role];
+        if (!userRoles.includes("ADMIN") && !userRoles.includes("MANAGER")) {
+          return res.status(403).json({ message: "Can only delete your own comments" });
+        }
+      }
+
+      await db.delete(schema.coachBlogComments).where(eq(schema.coachBlogComments.id, req.params.commentId));
+      res.status(204).send();
     } catch (e) { next(e); }
   });
 

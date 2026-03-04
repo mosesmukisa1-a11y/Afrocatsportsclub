@@ -761,3 +761,34 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+
+export const coachBlogPosts = pgTable("coach_blog_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  category: text("category").notNull().default("GENERAL"),
+  tags: text("tags").array(),
+  authorId: varchar("author_id").notNull(),
+  authorName: text("author_name").notNull(),
+  pinned: boolean("pinned").default(false),
+  publishedAt: timestamp("published_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const coachBlogComments = pgTable("coach_blog_comments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull(),
+  authorId: varchar("author_id").notNull(),
+  authorName: text("author_name").notNull(),
+  authorRole: text("author_role"),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCoachBlogPostSchema = createInsertSchema(coachBlogPosts).omit({ id: true, publishedAt: true, updatedAt: true });
+export type InsertCoachBlogPost = z.infer<typeof insertCoachBlogPostSchema>;
+export type CoachBlogPost = typeof coachBlogPosts.$inferSelect;
+
+export const insertCoachBlogCommentSchema = createInsertSchema(coachBlogComments).omit({ id: true, createdAt: true });
+export type InsertCoachBlogComment = z.infer<typeof insertCoachBlogCommentSchema>;
+export type CoachBlogComment = typeof coachBlogComments.$inferSelect;

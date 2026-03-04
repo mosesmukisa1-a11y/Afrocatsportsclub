@@ -363,6 +363,19 @@ export const api = {
   startDm: (targetUserId: string) =>
     apiFetch<any>("/chat/dm", { method: "POST", body: JSON.stringify({ targetUserId }) }),
   getChatUsers: () => apiFetch<any[]>("/chat/users"),
+
+  getCoachBlogPosts: () => apiFetch<any[]>("/coach-blog"),
+  getCoachBlogPost: (id: string) => apiFetch<any>(`/coach-blog/${id}`),
+  createCoachBlogPost: (data: { title: string; body: string; category: string; tags?: string[]; pinned?: boolean }) =>
+    apiFetch<any>("/coach-blog", { method: "POST", body: JSON.stringify(data) }),
+  updateCoachBlogPost: (id: string, data: Record<string, any>) =>
+    apiFetch<any>(`/coach-blog/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteCoachBlogPost: (id: string) =>
+    apiFetch<void>(`/coach-blog/${id}`, { method: "DELETE" }),
+  addCoachBlogComment: (postId: string, body: string) =>
+    apiFetch<any>(`/coach-blog/${postId}/comments`, { method: "POST", body: JSON.stringify({ body }) }),
+  deleteCoachBlogComment: (postId: string, commentId: string) =>
+    apiFetch<void>(`/coach-blog/${postId}/comments/${commentId}`, { method: "DELETE" }),
 };
 
 export async function registerPushNotifications() {
