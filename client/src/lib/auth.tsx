@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { api, setToken, clearToken } from "./api";
+import { api, setToken, clearToken, registerPushNotifications } from "./api";
 import { useLocation } from "wouter";
 
 interface AuthUser {
@@ -81,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(res.user);
       setActiveRole(res.user.role);
     }
+    registerPushNotifications();
     return { mustChangePassword: res.mustChangePassword };
   };
 

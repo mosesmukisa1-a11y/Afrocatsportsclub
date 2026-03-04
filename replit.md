@@ -129,9 +129,13 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 
 ## New Features
 - **Stats Comparison** (`/stats-comparison`): Side-by-side player stat comparison with visual bars. Select two players, compare kills/aces/blocks/digs/assists/points/errors/matches + awards count. Uses `GET /api/stats/compare?player1=ID&player2=ID`.
-- **Real-Time Chat** (`/chat`): Room-based messaging (General + per-team rooms). REST-based with 3s auto-refresh via react-query. Role badges (ADMIN=gold, COACH=teal, PLAYER=muted). `chatMessages` table with `sentAt` timestamp. Endpoints: `GET /api/chat/rooms`, `GET /api/chat/messages/:roomId`, `POST /api/chat/messages`.
-- **Match Simulation** (`/match-simulation`): Coaches build Starting 6 lineups from team roster. Shows per-player avg stats (kills/aces/blocks/digs/assists/points/efficiency). Team Strength Score = sum of efficiency. Save/load presets via localStorage. Compare mode for lineup testing. `GET /api/simulation/team-stats/:teamId`.
-- **Report Templates** (`/report-templates`): 5 customizable report types: Season Summary, Player Report, Team Roster, Attendance Summary, Financial Summary. Each returns HTML for print-to-PDF. POST endpoints under `/api/reports/*`. Financial requires ADMIN/MANAGER/FINANCE; others require ADMIN/MANAGER/COACH/STATISTICIAN.
+- **Real-Time Chat** (`/chat`): Room-based messaging (General + per-team rooms) + Direct Messages between users. REST-based with 3s auto-refresh. Role badges. DM threads sidebar with user picker dialog. `POST /api/chat/dm` creates DM room with initial message. `GET /api/chat/dm-threads` lists user's DM conversations. `GET /api/chat/users` for user picker.
+- **Match Simulation** (`/match-simulation`): Coaches build Starting 6 lineups from team roster. Shows per-player avg stats. Team Strength Score. Save/load presets via localStorage. Compare mode.
+- **Report Templates** (`/report-templates`): 5 customizable report types. Each returns HTML for print-to-PDF.
+- **Notice Board** (`/notices`): Club announcements system. Admin/Manager create notices with title, body, audience (ALL or specific team). `noticeBoardPosts` table. Dashboard widget shows latest 3 notices.
+- **Email Compose** (`/email-compose`): Admin sends emails via Gmail (afrocatvolleyballclub@gmail.com). Auto CC to afrocatladiesvc@gmail.com. Uses nodemailer with GMAIL_USER + GMAIL_APP_PASSWORD secrets.
+- **Web Push Notifications**: Service worker at `client/public/sw.js`. Push subscription registered on login. `pushSubscriptions` table stores user subscriptions. VAPID key served via `GET /api/push/vapid-key`. Notifications displayed with club favicon.
+- **Contract Bypass for Squad Selection**: Players without active contracts can be selected for match squads. `contractWarning: true` badge shown in UI instead of blocking selection.
 
 ## GitHub Repository
 - **Repo**: https://github.com/mosesmukisa1-a11y/afrocat-club-portal

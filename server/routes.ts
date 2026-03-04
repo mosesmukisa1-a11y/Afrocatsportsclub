@@ -3149,11 +3149,12 @@ th{background:#0d7377;color:white}
         const openInjury = injuries.find(i => i.playerId === p.id && i.status === "OPEN");
         if (openInjury) reasons.push(`Injury: ${openInjury.injuryType}`);
         const activeContract = contracts.find(c => c.playerId === p.id && c.status === "ACTIVE");
-        if (!activeContract) reasons.push("No active contract");
+        const contractWarning = !activeContract;
         return {
           ...p,
           eligible: reasons.length === 0,
           ineligibilityReasons: reasons,
+          contractWarning,
         };
       });
       res.json(enriched);
@@ -3185,13 +3186,11 @@ th{background:#0d7377;color:white}
       }
 
       const injuries = await storage.getInjuries();
-      const contracts = await storage.getAllContracts();
       const ineligible = body.playerIds.filter(pid => {
         const p = teamPlayers.find(tp => tp.id === pid)!;
         if (p.status !== "ACTIVE") return true;
         if (p.eligibilityStatus === "NOT_ELIGIBLE") return true;
         if (injuries.some(i => i.playerId === pid && i.status === "OPEN")) return true;
-        if (!contracts.some(c => c.playerId === pid && c.status === "ACTIVE")) return true;
         return false;
       });
       if (ineligible.length > 0) {
@@ -5510,6 +5509,229 @@ th{background:#0d7377;color:white}
       await storage.deleteMatchEvent(eventId);
       res.json({ ok: true, match });
     } catch (err) { next(err); }
+  });
+
+  // ─── NOTICE BOARD ────────────────────
+  app.get("/api/notices", requireAuth, async (req, res, next) => {
+    try {
+      const user = req.user!;
+      const player = user.playerId ? await storage.getPlayer(user.playerId) : null;
+      const teamId = player?.teamId || undefined;
+      const posts = await storage.getNoticeBoardPosts(teamId);
+      res.json(posts);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/notices", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const body = z.object({
+        title: z.string().min(1).max(200),
+        body: z.string().min(1).max(10000),
+        audience: z.enum(["ALL", "TEAM"]).default("ALL"),
+        teamId: z.string().optional(),
+      }).parse(req.body);
+
+      const post = await storage.createNoticeBoardPost({
+        title: body.title,
+        body: body.body,
+        audience: body.audience,
+        teamId: body.audience === "TEAM" ? (body.teamId || null) : null,
+        createdBy: req.user!.userId,
+      });
+
+      const allUsers = await storage.getAllUsers();
+      let targetUsers = allUsers;
+      if (body.audience === "TEAM" && body.teamId) {
+        const teamPlayers = await storage.getPlayersByTeam(body.teamId);
+        const teamPlayerUserIds = new Set<string>();
+        for (const p of teamPlayers) {
+          if (p.userId) teamPlayerUserIds.add(p.userId);
+        }
+        targetUsers = allUsers.filter(u => teamPlayerUserIds.has(u.id) || (u.roles as string[] || []).some(r => ["ADMIN","MANAGER","COACH"].includes(r)));
+      }
+
+      for (const u of targetUsers) {
+        if (u.id === req.user!.userId) continue;
+        await storage.createNotification({
+          userId: u.id,
+          type: "NOTICE_NEW",
+          title: "Notice Board",
+          message: body.title,
+          read: false,
+        });
+      }
+
+      res.status(201).json(post);
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── EMAIL SEND (Gmail) ────────────────────
+  app.post("/api/email/send", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const gmailUser = process.env.GMAIL_USER;
+      const gmailPass = process.env.GMAIL_APP_PASSWORD;
+      if (!gmailUser || !gmailPass) {
+        return res.status(500).json({ message: "Email not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD secrets." });
+      }
+
+      const body = z.object({
+        to: z.string().min(1),
+        subject: z.string().min(1).max(200),
+        text: z.string().optional(),
+        html: z.string().optional(),
+      }).refine(d => d.text || d.html, { message: "text or html body required" })
+        .parse(req.body);
+
+      const nodemailer = await import("nodemailer");
+      const transporter = nodemailer.default.createTransport({
+        service: "gmail",
+        auth: { user: gmailUser, pass: gmailPass },
+      });
+
+      const autoCc = process.env.EMAIL_AUTO_CC || "afrocatladiesvc@gmail.com";
+
+      const info = await transporter.sendMail({
+        from: `"Afrocat Volleyball Club" <${gmailUser}>`,
+        to: body.to,
+        cc: autoCc,
+        subject: body.subject,
+        text: body.text || undefined,
+        html: body.html || undefined,
+      });
+
+      res.json({ ok: true, messageId: info.messageId });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
+      next(e);
+    }
+  });
+
+  // ─── PUSH NOTIFICATIONS ────────────────────
+  app.post("/api/push/subscribe", requireAuth, async (req, res, next) => {
+    try {
+      const body = z.object({
+        endpoint: z.string(),
+        keys: z.object({
+          p256dh: z.string(),
+          auth: z.string(),
+        }),
+      }).parse(req.body);
+
+      await storage.createPushSubscription({
+        userId: req.user!.userId,
+        endpoint: body.endpoint,
+        p256dh: body.keys.p256dh,
+        auth: body.keys.auth,
+      });
+
+      res.json({ ok: true });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Invalid subscription data" });
+      next(e);
+    }
+  });
+
+  app.get("/api/push/vapid-key", (_req, res) => {
+    res.json({ key: process.env.VAPID_PUBLIC_KEY || "" });
+  });
+
+  // ─── CHAT DMs ────────────────────
+  app.post("/api/chat/dm", requireAuth, async (req, res, next) => {
+    try {
+      const body = z.object({
+        targetUserId: z.string().min(1),
+      }).parse(req.body);
+
+      const myId = req.user!.userId;
+      const targetId = body.targetUserId;
+      if (myId === targetId) return res.status(400).json({ message: "Cannot DM yourself" });
+
+      const targetUser = await storage.getUser(targetId);
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      const dmRoomId = [myId, targetId].sort().join(":");
+      const roomId = `dm:${dmRoomId}`;
+
+      const existing = await db.select().from(schema.chatMessages)
+        .where(eq(schema.chatMessages.roomId, roomId))
+        .limit(1);
+
+      if (existing.length === 0) {
+        const me = await storage.getUser(myId);
+        await db.insert(schema.chatMessages).values({
+          id: crypto.randomUUID(),
+          roomId,
+          senderId: myId,
+          senderName: me?.fullName || "Unknown",
+          senderRole: me?.role || "PLAYER",
+          message: `Started a conversation`,
+          sentAt: new Date(),
+        });
+      }
+
+      res.json({
+        roomId,
+        targetUser: {
+          id: targetUser.id,
+          fullName: targetUser.fullName,
+          role: targetUser.role,
+        },
+      });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
+      next(e);
+    }
+  });
+
+  app.get("/api/chat/dm-threads", requireAuth, async (req, res, next) => {
+    try {
+      const myId = req.user!.userId;
+      const allMessages = await db.select().from(schema.chatMessages)
+        .where(sql`${schema.chatMessages.roomId} LIKE 'dm:%'`);
+
+      const myDmMessages = allMessages.filter(m =>
+        m.roomId.includes(myId)
+      );
+
+      const threadMap = new Map<string, any>();
+      for (const msg of myDmMessages) {
+        const existing = threadMap.get(msg.roomId);
+        if (!existing || new Date(msg.sentAt!).getTime() > new Date(existing.sentAt!).getTime()) {
+          threadMap.set(msg.roomId, msg);
+        }
+      }
+
+      const threads: any[] = [];
+      for (const [roomId, lastMsg] of threadMap) {
+        const parts = roomId.replace("dm:", "").split(":");
+        const otherUserId = parts.find(id => id !== myId) || parts[0];
+        const otherUser = await storage.getUser(otherUserId);
+        threads.push({
+          roomId,
+          otherUser: otherUser ? { id: otherUser.id, fullName: otherUser.fullName, role: otherUser.role, photoUrl: otherUser.photoUrl } : null,
+          lastMessage: lastMsg.message,
+          lastMessageAt: lastMsg.sentAt,
+        });
+      }
+
+      threads.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+      res.json(threads);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/chat/users", requireAuth, async (_req, res, next) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      res.json(allUsers.map(u => ({
+        id: u.id,
+        fullName: u.fullName,
+        role: u.role,
+        photoUrl: u.photoUrl,
+      })));
+    } catch (e) { next(e); }
   });
 
   return httpServer;

@@ -29,7 +29,9 @@ import type {
   PlayerFundRaisingContribution, InsertPlayerFundRaisingContribution,
   MatchSetStat, InsertMatchSetStat,
   MatchEvent, InsertMatchEvent,
-  PlayerUpdateRequest, InsertPlayerUpdateRequest
+  PlayerUpdateRequest, InsertPlayerUpdateRequest,
+  NoticeBoardPost, InsertNoticeBoardPost,
+  PushSubscription, InsertPushSubscription
 } from "@shared/schema";
 
 export interface IStorage {
@@ -191,6 +193,10 @@ export interface IStorage {
   approvePlayerUpdateRequest(id: string, reviewedBy: string, reviewNote?: string): Promise<PlayerUpdateRequest | undefined>;
   rejectPlayerUpdateRequest(id: string, reviewedBy: string, reviewNote?: string): Promise<PlayerUpdateRequest | undefined>;
   getPlayersWithOverdueWeight(): Promise<Player[]>;
+  getNoticeBoardPosts(teamId?: string): Promise<NoticeBoardPost[]>;
+  createNoticeBoardPost(post: InsertNoticeBoardPost): Promise<NoticeBoardPost>;
+  createPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription>;
+  getPushSubscriptionsByUser(userId: string): Promise<PushSubscription[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -945,6 +951,31 @@ export class DatabaseStorage implements IStorage {
     return allPlayers.filter(p =>
       !p.lastWeightUpdatedAt || new Date(p.lastWeightUpdatedAt) < ninetyDaysAgo
     );
+  }
+  async getNoticeBoardPosts(teamId?: string) {
+    const all = await db.select().from(schema.noticeBoardPosts).orderBy(desc(schema.noticeBoardPosts.createdAt));
+    if (!teamId) return all.filter(p => p.audience === "ALL");
+    return all.filter(p => p.audience === "ALL" || (p.audience === "TEAM" && p.teamId === teamId));
+  }
+  async createNoticeBoardPost(post: InsertNoticeBoardPost) {
+    const [created] = await db.insert(schema.noticeBoardPosts).values(post).returning();
+    return created;
+  }
+  async createPushSubscription(sub: InsertPushSubscription) {
+    const existing = await db.select().from(schema.pushSubscriptions)
+      .where(and(eq(schema.pushSubscriptions.userId, sub.userId), eq(schema.pushSubscriptions.endpoint, sub.endpoint)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(schema.pushSubscriptions)
+        .set({ p256dh: sub.p256dh, auth: sub.auth })
+        .where(eq(schema.pushSubscriptions.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(schema.pushSubscriptions).values(sub).returning();
+    return created;
+  }
+  async getPushSubscriptionsByUser(userId: string) {
+    return db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
   }
 }
 

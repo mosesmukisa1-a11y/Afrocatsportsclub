@@ -6,7 +6,7 @@ import {
   Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
   User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
   FileText, Bell, ChevronRight, MessageCircle, Cake, PartyPopper, Gift, Scale,
-  Star, Crosshair, Sparkles
+  Star, Crosshair, Sparkles, Megaphone
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -69,6 +69,12 @@ export default function Dashboard() {
   const { data: notifications = [] } = useQuery({
     queryKey: ["/api/notifications"],
     queryFn: api.getNotifications,
+    enabled: !!user,
+  });
+
+  const { data: notices = [] } = useQuery({
+    queryKey: ["/api/notices"],
+    queryFn: api.getNotices,
     enabled: !!user,
   });
 
@@ -811,6 +817,32 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {notices.length > 0 && (
+          <div className="afrocat-card overflow-hidden" data-testid="card-notices">
+            <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px]">
+              <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-teal">
+                <Megaphone className="h-5 w-5" /> Notice Board
+              </h3>
+            </div>
+            <div className="p-5 space-y-3">
+              {notices.slice(0, 3).map((n: any) => (
+                <div key={n.id} className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid={`dash-notice-${n.id}`}>
+                  <div className="flex items-start justify-between">
+                    <p className="font-semibold text-sm text-afrocat-text">{n.title}</p>
+                    <span className="text-[10px] text-afrocat-muted shrink-0">{new Date(n.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <p className="text-xs text-afrocat-muted mt-1 line-clamp-2">{n.body}</p>
+                </div>
+              ))}
+              {notices.length > 3 && (
+                <Link href="/notices" className="text-xs text-afrocat-teal hover:underline flex items-center gap-1">
+                  View all notices <ChevronRight className="h-3 w-3" />
+                </Link>
               )}
             </div>
           </div>

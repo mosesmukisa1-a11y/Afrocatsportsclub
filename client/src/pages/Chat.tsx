@@ -4,7 +4,10 @@ import { Layout } from "@/components/Layout";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Send, MessageCircle, Wifi, WifiOff } from "lucide-react";
+import { Send, MessageCircle, Wifi, WifiOff, UserPlus, Hash, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 function roleBadgeColor(role: string) {
   switch (role) {
@@ -40,6 +43,8 @@ export default function Chat() {
   const [message, setMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showNewDm, setShowNewDm] = useState(false);
+  const [dmTarget, setDmTarget] = useState("");
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -55,6 +60,29 @@ export default function Chat() {
   const { data: rooms = [] } = useQuery({
     queryKey: ["/chat/rooms"],
     queryFn: () => api.getChatRooms(),
+  });
+
+  const { data: dmThreads = [] } = useQuery({
+    queryKey: ["/chat/dm-threads"],
+    queryFn: () => api.getChatDmThreads(),
+    refetchInterval: 5000,
+  });
+
+  const { data: chatUsers = [] } = useQuery({
+    queryKey: ["/chat/users"],
+    queryFn: () => api.getChatUsers(),
+    enabled: showNewDm,
+  });
+
+  const startDmMut = useMutation({
+    mutationFn: (targetUserId: string) => api.startDm(targetUserId),
+    onSuccess: (data: any) => {
+      setSelectedRoom(data.roomId);
+      setShowNewDm(false);
+      setDmTarget("");
+      queryClient.invalidateQueries({ queryKey: ["/chat/dm-threads"] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   useEffect(() => {
@@ -127,43 +155,92 @@ export default function Chat() {
             <div className="p-3 border-b border-afrocat-border">
               <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider">Rooms</p>
             </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1" data-testid="room-list">
+            <div className="overflow-y-auto p-2 space-y-1" data-testid="room-list">
               {rooms.map((room: any) => (
                 <button
                   key={room.id}
                   onClick={() => setSelectedRoom(room.id)}
                   data-testid={`room-button-${room.id}`}
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
                     selectedRoom === room.id
                       ? "bg-afrocat-teal/15 text-afrocat-teal"
                       : "text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
                   }`}
                 >
-                  # {room.name}
+                  <Hash size={14} /> {room.name}
+                </button>
+              ))}
+            </div>
+            <div className="p-3 border-t border-b border-afrocat-border flex items-center justify-between">
+              <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider">Direct Messages</p>
+              <button onClick={() => setShowNewDm(true)} data-testid="button-new-dm" className="text-afrocat-teal hover:text-afrocat-gold transition-colors">
+                <UserPlus size={14} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {dmThreads.length === 0 && (
+                <p className="text-xs text-afrocat-muted px-3 py-2">No conversations yet</p>
+              )}
+              {dmThreads.map((t: any) => (
+                <button
+                  key={t.roomId}
+                  onClick={() => setSelectedRoom(t.roomId)}
+                  data-testid={`dm-button-${t.roomId}`}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                    selectedRoom === t.roomId
+                      ? "bg-afrocat-teal/15 text-afrocat-teal"
+                      : "text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <User size={14} />
+                    <span className="font-medium truncate">{t.otherUser?.fullName || "Unknown"}</span>
+                  </div>
+                  <p className="text-[10px] text-afrocat-muted truncate mt-0.5 pl-6">{t.lastMessage}</p>
                 </button>
               ))}
             </div>
           </div>
 
-          <div className="md:hidden p-2 bg-afrocat-card border-b border-afrocat-border">
+          <div className="md:hidden p-2 bg-afrocat-card border-b border-afrocat-border flex gap-2">
             <select
               value={selectedRoom}
               onChange={(e) => setSelectedRoom(e.target.value)}
               data-testid="select-room-mobile"
-              className="w-full bg-afrocat-bg text-afrocat-text border border-afrocat-border rounded-md px-3 py-2 text-sm"
+              className="flex-1 bg-afrocat-bg text-afrocat-text border border-afrocat-border rounded-md px-3 py-2 text-sm"
             >
-              {rooms.map((room: any) => (
-                <option key={room.id} value={room.id}>
-                  # {room.name}
-                </option>
-              ))}
+              <optgroup label="Rooms">
+                {rooms.map((room: any) => (
+                  <option key={room.id} value={room.id}># {room.name}</option>
+                ))}
+              </optgroup>
+              {dmThreads.length > 0 && (
+                <optgroup label="Direct Messages">
+                  {dmThreads.map((t: any) => (
+                    <option key={t.roomId} value={t.roomId}>{t.otherUser?.fullName || "DM"}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
+            <button onClick={() => setShowNewDm(true)} data-testid="button-new-dm-mobile" className="bg-afrocat-teal text-white p-2 rounded-md">
+              <UserPlus size={16} />
+            </button>
           </div>
 
           <div className="flex flex-col flex-1 min-w-0">
             <div className="px-4 py-3 border-b border-afrocat-border bg-afrocat-card">
               <p className="text-sm font-semibold text-afrocat-text" data-testid="text-current-room">
-                # {rooms.find((r: any) => r.id === selectedRoom)?.name || "..."}
+                {selectedRoom.startsWith("dm:") ? (
+                  <span className="flex items-center gap-2">
+                    <User size={14} />
+                    {dmThreads.find((t: any) => t.roomId === selectedRoom)?.otherUser?.fullName || "Direct Message"}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Hash size={14} />
+                    {rooms.find((r: any) => r.id === selectedRoom)?.name || "..."}
+                  </span>
+                )}
               </p>
             </div>
 
@@ -252,6 +329,35 @@ export default function Chat() {
           </div>
         </div>
       </div>
+
+      <Dialog open={showNewDm} onOpenChange={setShowNewDm}>
+        <DialogContent className="bg-afrocat-card border-afrocat-border text-afrocat-text max-w-sm">
+          <DialogTitle className="text-lg font-display font-bold text-afrocat-gold">New Direct Message</DialogTitle>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs text-afrocat-muted mb-1 block">Select User</label>
+              <Select value={dmTarget} onValueChange={setDmTarget}>
+                <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="select-dm-user">
+                  <SelectValue placeholder="Choose a user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {chatUsers.filter((u: any) => u.id !== user?.id).map((u: any) => (
+                    <SelectItem key={u.id} value={u.id}>{u.fullName} ({u.role})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              onClick={() => dmTarget && startDmMut.mutate(dmTarget)}
+              disabled={!dmTarget || startDmMut.isPending}
+              data-testid="button-start-dm"
+              className="w-full bg-afrocat-teal hover:bg-afrocat-teal/90 text-white"
+            >
+              {startDmMut.isPending ? "Opening..." : "Start Conversation"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

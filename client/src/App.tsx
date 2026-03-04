@@ -40,6 +40,8 @@ import StatsComparison from "@/pages/StatsComparison";
 import Chat from "@/pages/Chat";
 import MatchSimulation from "@/pages/MatchSimulation";
 import ReportTemplates from "@/pages/ReportTemplates";
+import NoticeBoard from "@/pages/NoticeBoard";
+import EmailCompose from "@/pages/EmailCompose";
 
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
@@ -86,6 +88,8 @@ function Router() {
       <Route path="/chat">{() => <ProtectedRoute component={Chat} />}</Route>
       <Route path="/match-simulation">{() => <ProtectedRoute component={MatchSimulation} />}</Route>
       <Route path="/report-templates">{() => <ProtectedRoute component={ReportTemplates} />}</Route>
+      <Route path="/notices">{() => <ProtectedRoute component={NoticeBoard} />}</Route>
+      <Route path="/email-compose">{() => <ProtectedRoute component={EmailCompose} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

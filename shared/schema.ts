@@ -734,3 +734,30 @@ export const chatMessages = pgTable("chat_messages", {
 export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ id: true, sentAt: true });
 export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+
+export const noticeBoardPosts = pgTable("notice_board_posts", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  audience: text("audience").notNull().default("ALL"),
+  teamId: varchar("team_id", { length: 36 }),
+  createdBy: varchar("created_by", { length: 36 }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNoticeBoardPostSchema = createInsertSchema(noticeBoardPosts).omit({ id: true, createdAt: true });
+export type InsertNoticeBoardPost = z.infer<typeof insertNoticeBoardPostSchema>;
+export type NoticeBoardPost = typeof noticeBoardPosts.$inferSelect;
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
