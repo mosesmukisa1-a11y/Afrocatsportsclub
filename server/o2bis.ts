@@ -1,8 +1,10 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, PDFPage, PDFFont } from "pdf-lib";
 import type { IStorage } from "./storage";
 import * as schema from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
+import fs from "fs";
+import path from "path";
 
 function calculateAge(dob: string): number | string {
   if (!dob) return "";
@@ -48,7 +50,7 @@ export async function generateO2BISPdf(storage: IStorage, options: O2BISOptions)
     .where(eq(schema.matchStaffAssignments.matchId, matchId));
   const staff = staffRows[0] || null;
 
-  const resolveUserName = async (uid: string | null) => {
+  const resolveUserName = async (uid: string | null | undefined) => {
     if (!uid) return skipMissing ? "________________" : "";
     const u = await storage.getUser(uid);
     return u?.fullName || (skipMissing ? "________________" : "");
@@ -69,16 +71,17 @@ export async function generateO2BISPdf(storage: IStorage, options: O2BISOptions)
       const p = allPlayers.find(pl => pl.id === e.playerId);
       return p ? {
         jerseyNo: e.jerseyNo ?? p.jerseyNo ?? "",
-        name: `${(p.lastName || "").toUpperCase()} ${p.firstName}`,
+        name: `${(p.lastName || "").toUpperCase()} ${p.firstName || ""}`.trim(),
         position: p.position || "",
         dob: p.dob || "",
         age: calculateAge(p.dob || ""),
         isCaptain: captainIds.has(p.id),
         isLibero: e.isLibero === true,
-        nationality: p.nationality || "Namibia",
-        gender: p.gender || "",
+        nationality: p.nationality || "",
+        gender: (p.gender || "").charAt(0).toUpperCase() || "",
+        country: (p.nationality || "").substring(0, 3).toUpperCase() || "",
       } : null;
-    }).filter(Boolean).sort((a: any, b: any) => (a.jerseyNo || 99) - (b.jerseyNo || 99));
+    }).filter(Boolean).sort((a: any, b: any) => (Number(a.jerseyNo) || 99) - (Number(b.jerseyNo) || 99));
   }
 
   const officials = await storage.getTeamOfficials(teamId);
@@ -87,105 +90,237 @@ export async function generateO2BISPdf(storage: IStorage, options: O2BISOptions)
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  let page = pdfDoc.addPage([595, 842]);
-  let y = 800;
-  const black = rgb(0, 0, 0);
+  const pageW = 595;
+  const pageH = 842;
+  let page = pdfDoc.addPage([pageW, pageH]);
   const teal = rgb(0.06, 0.55, 0.49);
-  const lineH = 16;
+  const black = rgb(0, 0, 0);
+  const gray = rgb(0.4, 0.4, 0.4);
+  const lightGray = rgb(0.85, 0.85, 0.85);
+  const white = rgb(1, 1, 1);
+  const tealBg = rgb(0.06, 0.55, 0.49);
+  const lM = 40;
+  const rM = pageW - 40;
+  const tableW = rM - lM;
+
+  let y = pageH - 40;
 
   const drawText = (text: string, x: number, yPos: number, size = 10, f = font, color = black) => {
-    page.drawText(text, { x, y: yPos, size, font: f, color });
+    page.drawText(String(text ?? ""), { x, y: yPos, size, font: f, color });
   };
 
-  drawText("O-2 Bis — OFFICIAL TEAM COMPOSITION FORM", 120, y, 14, fontBold, teal);
-  y -= 25;
-  drawText("AFROCAT VOLLEYBALL CLUB", 200, y, 12, fontBold);
+  const drawRect = (x: number, yPos: number, w: number, h: number, color: any) => {
+    page.drawRectangle({ x, y: yPos, width: w, height: h, color });
+  };
+
+  const drawLine = (x1: number, y1: number, x2: number, y2: number, thickness = 0.5) => {
+    page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness, color: black });
+  };
+
+  try {
+    const logoPath = path.join(process.cwd(), "attached_assets", "afrocate_logo_1772226294597.png");
+    if (fs.existsSync(logoPath)) {
+      const logoBytes = fs.readFileSync(logoPath);
+      const logoImage = await pdfDoc.embedPng(logoBytes).catch(() => null);
+      if (logoImage) {
+        const logoDims = logoImage.scale(0.15);
+        page.drawImage(logoImage, {
+          x: (pageW - logoDims.width) / 2,
+          y: y - logoDims.height,
+          width: logoDims.width,
+          height: logoDims.height,
+        });
+        y -= logoDims.height + 5;
+      }
+    }
+  } catch {}
+
+  drawText("AFROCAT VOLLEYBALL CLUB", (pageW - fontBold.widthOfTextAtSize("AFROCAT VOLLEYBALL CLUB", 16)) / 2, y, 16, fontBold, teal);
+  y -= 14;
+  const motto = "One Team One Dream — Passion Discipline Victory";
+  drawText(motto, (pageW - font.widthOfTextAtSize(motto, 8)) / 2, y, 8, font, gray);
   y -= 20;
-  drawText("One Team One Dream — Passion Discipline Victory", 170, y, 9, font, rgb(0.4, 0.4, 0.4));
+
+  const boxTitle = "O-2 Bis — OFFICIAL TEAM COMPOSITION FORM";
+  const boxTitleW = fontBold.widthOfTextAtSize(boxTitle, 12);
+  const boxPad = 15;
+  const boxW = boxTitleW + boxPad * 2;
+  const boxX = (pageW - boxW) / 2;
+  drawRect(boxX, y - 4, boxW, 20, white);
+  page.drawRectangle({ x: boxX, y: y - 4, width: boxW, height: 20, borderColor: black, borderWidth: 1.5, color: white });
+  drawText(boxTitle, boxX + boxPad, y, 12, fontBold, black);
   y -= 30;
 
-  drawText("MATCH INFORMATION", 40, y, 11, fontBold, teal);
-  y -= lineH;
-  drawText(`Competition: ${match.competition || (skipMissing ? "________________" : "")}`, 40, y, 10);
-  if ((match as any).round) drawText(`Round: ${(match as any).round}`, 350, y, 10);
-  y -= lineH;
-  drawText(`Date: ${match.matchDate}`, 40, y, 10);
-  drawText(`Time: ${match.startTime ? new Date(match.startTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : (skipMissing ? "____" : "")}`, 200, y, 10);
-  y -= lineH;
-  drawText(`Venue: ${match.venue || (skipMissing ? "________________" : "")}`, 40, y, 10);
-  y -= lineH;
-  drawText(`Home Team: ${team.name}`, 40, y, 10);
-  drawText(`Away Team: ${match.opponent}`, 300, y, 10);
-  y -= 25;
+  const rowH = 18;
+  const midX = pageW / 2;
+  const labelW = 100;
 
-  drawText("STAFF", 40, y, 11, fontBold, teal);
-  y -= lineH;
-  drawText(`Head Coach: ${headCoachName}`, 40, y, 10);
-  y -= lineH;
-  drawText(`Assistant Coach: ${assistantCoachName}`, 40, y, 10);
-  y -= lineH;
-  drawText(`Medic: ${medicName}`, 40, y, 10);
-  y -= lineH;
-  drawText(`Team Manager: ${teamManagerName}`, 40, y, 10);
-  y -= 25;
+  const drawInfoRow = (label1: string, val1: string, label2: string, val2: string) => {
+    drawRect(lM, y - 2, midX - lM - 5, rowH, rgb(0.96, 0.96, 0.96));
+    drawRect(midX + 5, y - 2, rM - midX - 5, rowH, rgb(0.96, 0.96, 0.96));
+    drawLine(lM, y - 2, midX - 5, y - 2);
+    drawLine(lM, y + rowH - 2, midX - 5, y + rowH - 2);
+    drawLine(lM, y - 2, lM, y + rowH - 2);
+    drawLine(midX - 5, y - 2, midX - 5, y + rowH - 2);
+    drawLine(midX + 5, y - 2, rM, y - 2);
+    drawLine(midX + 5, y + rowH - 2, rM, y + rowH - 2);
+    drawLine(midX + 5, y - 2, midX + 5, y + rowH - 2);
+    drawLine(rM, y - 2, rM, y + rowH - 2);
 
-  drawText("PLAYER LIST", 40, y, 11, fontBold, teal);
-  y -= lineH;
+    drawText(`${label1}:`, lM + 5, y + 4, 8, fontBold, black);
+    drawText(val1, lM + labelW, y + 4, 9, font, black);
+    drawText(`${label2}:`, midX + 10, y + 4, 8, fontBold, black);
+    drawText(val2, midX + 10 + labelW, y + 4, 9, font, black);
+    y -= rowH;
+  };
 
-  const colX = [40, 80, 250, 340, 410, 475];
-  drawText("#", colX[0], y, 9, fontBold);
-  drawText("Name", colX[1], y, 9, fontBold);
-  drawText("Position", colX[2], y, 9, fontBold);
-  drawText("DOB", colX[3], y, 9, fontBold);
-  drawText("Age", colX[4], y, 9, fontBold);
-  drawText("Captain", colX[5], y, 9, fontBold);
-  y -= 3;
-  page.drawLine({ start: { x: 40, y }, end: { x: 555, y }, thickness: 0.5, color: black });
-  y -= lineH;
+  const blank = skipMissing ? "________________" : "";
+  drawInfoRow("Association / Club", team.name || blank, "Opponent", match.opponent || blank);
+  drawInfoRow("Date", match.matchDate || blank, "Venue", match.venue || blank);
+  drawInfoRow("Competition", match.competition || blank, "Head Coach", headCoachName);
+  y -= 15;
 
-  for (const p of players) {
-    if (y < 60) {
-      page = pdfDoc.addPage([595, 842]);
-      y = 800;
+  drawText("PLAYERS", lM, y, 11, fontBold, teal);
+  y -= 8;
+
+  const cols = [
+    { label: "#", x: lM, w: 25 },
+    { label: "JERSEY\nNO.", x: lM + 25, w: 45 },
+    { label: "FULL NAME", x: lM + 70, w: 175 },
+    { label: "DATE OF\nBIRTH", x: lM + 245, w: 65 },
+    { label: "AGE", x: lM + 310, w: 30 },
+    { label: "COUNTRY", x: lM + 340, w: 55 },
+    { label: "M/F", x: lM + 395, w: 25 },
+    { label: "POSITION", x: lM + 420, w: 60 },
+    { label: "SIGNATURE", x: lM + 480, w: tableW - 480 },
+  ];
+
+  const headerH = 24;
+  drawRect(lM, y - headerH + 10, tableW, headerH, tealBg);
+  for (const col of cols) {
+    drawText(col.label.split("\n")[0], col.x + 2, y + 2, 7, fontBold, white);
+    if (col.label.includes("\n")) {
+      drawText(col.label.split("\n")[1], col.x + 2, y - 7, 7, fontBold, white);
     }
-    drawText(String(p.jerseyNo || "—"), colX[0], y, 9);
-    const nameText = p.isLibero ? `${p.name} (L)` : p.name;
-    drawText(nameText, colX[1], y, 9);
-    drawText(p.position, colX[2], y, 9);
-    drawText(p.dob, colX[3], y, 9);
-    drawText(String(p.age || "—"), colX[4], y, 9);
-    if (p.isCaptain) drawText("(C)", colX[5], y, 9, fontBold, teal);
-    y -= lineH;
+    drawLine(col.x, y - headerH + 10, col.x, y + 10, 0.3);
+  }
+  drawLine(rM, y - headerH + 10, rM, y + 10, 0.3);
+  drawLine(lM, y + 10, rM, y + 10, 0.5);
+  drawLine(lM, y - headerH + 10, rM, y - headerH + 10, 0.5);
+  y -= headerH;
+
+  const pRowH = 18;
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    if (y - pRowH < 80) {
+      page = pdfDoc.addPage([pageW, pageH]);
+      y = pageH - 50;
+    }
+    const bg = i % 2 === 0 ? rgb(1, 1, 1) : rgb(0.96, 0.96, 0.96);
+    drawRect(lM, y - pRowH + 10, tableW, pRowH, bg);
+    drawLine(lM, y - pRowH + 10, rM, y - pRowH + 10, 0.3);
+
+    for (const col of cols) {
+      drawLine(col.x, y - pRowH + 10, col.x, y + 10, 0.3);
+    }
+    drawLine(rM, y - pRowH + 10, rM, y + 10, 0.3);
+
+    drawText(String(i + 1), cols[0].x + 5, y - 2, 8, font);
+    drawText(String(p.jerseyNo || ""), cols[1].x + 10, y - 2, 9, fontBold);
+    const nameStr = p.isLibero ? `${p.name} (L)` : p.isCaptain ? `${p.name} (C)` : p.name;
+    drawText(nameStr, cols[2].x + 3, y - 2, 8, font);
+    drawText(String(p.dob || ""), cols[3].x + 3, y - 2, 7, font);
+    drawText(String(p.age || ""), cols[4].x + 5, y - 2, 8, font);
+    drawText(String(p.country || ""), cols[5].x + 3, y - 2, 8, font);
+    drawText(String(p.gender || ""), cols[6].x + 5, y - 2, 8, font);
+    drawText(String(p.position || ""), cols[7].x + 3, y - 2, 8, font);
+
+    y -= pRowH;
   }
 
   if (players.length === 0) {
-    drawText(skipMissing ? "(No players selected)" : "No players in squad", 40, y, 9, font, rgb(0.5, 0.5, 0.5));
-    y -= lineH;
+    drawRect(lM, y - pRowH + 10, tableW, pRowH, white);
+    drawText("No players selected", lM + 5, y - 2, 9, font, gray);
+    drawLine(lM, y - pRowH + 10, rM, y - pRowH + 10, 0.3);
+    y -= pRowH;
   }
 
+  drawLine(lM, y + 10, rM, y + 10, 0.5);
   y -= 20;
-  if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
 
-  if (officials.length > 0) {
-    drawText("TEAM OFFICIALS", 40, y, 11, fontBold, teal);
-    y -= lineH;
-    for (const o of officials) {
-      if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
-      drawText(`${o.role}: ${o.name}`, 40, y, 10);
-      y -= lineH;
+  if (y < 150) { page = pdfDoc.addPage([pageW, pageH]); y = pageH - 50; }
+
+  drawText("TEAM OFFICIALS", lM, y, 11, fontBold, teal);
+  y -= 8;
+
+  const offCols = [
+    { label: "ROLE", x: lM, w: 150 },
+    { label: "FULL NAME", x: lM + 150, w: 200 },
+    { label: "LICENCE NO.", x: lM + 350, w: 80 },
+    { label: "SIGNATURE", x: lM + 430, w: tableW - 430 },
+  ];
+
+  drawRect(lM, y - headerH + 10, tableW, headerH, tealBg);
+  for (const col of offCols) {
+    drawText(col.label, col.x + 3, y + 2, 8, fontBold, white);
+    drawLine(col.x, y - headerH + 10, col.x, y + 10, 0.3);
+  }
+  drawLine(rM, y - headerH + 10, rM, y + 10, 0.3);
+  drawLine(lM, y + 10, rM, y + 10, 0.5);
+  drawLine(lM, y - headerH + 10, rM, y - headerH + 10, 0.5);
+  y -= headerH;
+
+  const allOfficials: { role: string; name: string }[] = [];
+  if (headCoachName) allOfficials.push({ role: "Head Coach", name: headCoachName });
+  if (assistantCoachName) allOfficials.push({ role: "Assistant Coach", name: assistantCoachName });
+  if (teamManagerName) allOfficials.push({ role: "Team Manager", name: teamManagerName });
+  if (medicName) allOfficials.push({ role: "Medic", name: medicName });
+  for (const o of officials) {
+    if (!allOfficials.some(a => a.role === o.role && a.name === o.name)) {
+      allOfficials.push({ role: o.role || "", name: o.name || "" });
     }
-    y -= 10;
   }
 
-  if (y < 60) { page = pdfDoc.addPage([595, 842]); y = 800; }
-  drawText("SIGNATURES", 40, y, 11, fontBold, teal);
-  y -= 25;
-  drawText("Head Coach: ___________________________", 40, y, 10);
-  drawText("Team Manager: ___________________________", 300, y, 10);
-  y -= 25;
-  drawText("Match Commissioner: ___________________________", 40, y, 10);
+  if (allOfficials.length > 0) {
+    for (let i = 0; i < allOfficials.length; i++) {
+      const o = allOfficials[i];
+      if (y - pRowH < 80) { page = pdfDoc.addPage([pageW, pageH]); y = pageH - 50; }
+      const bg = i % 2 === 0 ? rgb(1, 1, 1) : rgb(0.96, 0.96, 0.96);
+      drawRect(lM, y - pRowH + 10, tableW, pRowH, bg);
+      drawLine(lM, y - pRowH + 10, rM, y - pRowH + 10, 0.3);
+      for (const col of offCols) drawLine(col.x, y - pRowH + 10, col.x, y + 10, 0.3);
+      drawLine(rM, y - pRowH + 10, rM, y + 10, 0.3);
+
+      drawText(String(o.role || ""), offCols[0].x + 3, y - 2, 8, font);
+      drawText(String(o.name || ""), offCols[1].x + 3, y - 2, 8, font);
+      y -= pRowH;
+    }
+  } else {
+    drawRect(lM, y - pRowH + 10, tableW, pRowH, white);
+    drawText("No officials listed", (pageW - font.widthOfTextAtSize("No officials listed", 9)) / 2, y - 2, 9, font, gray);
+    drawLine(lM, y - pRowH + 10, rM, y - pRowH + 10, 0.3);
+    for (const col of offCols) drawLine(col.x, y - pRowH + 10, col.x, y + 10, 0.3);
+    drawLine(rM, y - pRowH + 10, rM, y + 10, 0.3);
+    y -= pRowH;
+  }
+  drawLine(lM, y + 10, rM, y + 10, 0.5);
   y -= 30;
-  drawText(`Generated: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`, 40, y, 8, font, rgb(0.5, 0.5, 0.5));
+
+  if (y < 100) { page = pdfDoc.addPage([pageW, pageH]); y = pageH - 50; }
+
+  const sigW = (tableW - 20) / 3;
+  const sigLabels = ["Team Captain", "Head Coach", "Match Commissioner"];
+  for (let i = 0; i < 3; i++) {
+    const sx = lM + i * (sigW + 10);
+    drawText(sigLabels[i], sx, y, 9, fontBold, black);
+    y = y;
+    drawText("Sign: _______________", sx, y - 18, 8, font, black);
+    drawText("Date: _______________", sx, y - 32, 8, font, black);
+  }
+  y -= 50;
+
+  drawText(`Generated: ${new Date().toLocaleDateString("en-GB")} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`,
+    lM, y, 7, font, gray);
 
   const pdfBytes = await pdfDoc.save();
   return Buffer.from(pdfBytes);
