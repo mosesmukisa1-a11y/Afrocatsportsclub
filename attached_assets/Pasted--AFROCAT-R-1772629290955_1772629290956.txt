@@ -1,0 +1,724 @@
+/*****************************************************************************************
+AFROCAT REPLIT SCRIPT (PASTE ALL) – CONTRACT BYPASS FOR SELECTION + MEDIA + CHAT + NOTICE BOARD
++ BACKGROUND NOTIFICATIONS + EMAIL BUTTON (FROM afrocatvolleyballclub@gmail.com, AUTO CC afrocatladiesvc@gmail.com)
+
+WHAT THIS DOES:
+1) ✅ Allow players WITHOUT approved contracts to be selected for matches and O2BIS.
+2) ✅ Admin + Super Admin can upload media.
+3) ✅ All users see a Media section on dashboard (feed/gallery).
+4) ✅ Players can message each other + officials (in-app chat).
+5) ✅ Notice Board: club posts to all team members.
+6) ✅ Background notifications (Web Push via Service Worker) + in-app notifications.
+7) ✅ Email send button uses Gmail sender afrocatvolleyballclub@gmail.com and auto-CC afrocatladiesvc@gmail.com.
+
+IMPORTANT ENV VARS (Replit Secrets):
+- GMAIL_USER=afrocatvolleyballclub@gmail.com
+- GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx     (Google App Password)
+- EMAIL_AUTO_CC=afrocatladiesvc@gmail.com
+
+For Web Push (optional but recommended for background notifications):
+- VAPID_PUBLIC_KEY=...
+- VAPID_PRIVATE_KEY=...
+
+Deps:
+npm i multer nodemailer web-push
+
+******************************************************************************************/
+
+/* =======================================================================================
+1) CONTRACT RULE CHANGE: ALLOW UNAPPROVED CONTRACTS FOR MATCH/O2BIS SELECTION
+======================================================================================= */
+/**
+ * Replit: Remove any checks like:
+ *   if (!player.contractAccepted) block selection
+ *
+ * Replace with:
+ *   allow selection always
+ * Optional: show warning badge only (UI) “Contract not confirmed”
+ *
+ * Update O2BIS generator: DO NOT filter out players by contract status.
+ * Only show contract status on admin view if you want.
+ */
+
+/* =======================================================================================
+2) PRISMA MODELS (IF YOU USE PRISMA) – add/update
+(If you don’t use Prisma, mirror these fields in your DB store)
+======================================================================================= */
+/**
+model MediaItem {
+  id          String   @id @default(cuid())
+  title       String?
+  description String?
+  url         String   // stored file url or external url
+  mimeType    String?
+  uploadedBy  String?
+  teamId      String?  // optional: restrict by team, else public club media
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model ChatThread {
+  id          String   @id @default(cuid())
+  title       String?
+  isGroup     Boolean  @default(false)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+}
+
+model ChatParticipant {
+  id        String @id @default(cuid())
+  threadId  String
+  userId    String
+  role      String? // "PLAYER"|"COACH"|"OFFICIAL"|"ADMIN"
+  createdAt DateTime @default(now())
+  @@unique([threadId, userId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  threadId  String
+  senderId  String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model NoticeBoardPost {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  audience  String   @default("ALL") // ALL | TEAM
+  teamId    String?
+  createdBy String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String
+  title      String
+  message    String
+  linkUrl    String?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  @@unique([userId, endpoint])
+}
+ */
+
+/* =======================================================================================
+3) BACKEND: ROLE HELPERS
+======================================================================================= */
+export function requireAuth(req, res, next) {
+  if (!req.user?.id) return res.status(401).json({ ok:false, error:"Not logged in" });
+  next();
+}
+export function isAdmin(user) {
+  const r = (user?.role || "").toUpperCase();
+  return r === "ADMIN" || r === "SUPER_ADMIN";
+}
+export function isSuperAdmin(user) {
+  return (user?.role || "").toUpperCase() === "SUPER_ADMIN";
+}
+export function requireAdmin(req, res, next) {
+  if (!isAdmin(req.user)) return res.status(403).json({ ok:false, error:"Admins only" });
+  next();
+}
+
+/* =======================================================================================
+4) BACKEND: MEDIA UPLOAD + FEED
+FILE: server/routes/media.js
+======================================================================================= */
+import express from "express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+const router = express.Router();
+
+const uploadDir = path.resolve("public/uploads/media");
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+    cb(null, `${Date.now()}_${safe}`);
+  },
+});
+const upload = multer({ storage });
+
+router.get("/media", async (req, res) => {
+  // Everyone can view media
+  const teamId = req.query.teamId || null;
+  const where = teamId ? { OR: [{ isPublic:true }, { teamId }] } : { isPublic:true };
+  const items = await req.db.mediaItem.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  res.json({ ok:true, items });
+});
+
+router.post("/media/upload", requireAuth, requireAdmin, upload.single("file"), async (req, res) => {
+  // Admin + Super Admin can upload
+  const { title, description, teamId, isPublic } = req.body || {};
+  const file = req.file;
+  if (!file) return res.status(400).json({ ok:false, error:"No file uploaded" });
+
+  const url = `/uploads/media/${file.filename}`;
+  const item = await req.db.mediaItem.create({
+    data: {
+      title: title || null,
+      description: description || null,
+      teamId: teamId || null,
+      isPublic: String(isPublic ?? "true") === "true",
+      url,
+      mimeType: file.mimetype || null,
+      uploadedBy: req.user.id,
+    },
+  });
+
+  // Notify all users (or only team users if teamId)
+  await notifyAudience(req, {
+    audience: teamId ? "TEAM" : "ALL",
+    teamId: teamId || null,
+    type: "MEDIA_NEW",
+    title: "📸 New Media Uploaded",
+    message: item.title ? item.title : "New club media available.",
+    linkUrl: "/dashboard?tab=media",
+  });
+
+  res.json({ ok:true, item });
+});
+
+export default router;
+
+/* =======================================================================================
+5) BACKEND: CHAT (Players + Officials + Coaches) – THREADS + MESSAGES
+FILE: server/routes/chat.js
+======================================================================================= */
+import express from "express";
+const router = express.Router();
+
+router.get("/chat/threads", requireAuth, async (req, res) => {
+  const threads = await req.db.chatThread.findMany({
+    where: { participants: { some: { userId: req.user.id } } },
+    orderBy: { createdAt: "desc" },
+    include: { participants: true },
+    take: 100,
+  });
+  res.json({ ok:true, threads });
+});
+
+router.post("/chat/threads", requireAuth, async (req, res) => {
+  const { title, participantUserIds = [], isGroup = false } = req.body || {};
+  const ids = Array.from(new Set([req.user.id, ...participantUserIds])).filter(Boolean);
+  if (ids.length < 2) return res.status(400).json({ ok:false, error:"Need at least 2 participants" });
+
+  const thread = await req.db.chatThread.create({
+    data: {
+      title: title || null,
+      isGroup: !!isGroup,
+      createdBy: req.user.id,
+      participants: { create: ids.map(uid => ({ userId: uid })) },
+    },
+    include: { participants: true },
+  });
+
+  // Notify participants
+  for (const uid of ids) {
+    if (uid === req.user.id) continue;
+    await createNotification(req, {
+      userId: uid,
+      type: "CHAT_NEW_THREAD",
+      title: "💬 New Chat",
+      message: title ? `New chat: ${title}` : "You have been added to a chat.",
+      linkUrl: "/dashboard?tab=chat",
+    });
+  }
+
+  res.json({ ok:true, thread });
+});
+
+router.get("/chat/messages", requireAuth, async (req, res) => {
+  const { threadId } = req.query;
+  if (!threadId) return res.status(400).json({ ok:false, error:"threadId required" });
+
+  const isMember = await req.db.chatParticipant.findFirst({ where: { threadId, userId: req.user.id } });
+  if (!isMember) return res.status(403).json({ ok:false, error:"Not a participant" });
+
+  const messages = await req.db.chatMessage.findMany({
+    where: { threadId },
+    orderBy: { createdAt: "asc" },
+    take: 500,
+  });
+
+  res.json({ ok:true, messages });
+});
+
+router.post("/chat/messages", requireAuth, async (req, res) => {
+  const { threadId, body } = req.body || {};
+  if (!threadId || !body) return res.status(400).json({ ok:false, error:"threadId and body required" });
+
+  const isMember = await req.db.chatParticipant.findFirst({ where: { threadId, userId: req.user.id } });
+  if (!isMember) return res.status(403).json({ ok:false, error:"Not a participant" });
+
+  const msg = await req.db.chatMessage.create({
+    data: { threadId, senderId: req.user.id, body: String(body).slice(0, 4000) },
+  });
+
+  // Notify other participants (background + in-app)
+  const participants = await req.db.chatParticipant.findMany({ where: { threadId } });
+  for (const p of participants) {
+    if (p.userId === req.user.id) continue;
+    await createNotification(req, {
+      userId: p.userId,
+      type: "CHAT_MESSAGE",
+      title: "💬 New Message",
+      message: String(body).slice(0, 120),
+      linkUrl: `/dashboard?tab=chat&threadId=${threadId}`,
+    });
+  }
+
+  res.json({ ok:true, msg });
+});
+
+export default router;
+
+/* =======================================================================================
+6) BACKEND: NOTICE BOARD (Broadcast to ALL or TEAM)
+FILE: server/routes/notice.js
+======================================================================================= */
+import express from "express";
+const router = express.Router();
+
+router.get("/notice", requireAuth, async (req, res) => {
+  // Everyone can read notices
+  const teamId = req.user?.teamId || null;
+  const posts = await req.db.noticeBoardPost.findMany({
+    where: { OR: [{ audience:"ALL" }, { audience:"TEAM", teamId }] },
+    orderBy: { createdAt:"desc" },
+    take: 200,
+  });
+  res.json({ ok:true, posts });
+});
+
+router.post("/notice", requireAuth, requireAdmin, async (req, res) => {
+  const { title, body, audience="ALL", teamId=null } = req.body || {};
+  if (!title || !body) return res.status(400).json({ ok:false, error:"title and body required" });
+
+  const post = await req.db.noticeBoardPost.create({
+    data: {
+      title: String(title).slice(0, 200),
+      body: String(body).slice(0, 10000),
+      audience: audience === "TEAM" ? "TEAM" : "ALL",
+      teamId: audience === "TEAM" ? teamId : null,
+      createdBy: req.user.id,
+    },
+  });
+
+  // Notify audience
+  await notifyAudience(req, {
+    audience: post.audience,
+    teamId: post.teamId,
+    type: "NOTICE_NEW",
+    title: "📌 Notice Board",
+    message: post.title,
+    linkUrl: "/dashboard?tab=notice",
+  });
+
+  res.json({ ok:true, post });
+});
+
+export default router;
+
+/* =======================================================================================
+7) BACKGROUND NOTIFICATIONS (Web Push) + In-App Notifications
+FILE: server/routes/notifications.js
+======================================================================================= */
+import express from "express";
+import webpush from "web-push";
+
+const router = express.Router();
+
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails("mailto:afrocatvolleyballclub@gmail.com", VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
+
+router.get("/notifications", requireAuth, async (req, res) => {
+  const items = await req.db.notification.findMany({
+    where: { userId: req.user.id },
+    orderBy: { createdAt:"desc" },
+    take: 200,
+  });
+  res.json({ ok:true, items });
+});
+
+router.post("/notifications/read", requireAuth, async (req, res) => {
+  const { notificationId } = req.body || {};
+  await req.db.notification.update({ where: { id: notificationId }, data: { isRead:true } });
+  res.json({ ok:true });
+});
+
+// Save browser push subscription
+router.post("/push/subscribe", requireAuth, async (req, res) => {
+  const sub = req.body;
+  if (!sub?.endpoint || !sub?.keys?.p256dh || !sub?.keys?.auth) {
+    return res.status(400).json({ ok:false, error:"Invalid subscription" });
+  }
+
+  await req.db.pushSubscription.upsert({
+    where: { userId_endpoint: { userId: req.user.id, endpoint: sub.endpoint } },
+    update: { p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+    create: { userId: req.user.id, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth },
+  });
+
+  res.json({ ok:true });
+});
+
+export default router;
+
+// helper used by other routes
+export async function createNotification(req, { userId, type, title, message, linkUrl }) {
+  const notif = await req.db.notification.create({
+    data: { userId, type, title, message, linkUrl: linkUrl || null },
+  });
+
+  // Send web push if configured
+  const VAPID_ON = !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+  if (VAPID_ON) {
+    const subs = await req.db.pushSubscription.findMany({ where: { userId } });
+    for (const s of subs) {
+      const payload = JSON.stringify({ title, message, linkUrl });
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: s.endpoint,
+            keys: { p256dh: s.p256dh, auth: s.auth },
+          },
+          payload
+        );
+      } catch (e) {
+        // ignore failures (expired endpoints etc)
+      }
+    }
+  }
+  return notif;
+}
+
+export async function notifyAudience(req, { audience, teamId, type, title, message, linkUrl }) {
+  let users = [];
+  if (audience === "TEAM" && teamId) {
+    users = await req.db.user.findMany({ where: { teamId }, select: { id:true } });
+  } else {
+    users = await req.db.user.findMany({ select: { id:true } });
+  }
+  for (const u of users) {
+    await createNotification(req, { userId: u.id, type, title, message, linkUrl });
+  }
+}
+
+/* =======================================================================================
+8) EMAIL SEND BUTTON (Gmail)
+FILE: server/routes/email.js
+======================================================================================= */
+import express from "express";
+import nodemailer from "nodemailer";
+
+const router = express.Router();
+
+function requireEmailConfig(req, res, next) {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+    return res.status(500).json({ ok:false, error:"Email not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD in Replit Secrets." });
+  }
+  next();
+}
+
+router.post("/email/send", requireAuth, requireAdmin, requireEmailConfig, async (req, res) => {
+  const from = process.env.GMAIL_USER; // afrocatvolleyballclub@gmail.com
+  const autoCc = process.env.EMAIL_AUTO_CC || "afrocatladiesvc@gmail.com";
+
+  const { to, subject, text, html } = req.body || {};
+  if (!to || !subject || (!text && !html)) {
+    return res.status(400).json({ ok:false, error:"to, subject, and text/html required" });
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
+  });
+
+  const info = await transporter.sendMail({
+    from: `"Afrocat Volleyball Club" <${from}>`,
+    to,
+    cc: autoCc,
+    subject: String(subject).slice(0, 200),
+    text: text ? String(text) : undefined,
+    html: html ? String(html) : undefined,
+  });
+
+  res.json({ ok:true, messageId: info.messageId });
+});
+
+export default router;
+
+/* =======================================================================================
+9) SERVER INDEX: MOUNT ROUTES + STATIC
+FILE: server/index.js (or your main server file)
+======================================================================================= */
+/**
+import mediaRouter from "./routes/media.js";
+import chatRouter from "./routes/chat.js";
+import noticeRouter from "./routes/notice.js";
+import notificationsRouter from "./routes/notifications.js";
+import emailRouter from "./routes/email.js";
+
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ extended:true }));
+
+// static for uploaded files
+app.use(express.static("public"));
+
+app.use("/api", mediaRouter);
+app.use("/api", chatRouter);
+app.use("/api", noticeRouter);
+app.use("/api", notificationsRouter);
+app.use("/api", emailRouter);
+
+// IMPORTANT: remove contract restriction from match selection and O2BIS generator
+**/
+
+/* =======================================================================================
+10) FRONTEND DASHBOARD: MEDIA + CHAT + NOTICE + NOTIFICATIONS + EMAIL BUTTON
+Add tabs: media, chat, notice, notifications, email (admin only)
+======================================================================================= */
+
+/* --- Service Worker registration (background notifications) ---
+FILE: src/push/registerPush.js
+*/
+export async function registerPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return { ok:false, error:"Push not supported" };
+
+  const reg = await navigator.serviceWorker.register("/sw.js");
+
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return { ok:false, error:"Permission denied" };
+
+  // VAPID public key must be available from your server or env-injected client config
+  const publicKey = window.__VAPID_PUBLIC_KEY__;
+  if (!publicKey) return { ok:false, error:"Missing VAPID public key" };
+
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
+
+  await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify(sub),
+  });
+
+  return { ok:true };
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+/* --- Service Worker file (public/sw.js) --- */
+self.addEventListener("push", (event) => {
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || "Afrocat";
+  const options = { body: data.message || "", data: { linkUrl: data.linkUrl || "/" } };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const link = event.notification.data?.linkUrl || "/";
+  event.waitUntil(clients.openWindow(link));
+});
+
+/* --- Media tab component: src/components/DashboardMedia.jsx --- */
+import React, { useEffect, useState } from "react";
+export function DashboardMedia({ teamId, isAdmin }) {
+  const [items, setItems] = useState([]);
+  const [file, setFile] = useState(null);
+  const [title, setTitle] = useState("");
+
+  async function load() {
+    const r = await fetch(`/api/media${teamId ? `?teamId=${teamId}` : ""}`);
+    const d = await r.json();
+    if (d?.ok) setItems(d.items);
+  }
+  useEffect(() => { load(); }, [teamId]);
+
+  async function upload() {
+    if (!file) return alert("Choose a file");
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("title", title);
+    fd.append("teamId", teamId || "");
+    fd.append("isPublic", "true");
+
+    const r = await fetch("/api/media/upload", { method: "POST", body: fd });
+    const d = await r.json().catch(()=>null);
+    if (!r.ok || !d?.ok) return alert(d?.error || "Upload failed");
+    setFile(null); setTitle(""); await load();
+  }
+
+  return (
+    <div style={{ padding:12 }}>
+      <h3>Media</h3>
+
+      {isAdmin ? (
+        <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:12 }}>
+          <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Title (optional)" />
+          <input type="file" onChange={e=>setFile(e.target.files?.[0] || null)} />
+          <button onClick={upload}>Upload</button>
+        </div>
+      ) : null}
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px,1fr))", gap:10 }}>
+        {items.map(x => (
+          <a key={x.id} href={x.url} target="_blank" rel="noreferrer" style={{ border:"1px solid #ddd", borderRadius:12, padding:10, textDecoration:"none" }}>
+            <div style={{ fontWeight:900 }}>{x.title || "Media"}</div>
+            <div style={{ fontSize:12, opacity:0.75 }}>{new Date(x.createdAt).toLocaleString()}</div>
+            {String(x.mimeType||"").startsWith("image/") ? <img src={x.url} alt="" style={{ width:"100%", marginTop:8, borderRadius:10 }} /> : null}
+            {String(x.mimeType||"").startsWith("video/") ? <video src={x.url} controls style={{ width:"100%", marginTop:8, borderRadius:10 }} /> : null}
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* --- Notice tab component: src/components/DashboardNotice.jsx --- */
+import React, { useEffect, useState } from "react";
+export function DashboardNotice({ isAdmin, teamId }) {
+  const [posts, setPosts] = useState([]);
+  const [form, setForm] = useState({ title:"", body:"", audience:"ALL" });
+
+  async function load() {
+    const r = await fetch("/api/notice");
+    const d = await r.json();
+    if (d?.ok) setPosts(d.posts);
+  }
+  useEffect(()=>{ load(); }, []);
+
+  async function postNotice() {
+    const payload = { ...form, teamId: form.audience==="TEAM" ? teamId : null };
+    const r = await fetch("/api/notice", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+    const d = await r.json().catch(()=>null);
+    if (!r.ok || !d?.ok) return alert(d?.error || "Failed");
+    setForm({ title:"", body:"", audience:"ALL" });
+    load();
+  }
+
+  return (
+    <div style={{ padding:12 }}>
+      <h3>Notice Board</h3>
+
+      {isAdmin ? (
+        <div style={{ border:"1px solid #ddd", borderRadius:12, padding:10, marginBottom:12 }}>
+          <div style={{ display:"flex", gap:8 }}>
+            <input value={form.title} onChange={e=>setForm(p=>({ ...p, title:e.target.value }))} placeholder="Title" style={{ flex:1 }} />
+            <select value={form.audience} onChange={e=>setForm(p=>({ ...p, audience:e.target.value }))}>
+              <option value="ALL">ALL</option>
+              <option value="TEAM">TEAM</option>
+            </select>
+            <button onClick={postNotice}>Post</button>
+          </div>
+          <textarea value={form.body} onChange={e=>setForm(p=>({ ...p, body:e.target.value }))} placeholder="Message" style={{ width:"100%", marginTop:8, minHeight:80 }} />
+        </div>
+      ) : null}
+
+      {posts.map(p => (
+        <div key={p.id} style={{ border:"1px solid #eee", borderRadius:12, padding:10, marginBottom:10 }}>
+          <div style={{ fontWeight:900 }}>{p.title}</div>
+          <div style={{ fontSize:12, opacity:0.75 }}>{new Date(p.createdAt).toLocaleString()}</div>
+          <div style={{ marginTop:8, whiteSpace:"pre-wrap" }}>{p.body}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* --- Email button (Admin only): src/components/AdminEmail.jsx --- */
+import React, { useState } from "react";
+export function AdminEmail() {
+  const [to, setTo] = useState("");
+  const [subject, setSubject] = useState("");
+  const [text, setText] = useState("");
+
+  async function send() {
+    const r = await fetch("/api/email/send", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ to, subject, text }),
+    });
+    const d = await r.json().catch(()=>null);
+    if (!r.ok || !d?.ok) return alert(d?.error || "Failed");
+    alert("Email sent ✅ (auto-CC afrocatladiesvc@gmail.com)");
+  }
+
+  return (
+    <div style={{ padding:12 }}>
+      <h3>Send Email</h3>
+      <div style={{ display:"grid", gap:8, maxWidth:600 }}>
+        <input value={to} onChange={e=>setTo(e.target.value)} placeholder="To (comma separated)" />
+        <input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Subject" />
+        <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Message" style={{ minHeight:120 }} />
+        <button onClick={send}>Send from afrocatvolleyballclub@gmail.com</button>
+      </div>
+    </div>
+  );
+}
+
+/* =======================================================================================
+11) FINAL NOTE TO REPLIT (VERY IMPORTANT)
+=======================================================================================
+
+A) MATCH/O2BIS SELECTION:
+- Remove contract approval constraint entirely.
+- Players appear in selection lists and O2BIS regardless of contract status.
+
+B) MEDIA:
+- Only Admin/Super Admin can upload.
+- All users can view “Media” tab in dashboard.
+
+C) CHAT:
+- Allow threads between players and officials/coaches.
+- Notify participants on new message (in-app + web push if enabled).
+
+D) NOTICE BOARD:
+- Admins post to ALL or TEAM; notify everyone.
+
+E) BACKGROUND NOTIFICATIONS:
+- Use Web Push (service worker) + Notification table.
+- If you don’t set VAPID keys, in-app notifications still work.
+
+F) EMAIL:
+- Use Gmail App Password via Replit Secrets.
+- Sender must be afrocatvolleyballclub@gmail.com
+- Auto CC afrocatladiesvc@gmail.com ALWAYS.
+
+END
+======================================================================================= */
