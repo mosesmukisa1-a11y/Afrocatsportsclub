@@ -1,0 +1,241 @@
+REPLIT – MEDIA (MULTI-SELECT FAST UPLOAD + DOWNLOAD + SLIDESHOW) + EMAIL MEMBER PICKER + ROLE SWITCH PERSIST
++ CHAT MOBILE + PARTICIPANT IDENTITIES + OFFICIALS TAB + COACH CORNER INTERACTIVE COURT
+
+========================================================
+A) MEDIA – MULTIPLE SELECTIONS + FASTER UPLOAD + DOWNLOAD + SLIDEVIEW
+========================================================
+
+1) MULTI-FILE UPLOAD (ADMIN/SUPER ADMIN)
+Frontend:
+- file input must allow multiple:
+  <input type="file" multiple />
+- Upload all selected files in ONE request OR concurrent batches (faster).
+
+Backend:
+- Change upload route from single file to multi:
+POST /api/media/upload
+multipart/form-data:
+- files[] (multiple)
+- title (optional) // can apply same title prefix, or empty
+- description (optional)
+- teamId (optional)
+- isPublic
+
+Use multer:
+upload.array("files", 10)  // allow up to 10 per request (config)
+
+Return:
+{ ok:true, items:[...] }
+
+2) FASTER UPLOAD (UX + PERFORMANCE)
+- Show progress per file
+- Start uploads immediately after file selection
+- Use parallel uploads in batches of 3–4 if not using a single multi request
+- Compress images client-side (optional later) – NOT required now
+
+3) ALLOW USERS TO DOWNLOAD MEDIA
+- On each media item add a Download button:
+  <a href={url} download>Download</a>
+- Backend ensure:
+  Content-Disposition: attachment for downloads endpoint (optional)
+Simpler:
+- Use direct URL with download attribute
+
+4) SLIDEVIEW ON PLAYER DASHBOARDS
+Add “Media Slideshow” card:
+- Shows latest media items (images/videos)
+- Next/Prev arrows + autoplay toggle
+- Fullscreen view on tap
+
+========================================================
+B) SEND EMAIL – MEMBER LIST + SEARCH + AUTO EMAIL FILL
+========================================================
+
+Requirement:
+On “Send Email” button, show searchable list of all registered members and auto-fill emails.
+
+Implementation:
+1) API:
+GET /api/members/search?q=...
+Returns list:
+[{ userId, fullName, role, teamName, email }]
+
+2) UI:
+- Search input (name/team/role)
+- Results list with checkboxes
+- “Add Selected” button
+- To field auto filled with selected emails (comma-separated)
+
+Also add quick filters:
+- Team dropdown
+- Role dropdown (PLAYER/COACH/OFFICIAL/ADMIN)
+
+Email send:
+POST /api/email/send
+Body:
+{ to:[emails], subject, text/html }
+Server joins array, keeps auto-CC afrocatladiesvc@gmail.com.
+
+========================================================
+C) ROLE SWITCH – MUST PERSIST AFTER REFRESH
+========================================================
+
+Problem:
+Profile switching disappears after refresh.
+
+Fix:
+- Store selected “active role profile” in:
+  localStorage.setItem("activeRole", "COACH" | "ADMIN" | "OFFICIAL" | "PLAYER")
+- Also store “activeTeamId” if needed.
+
+On app load:
+- Read localStorage
+- Set UI state accordingly
+- Keep switcher visible at all times (top navbar)
+
+Server side (important):
+- Active role should NOT grant permissions beyond the user’s real roles.
+- It only changes dashboard view, not security.
+
+Implementation:
+- User object returns roles array: ["PLAYER","COACH"]
+- Switcher allows only roles user actually has
+- After refresh, keep same selected role if still allowed.
+
+========================================================
+D) CHAT – MOBILE FRIENDLY + NOTIFY RECIPIENTS + SHOW REAL IDENTITIES
+========================================================
+
+1) MOBILE FRIENDLY CHAT UI
+- Use WhatsApp-style:
+  - Threads list
+  - Messages view
+  - Sticky input at bottom
+  - Big tap targets
+- Add unread badge counts
+
+2) NOTIFY RECIPIENTS OF AVAILABLE CHATS
+When:
+- new thread created
+- new message arrives
+Create Notification:
+type="CHAT_MESSAGE"
+title="💬 New message from {SenderName}"
+linkUrl="/dashboard?tab=chat&threadId=..."
+
+Background push uses same notifications.
+
+3) IDENTIFY PARTICIPANTS CLEARLY
+In thread header and participant list, show:
+- Registration full name (FirstName LastName)
+- Login username/email (small text)
+- Role badge (PLAYER/COACH/OFFICIAL)
+- Team name if applicable
+
+API response for chat threads/messages must include:
+- sender displayName
+- sender role
+- sender team
+
+Example message display:
+“John Shikongo (PLAYER – Afrocat Ladies)”
+small: “login: john@email.com”
+
+========================================================
+E) OFFICIALS TAB (ADMIN)
+========================================================
+
+Requirement:
+Officials can be quickly found and allocated teams.
+
+Implement admin tab “Officials”:
+- List all officials
+- Search (name, phone, email)
+- Assign to team(s) with role:
+  - Referee
+  - Scorer
+  - Line Judge
+  - Medic (if treated as official)
+  - Commissioner
+
+Data:
+OfficialTeamAssignment:
+- officialUserId
+- teamId
+- officialRole
+- active (boolean)
+- createdAt
+
+UI actions:
+- “Assign Team” button per official
+- Multi-team assignment allowed
+- Remove assignment
+
+Also integrate with match scheduling:
+- When selecting match officials, dropdown pulls from OfficialTeamAssignment + all officials
+
+========================================================
+F) COACH CORNER – INTERACTIVE COURT WITH MOVABLE BUTTONS
+========================================================
+
+Requirement:
+Interactive court to explain tactics; movable player markers.
+
+Coach Corner component:
+- Volleyball court image/background (2D)
+- Draggable markers:
+  - P1–P6 (Afrocat players)
+  - Opponent markers optional (grey)
+  - Ball marker
+- Tap marker => set label/name/role (setter, libero, OH, MB)
+- Save “Plays”:
+  - Store positions to DB:
+    CoachTacticBoard:
+      id, coachUserId, teamId, title, boardJson, createdAt
+
+Features:
+- Drag & drop markers (touch friendly)
+- Undo / Reset
+- Save & Load plays
+- Share play link to players (view-only)
+
+Tech:
+- Use simple HTML5 drag + pointer events (no heavy library).
+- Ensure mobile: use pointerdown/move/up.
+
+========================================================
+G) IMPLEMENTATION SUMMARY (WHAT REPLIT MUST DO)
+========================================================
+
+1) Media:
+- change upload to multiple files
+- faster UX (progress)
+- add download button
+- add slideshow view on dashboards
+
+2) Email:
+- add member search API + picker UI
+- auto-fill selected emails
+
+3) Role switch:
+- persist in localStorage
+- keep always visible (navbar)
+- only allow roles user has
+
+4) Chat:
+- mobile UI upgrade
+- sender identity labels (registration + login)
+- notifications for threads/messages
+
+5) Officials tab:
+- admin searchable officials list
+- assign officials to teams quickly
+- pull into match official selection
+
+6) Coach corner:
+- interactive draggable court
+- save/load tactics boards
+
+========================================================
+END – IMPLEMENT EXACTLY
+========================================================

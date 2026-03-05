@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CalendarCheck, Calendar, Users, Send, Loader2, Lock, ShieldCheck, Pencil } from "lucide-react";
+import { Plus, CalendarCheck, Calendar, Users, Send, Loader2, Lock, ShieldCheck, Pencil, AlertCircle, Check, X } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -413,7 +413,151 @@ export default function Attendance() {
             })}
           </div>
         )}
+
+        <ExcuseRequestSection user={user} sessions={sessions} />
       </div>
     </Layout>
+  );
+}
+
+function ExcuseRequestSection({ user, sessions }: { user: any; sessions: any[] }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const isPlayer = user?.role === "PLAYER" || user?.playerId;
+  const isManager = user && (user.role === "ADMIN" || user.role === "MANAGER" || user.role === "COACH" || user.isSuperAdmin);
+
+  const [showForm, setShowForm] = useState(false);
+  const [excuseForm, setExcuseForm] = useState({ sessionId: "", sessionDate: "", excuseType: "EXCUSE", reason: "" });
+
+  const { data: myRequests = [] } = useQuery({ queryKey: ["/api/attendance/excuse-requests/mine"], queryFn: api.getMyExcuseRequests, enabled: !!isPlayer });
+  const { data: allRequests = [] } = useQuery({ queryKey: ["/api/attendance/excuse-requests"], queryFn: api.getExcuseRequests, enabled: !!isManager });
+
+  const submitMut = useMutation({
+    mutationFn: (data: any) => api.submitExcuseRequest(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/excuse-requests/mine"] });
+      toast({ title: "Request Submitted" });
+      setShowForm(false);
+      setExcuseForm({ sessionId: "", sessionDate: "", excuseType: "EXCUSE", reason: "" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const approveMut = useMutation({
+    mutationFn: (id: string) => api.approveExcuseRequest(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/attendance/excuse-requests"] }); toast({ title: "Approved" }); },
+  });
+
+  const rejectMut = useMutation({
+    mutationFn: (id: string) => api.rejectExcuseRequest(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/attendance/excuse-requests"] }); toast({ title: "Rejected" }); },
+  });
+
+  const pendingRequests = allRequests.filter((r: any) => r.status === "PENDING");
+
+  return (
+    <div className="space-y-4 mt-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-display font-bold text-afrocat-text flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-afrocat-gold" /> Excuse / Late Requests
+        </h2>
+        {isPlayer && (
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-afrocat-gold text-white font-bold text-sm cursor-pointer" data-testid="button-request-excuse">
+            <Plus className="w-4 h-4" /> Request Excuse / Late
+          </button>
+        )}
+      </div>
+
+      {isManager && pendingRequests.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold text-afrocat-muted uppercase">Pending Approval ({pendingRequests.length})</h3>
+          {pendingRequests.map((r: any) => (
+            <div key={r.id} className="afrocat-card p-4 flex items-center gap-3" data-testid={`excuse-pending-${r.id}`}>
+              <div className="flex-1">
+                <div className="font-bold text-sm text-afrocat-text">{r.playerName}</div>
+                <div className="text-[10px] text-afrocat-muted">{r.excuseType} • {r.sessionDate || "Session"} • {r.reason}</div>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-400">{r.excuseType}</span>
+              <div className="flex gap-1">
+                <button onClick={() => approveMut.mutate(r.id)} className="p-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 cursor-pointer" data-testid={`button-approve-excuse-${r.id}`}><Check className="w-4 h-4" /></button>
+                <button onClick={() => rejectMut.mutate(r.id)} className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 cursor-pointer"><X className="w-4 h-4" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isPlayer && myRequests.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold text-afrocat-muted uppercase">My Requests</h3>
+          {myRequests.map((r: any) => (
+            <div key={r.id} className="afrocat-card p-4 flex items-center gap-3">
+              <div className="flex-1">
+                <div className="text-sm text-afrocat-text">{r.excuseType}: {r.reason}</div>
+                <div className="text-[10px] text-afrocat-muted">{r.sessionDate || "Session"} • {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</div>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                r.status === "APPROVED" ? "bg-green-500/20 text-green-400" :
+                r.status === "REJECTED" ? "bg-red-500/20 text-red-400" :
+                "bg-yellow-500/20 text-yellow-400"
+              }`}>{r.status}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-afrocat-card border border-afrocat-border rounded-2xl w-full max-w-md p-6 space-y-4">
+            <h3 className="font-display font-bold text-lg text-afrocat-text">Request Excuse / Late</h3>
+            <Select value={excuseForm.excuseType} onValueChange={(v) => setExcuseForm({ ...excuseForm, excuseType: v })}>
+              <SelectTrigger data-testid="select-excuse-type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="EXCUSE">Excuse (Full Absence)</SelectItem>
+                <SelectItem value="LATE">Late Arrival</SelectItem>
+              </SelectContent>
+            </Select>
+            {sessions.length > 0 && (
+              <Select value={excuseForm.sessionId} onValueChange={(v) => setExcuseForm({ ...excuseForm, sessionId: v })}>
+                <SelectTrigger><SelectValue placeholder="Select session (optional)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">No specific session</SelectItem>
+                  {sessions.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.sessionDate} - {s.sessionType}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            <div>
+              <label className="text-xs font-semibold text-afrocat-muted uppercase mb-1 block">Or enter date</label>
+              <input type="date" value={excuseForm.sessionDate} onChange={(e) => setExcuseForm({ ...excuseForm, sessionDate: e.target.value })}
+                className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-afrocat-muted uppercase mb-1 block">Reason</label>
+              <textarea value={excuseForm.reason} onChange={(e) => setExcuseForm({ ...excuseForm, reason: e.target.value })} rows={3} placeholder="Explain your reason..."
+                className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text placeholder:text-afrocat-muted focus:outline-none focus:ring-1 focus:ring-afrocat-teal resize-none" data-testid="input-excuse-reason" />
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl bg-afrocat-white-5 text-afrocat-muted font-bold text-sm cursor-pointer">Cancel</button>
+              <button
+                onClick={() => {
+                  if (!excuseForm.reason.trim()) return toast({ title: "Reason required", variant: "destructive" });
+                  submitMut.mutate({
+                    sessionId: excuseForm.sessionId && excuseForm.sessionId !== "NONE" ? excuseForm.sessionId : undefined,
+                    sessionDate: excuseForm.sessionDate || undefined,
+                    excuseType: excuseForm.excuseType,
+                    reason: excuseForm.reason,
+                  });
+                }}
+                disabled={submitMut.isPending}
+                className="px-4 py-2 rounded-xl bg-afrocat-gold text-white font-bold text-sm cursor-pointer disabled:opacity-50"
+                data-testid="button-submit-excuse"
+              >
+                {submitMut.isPending ? "Submitting..." : "Submit Request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

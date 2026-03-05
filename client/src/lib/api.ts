@@ -391,6 +391,36 @@ export const api = {
   deleteCoachBlogComment: (postId: string, commentId: string) =>
     apiFetch<void>(`/coach-blog/${postId}/comments/${commentId}`, { method: "DELETE" }),
 
+  getTrainingSessions: (teamId?: string) => apiFetch<any[]>(`/training/sessions${teamId ? `?teamId=${teamId}` : ""}`),
+  createTrainingSession: (data: any) => apiFetch<any>("/training/sessions", { method: "POST", body: JSON.stringify(data) }),
+  updateTrainingSession: (id: string, data: any) => apiFetch<any>(`/training/sessions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteTrainingSession: (id: string) => apiFetch<void>(`/training/sessions/${id}`, { method: "DELETE" }),
+
+  submitExcuseRequest: (data: any) => apiFetch<any>("/attendance/excuse-request", { method: "POST", body: JSON.stringify(data) }),
+  getExcuseRequests: () => apiFetch<any[]>("/attendance/excuse-requests"),
+  getMyExcuseRequests: () => apiFetch<any[]>("/attendance/excuse-requests/mine"),
+  approveExcuseRequest: (id: string, reviewNote?: string) => apiFetch<any>(`/attendance/excuse-requests/${id}/approve`, { method: "POST", body: JSON.stringify({ reviewNote }) }),
+  rejectExcuseRequest: (id: string, reviewNote?: string) => apiFetch<any>(`/attendance/excuse-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ reviewNote }) }),
+
+  getFeeConfig: () => apiFetch<Record<string, string>>("/finance/fee-config"),
+  updateFeeConfig: (data: Record<string, string>) => apiFetch<any>("/finance/fee-config", { method: "PUT", body: JSON.stringify(data) }),
+  getFinancePayments: (playerId?: string) => apiFetch<any[]>(`/finance/payments${playerId ? `?playerId=${playerId}` : ""}`),
+  createFinancePayment: (data: any) => apiFetch<any>("/finance/payment", { method: "POST", body: JSON.stringify(data) }),
+  approveFinancePayment: (id: string) => apiFetch<any>(`/finance/payment/${id}/approve`, { method: "POST", body: JSON.stringify({}) }),
+  rejectFinancePayment: (id: string) => apiFetch<any>(`/finance/payment/${id}/reject`, { method: "POST", body: JSON.stringify({}) }),
+  getFinanceExpenses: (playerId?: string) => apiFetch<any[]>(`/finance/expenses${playerId ? `?playerId=${playerId}` : ""}`),
+  createFinanceExpense: (data: any) => apiFetch<any>("/finance/expense", { method: "POST", body: JSON.stringify(data) }),
+  approveFinanceExpense: (id: string) => apiFetch<any>(`/finance/expense/${id}/approve`, { method: "POST", body: JSON.stringify({}) }),
+  rejectFinanceExpense: (id: string) => apiFetch<any>(`/finance/expense/${id}/reject`, { method: "POST", body: JSON.stringify({}) }),
+  getPlayerFinance: (playerId: string) => apiFetch<any>(`/finance/player/${playerId}`),
+  getPlayerExitStatement: (playerId: string) => apiFetch<any>(`/finance/player/${playerId}/exit-statement`),
+  getFinanceSummary: (from?: string, to?: string) => apiFetch<any>(`/finance/summary${from || to ? `?${from ? `from=${from}` : ""}${to ? `&to=${to}` : ""}` : ""}`),
+  getMyOutstandingFees: () => apiFetch<any>("/finance/my-outstanding"),
+
+  getCoachMyTeams: () => apiFetch<any[]>("/coach/my-teams"),
+  getCoachAttendanceTrends: (teamId: string) => apiFetch<any>(`/coach/attendance-trends?teamId=${teamId}`),
+  getCoachPerformanceTrends: (teamId: string) => apiFetch<any[]>(`/coach/performance-trends?teamId=${teamId}`),
+
   getInterviews: () => apiFetch<any[]>("/interviews"),
   getInterview: (id: string) => apiFetch<any>(`/interviews/${id}`),
   createInterview: (data: any) =>

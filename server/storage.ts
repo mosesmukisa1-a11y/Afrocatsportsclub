@@ -32,7 +32,12 @@ import type {
   PlayerUpdateRequest, InsertPlayerUpdateRequest,
   NoticeBoardPost, InsertNoticeBoardPost,
   PushSubscription, InsertPushSubscription,
-  PlayerInterview, InsertPlayerInterview
+  PlayerInterview, InsertPlayerInterview,
+  TrainingSession, InsertTrainingSession,
+  PlayerExcuseRequest, InsertPlayerExcuseRequest,
+  PlayerPayment, InsertPlayerPayment,
+  PlayerExpense, InsertPlayerExpense,
+  FeeConfig, InsertFeeConfig
 } from "@shared/schema";
 
 export interface IStorage {
@@ -203,6 +208,21 @@ export interface IStorage {
   createPlayerInterview(interview: InsertPlayerInterview): Promise<PlayerInterview>;
   updatePlayerInterview(id: string, data: Partial<InsertPlayerInterview>): Promise<PlayerInterview | undefined>;
   deletePlayerInterview(id: string): Promise<void>;
+  getTrainingSessions(teamId?: string): Promise<TrainingSession[]>;
+  createTrainingSession(session: InsertTrainingSession): Promise<TrainingSession>;
+  updateTrainingSession(id: string, data: Partial<InsertTrainingSession>): Promise<TrainingSession | undefined>;
+  deleteTrainingSession(id: string): Promise<void>;
+  getPlayerExcuseRequests(playerId?: string): Promise<PlayerExcuseRequest[]>;
+  createPlayerExcuseRequest(req: InsertPlayerExcuseRequest): Promise<PlayerExcuseRequest>;
+  updatePlayerExcuseRequest(id: string, data: Partial<PlayerExcuseRequest>): Promise<PlayerExcuseRequest | undefined>;
+  getPlayerPayments(playerId?: string): Promise<PlayerPayment[]>;
+  createPlayerPayment(payment: InsertPlayerPayment): Promise<PlayerPayment>;
+  updatePlayerPayment(id: string, data: Partial<PlayerPayment>): Promise<PlayerPayment | undefined>;
+  getPlayerExpenses(playerId?: string): Promise<PlayerExpense[]>;
+  createPlayerExpense(expense: InsertPlayerExpense): Promise<PlayerExpense>;
+  updatePlayerExpense(id: string, data: Partial<PlayerExpense>): Promise<PlayerExpense | undefined>;
+  getFeeConfigs(): Promise<FeeConfig[]>;
+  upsertFeeConfig(key: string, value: string, updatedBy: string): Promise<FeeConfig>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1000,6 +1020,77 @@ export class DatabaseStorage implements IStorage {
   }
   async deletePlayerInterview(id: string) {
     await db.delete(schema.playerInterviews).where(eq(schema.playerInterviews.id, id));
+  }
+  async getTrainingSessions(teamId?: string) {
+    if (teamId) {
+      return db.select().from(schema.trainingSessions).where(eq(schema.trainingSessions.teamId, teamId)).orderBy(desc(schema.trainingSessions.createdAt));
+    }
+    return db.select().from(schema.trainingSessions).orderBy(desc(schema.trainingSessions.createdAt));
+  }
+  async createTrainingSession(session: InsertTrainingSession) {
+    const [created] = await db.insert(schema.trainingSessions).values(session).returning();
+    return created;
+  }
+  async updateTrainingSession(id: string, data: Partial<InsertTrainingSession>) {
+    const [updated] = await db.update(schema.trainingSessions).set(data).where(eq(schema.trainingSessions.id, id)).returning();
+    return updated;
+  }
+  async deleteTrainingSession(id: string) {
+    await db.delete(schema.trainingSessions).where(eq(schema.trainingSessions.id, id));
+  }
+  async getPlayerExcuseRequests(playerId?: string) {
+    if (playerId) {
+      return db.select().from(schema.playerExcuseRequests).where(eq(schema.playerExcuseRequests.playerId, playerId)).orderBy(desc(schema.playerExcuseRequests.createdAt));
+    }
+    return db.select().from(schema.playerExcuseRequests).orderBy(desc(schema.playerExcuseRequests.createdAt));
+  }
+  async createPlayerExcuseRequest(req: InsertPlayerExcuseRequest) {
+    const [created] = await db.insert(schema.playerExcuseRequests).values(req).returning();
+    return created;
+  }
+  async updatePlayerExcuseRequest(id: string, data: Partial<PlayerExcuseRequest>) {
+    const [updated] = await db.update(schema.playerExcuseRequests).set(data).where(eq(schema.playerExcuseRequests.id, id)).returning();
+    return updated;
+  }
+  async getPlayerPayments(playerId?: string) {
+    if (playerId) {
+      return db.select().from(schema.playerPayments).where(eq(schema.playerPayments.playerId, playerId)).orderBy(desc(schema.playerPayments.createdAt));
+    }
+    return db.select().from(schema.playerPayments).orderBy(desc(schema.playerPayments.createdAt));
+  }
+  async createPlayerPayment(payment: InsertPlayerPayment) {
+    const [created] = await db.insert(schema.playerPayments).values(payment).returning();
+    return created;
+  }
+  async updatePlayerPayment(id: string, data: Partial<PlayerPayment>) {
+    const [updated] = await db.update(schema.playerPayments).set(data).where(eq(schema.playerPayments.id, id)).returning();
+    return updated;
+  }
+  async getPlayerExpenses(playerId?: string) {
+    if (playerId) {
+      return db.select().from(schema.playerExpenses).where(eq(schema.playerExpenses.playerId, playerId)).orderBy(desc(schema.playerExpenses.createdAt));
+    }
+    return db.select().from(schema.playerExpenses).orderBy(desc(schema.playerExpenses.createdAt));
+  }
+  async createPlayerExpense(expense: InsertPlayerExpense) {
+    const [created] = await db.insert(schema.playerExpenses).values(expense).returning();
+    return created;
+  }
+  async updatePlayerExpense(id: string, data: Partial<PlayerExpense>) {
+    const [updated] = await db.update(schema.playerExpenses).set(data).where(eq(schema.playerExpenses.id, id)).returning();
+    return updated;
+  }
+  async getFeeConfigs() {
+    return db.select().from(schema.feeConfig);
+  }
+  async upsertFeeConfig(key: string, value: string, updatedBy: string) {
+    const existing = await db.select().from(schema.feeConfig).where(eq(schema.feeConfig.key, key));
+    if (existing.length > 0) {
+      const [updated] = await db.update(schema.feeConfig).set({ value, updatedBy, updatedAt: new Date() }).where(eq(schema.feeConfig.key, key)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(schema.feeConfig).values({ key, value, updatedBy }).returning();
+    return created;
   }
 }
 

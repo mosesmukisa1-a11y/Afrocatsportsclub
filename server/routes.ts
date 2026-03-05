@@ -3937,7 +3937,7 @@ th{background:#0d7377;color:white}
   // ─── TRAINING SCHEDULE & NOTIFICATIONS ──────────
   const TRAINING_SCHEDULE: Record<string, number[]> = {
     MEN: [2, 4],
-    WOMEN: [1, 4],
+    WOMEN: [1, 3],
     ALL: [5],
   };
 
@@ -6186,6 +6186,452 @@ th{background:#0d7377;color:white}
 
       await db.delete(schema.coachBlogComments).where(eq(schema.coachBlogComments.id, req.params.commentId));
       res.status(204).send();
+    } catch (e) { next(e); }
+  });
+
+  // ─── TRAINING SESSIONS CRUD ──────────
+  app.get("/api/training/sessions", requireAuth, async (req, res, next) => {
+    try {
+      const teamId = req.query.teamId as string | undefined;
+      const sessions = await storage.getTrainingSessions(teamId);
+      res.json(sessions);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/training/sessions", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { teamId, dateTimeStart, dateTimeEnd, venue, notes, targetGender } = req.body;
+      if (!teamId || !dateTimeStart) return res.status(400).json({ error: "teamId and dateTimeStart required" });
+      let gender = targetGender;
+      if (!gender) {
+        const dayOfWeek = new Date(dateTimeStart).getDay();
+        if (dayOfWeek === 1 || dayOfWeek === 3) gender = "FEMALE";
+        else if (dayOfWeek === 2 || dayOfWeek === 4) gender = "MALE";
+        else gender = "ALL";
+      }
+      const session = await storage.createTrainingSession({
+        teamId, dateTimeStart, dateTimeEnd: dateTimeEnd || null, venue: venue || null,
+        notes: notes || null, targetGender: gender, createdBy: req.user!.userId,
+      });
+      res.status(201).json(session);
+    } catch (e) { next(e); }
+  });
+
+  app.patch("/api/training/sessions/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updateTrainingSession(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ error: "Session not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/training/sessions/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      await storage.deleteTrainingSession(req.params.id);
+      res.status(204).send();
+    } catch (e) { next(e); }
+  });
+
+  // ─── PLAYER EXCUSE / LATE REQUESTS ──────────
+  app.post("/api/attendance/excuse-request", requireAuth, async (req, res, next) => {
+    try {
+      const { sessionId, sessionDate, excuseType, reason } = req.body;
+      if (!reason) return res.status(400).json({ error: "reason required" });
+      if (!sessionId && !sessionDate) return res.status(400).json({ error: "sessionId or sessionDate required" });
+      const playerId = req.user!.playerId;
+      if (!playerId) return res.status(400).json({ error: "No player profile linked" });
+      const request = await storage.createPlayerExcuseRequest({
+        playerId, sessionId: sessionId || null, sessionDate: sessionDate || null,
+        excuseType: excuseType || "EXCUSE", reason, status: "PENDING",
+        reviewedBy: null, reviewNote: null,
+      });
+      res.status(201).json(request);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/attendance/excuse-requests", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (_req, res, next) => {
+    try {
+      const requests = await storage.getPlayerExcuseRequests();
+      const enriched = await Promise.all(requests.map(async (r: any) => {
+        const player = await storage.getPlayer(r.playerId);
+        return { ...r, playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown", playerTeamId: player?.teamId };
+      }));
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/attendance/excuse-requests/mine", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.user!.playerId;
+      if (!playerId) return res.json([]);
+      const requests = await storage.getPlayerExcuseRequests(playerId);
+      res.json(requests);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/attendance/excuse-requests/:id/approve", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerExcuseRequest(req.params.id, {
+        status: "APPROVED", reviewedBy: req.user!.userId, reviewNote: req.body.reviewNote || null,
+      });
+      if (!updated) return res.status(404).json({ error: "Request not found" });
+      if (updated.sessionId) {
+        const records = await storage.getAttendanceRecords(updated.sessionId);
+        const record = records.find((r: any) => r.playerId === updated.playerId);
+        if (record) {
+          const newStatus = updated.excuseType === "EXCUSE" ? "EXCUSED" : "LATE";
+          await storage.updateAttendanceRecord(record.id, { status: newStatus as any, reason: updated.reason || undefined });
+        }
+      }
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/attendance/excuse-requests/:id/reject", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerExcuseRequest(req.params.id, {
+        status: "REJECTED", reviewedBy: req.user!.userId, reviewNote: req.body.reviewNote || null,
+      });
+      if (!updated) return res.status(404).json({ error: "Request not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── FINANCE: FEE CONFIG ──────────
+  app.get("/api/finance/fee-config", requireAuth, async (_req, res, next) => {
+    try {
+      const configs = await storage.getFeeConfigs();
+      const result: Record<string, string> = {};
+      configs.forEach((c: any) => { result[c.key] = c.value; });
+      res.json(result);
+    } catch (e) { next(e); }
+  });
+
+  app.put("/api/finance/fee-config", requireAuth, requireRole(["ADMIN","FINANCE"]), async (req, res, next) => {
+    try {
+      const entries = req.body;
+      for (const [key, value] of Object.entries(entries)) {
+        await storage.upsertFeeConfig(key, String(value), req.user!.userId);
+      }
+      res.json({ success: true });
+    } catch (e) { next(e); }
+  });
+
+  // ─── FINANCE: PLAYER PAYMENTS ──────────
+  app.get("/api/finance/payments", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.query.playerId as string | undefined;
+      const payments = await storage.getPlayerPayments(playerId);
+      const enriched = await Promise.all(payments.map(async (p: any) => {
+        const player = await storage.getPlayer(p.playerId);
+        return { ...p, playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown" };
+      }));
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/finance/payment", requireAuth, async (req, res, next) => {
+    try {
+      const { playerId, feeType, amount, paidBy, paidByName, reference, paymentDate } = req.body;
+      if (!playerId || !feeType || !amount || !paymentDate) {
+        return res.status(400).json({ error: "playerId, feeType, amount, paymentDate required" });
+      }
+      const payment = await storage.createPlayerPayment({
+        playerId, feeType, amount: parseInt(amount), paidBy: paidBy || "PLAYER",
+        paidByName: paidByName || null, reference: reference || null, paymentDate,
+        status: "PENDING_APPROVAL", approvedBy: null, createdBy: req.user!.userId,
+      });
+      res.status(201).json(payment);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/finance/payment/:id/approve", requireAuth, requireRole(["ADMIN","FINANCE"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerPayment(req.params.id, {
+        status: "APPROVED", approvedBy: req.user!.userId, approvedAt: new Date(),
+      });
+      if (!updated) return res.status(404).json({ error: "Payment not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/finance/payment/:id/reject", requireAuth, requireRole(["ADMIN","FINANCE"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerPayment(req.params.id, {
+        status: "REJECTED", approvedBy: req.user!.userId, approvedAt: new Date(),
+      });
+      if (!updated) return res.status(404).json({ error: "Payment not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── FINANCE: PLAYER EXPENSES ──────────
+  app.get("/api/finance/expenses", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.query.playerId as string | undefined;
+      const expenses = await storage.getPlayerExpenses(playerId);
+      const enriched = await Promise.all(expenses.map(async (e: any) => {
+        const player = await storage.getPlayer(e.playerId);
+        return { ...e, playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown" };
+      }));
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/finance/expense", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const { playerId, amount, paidBy, paidByName, reason, notes, expenseDate } = req.body;
+      if (!playerId || !amount || !reason || !expenseDate) {
+        return res.status(400).json({ error: "playerId, amount, reason, expenseDate required" });
+      }
+      const expense = await storage.createPlayerExpense({
+        playerId, amount: parseInt(amount), paidBy: paidBy || "CLUB",
+        paidByName: paidByName || null, reason, notes: notes || null, expenseDate,
+        status: "PENDING_APPROVAL", approvedBy: null, createdBy: req.user!.userId,
+      });
+      res.status(201).json(expense);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/finance/expense/:id/approve", requireAuth, requireRole(["ADMIN","FINANCE"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerExpense(req.params.id, {
+        status: "APPROVED", approvedBy: req.user!.userId, approvedAt: new Date(),
+      });
+      if (!updated) return res.status(404).json({ error: "Expense not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/finance/expense/:id/reject", requireAuth, requireRole(["ADMIN","FINANCE"]), async (req, res, next) => {
+    try {
+      const updated = await storage.updatePlayerExpense(req.params.id, {
+        status: "REJECTED", approvedBy: req.user!.userId, approvedAt: new Date(),
+      });
+      if (!updated) return res.status(404).json({ error: "Expense not found" });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  // ─── FINANCE: PLAYER SUMMARY + VALUE + EXIT ──────────
+  app.get("/api/finance/player/:playerId", requireAuth, async (req, res, next) => {
+    try {
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ error: "Player not found" });
+      const payments = await storage.getPlayerPayments(req.params.playerId);
+      const expenses = await storage.getPlayerExpenses(req.params.playerId);
+      const configs = await storage.getFeeConfigs();
+      const feeMap: Record<string, number> = {};
+      configs.forEach((c: any) => { feeMap[c.key] = parseInt(c.value) || 0; });
+
+      const membershipFee = player.employmentClass === "WORKING"
+        ? (feeMap.membershipFeeWorking || 800)
+        : (feeMap.membershipFeeNonWorking || 400);
+      const developmentFee = feeMap.developmentFee || 2500;
+      const resourceFee = feeMap.resourceFee || 1500;
+      const leagueFee = feeMap.leagueAffiliationFeePerPlayer || 0;
+      const totalFeesDue = membershipFee + developmentFee + resourceFee + leagueFee;
+
+      const approvedPayments = payments.filter((p: any) => p.status === "APPROVED");
+      const totalPaidByPlayer = approvedPayments.filter((p: any) => p.paidBy === "PLAYER").reduce((s: number, p: any) => s + p.amount, 0);
+      const totalPaidByOthers = approvedPayments.filter((p: any) => p.paidBy !== "PLAYER").reduce((s: number, p: any) => s + p.amount, 0);
+      const totalPaid = approvedPayments.reduce((s: number, p: any) => s + p.amount, 0);
+      const outstanding = Math.max(0, totalFeesDue - totalPaid);
+
+      const approvedExpenses = expenses.filter((e: any) => e.status === "APPROVED");
+      const clubExpenses = approvedExpenses.filter((e: any) => e.paidBy !== "PLAYER").reduce((s: number, e: any) => s + e.amount, 0);
+
+      const playerValue = totalPaidByOthers + clubExpenses;
+
+      res.json({
+        playerId: req.params.playerId,
+        playerName: `${player.firstName} ${player.lastName}`,
+        employmentClass: player.employmentClass || "NON_WORKING",
+        fees: { membership: membershipFee, development: developmentFee, resource: resourceFee, league: leagueFee, total: totalFeesDue },
+        totalPaid, totalPaidByPlayer, totalPaidByOthers, outstanding,
+        clubExpenses, playerValue,
+        payments, expenses,
+      });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/finance/player/:playerId/exit-statement", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const player = await storage.getPlayer(req.params.playerId);
+      if (!player) return res.status(404).json({ error: "Player not found" });
+      const payments = await storage.getPlayerPayments(req.params.playerId);
+      const expenses = await storage.getPlayerExpenses(req.params.playerId);
+      const configs = await storage.getFeeConfigs();
+      const feeMap: Record<string, number> = {};
+      configs.forEach((c: any) => { feeMap[c.key] = parseInt(c.value) || 0; });
+
+      const membershipFee = player.employmentClass === "WORKING" ? (feeMap.membershipFeeWorking || 800) : (feeMap.membershipFeeNonWorking || 400);
+      const developmentFee = feeMap.developmentFee || 2500;
+      const resourceFee = feeMap.resourceFee || 1500;
+      const leagueFee = feeMap.leagueAffiliationFeePerPlayer || 0;
+      const totalFeesDue = membershipFee + developmentFee + resourceFee + leagueFee;
+
+      const approvedPayments = payments.filter((p: any) => p.status === "APPROVED");
+      const totalPaidByPlayer = approvedPayments.filter((p: any) => p.paidBy === "PLAYER").reduce((s: number, p: any) => s + p.amount, 0);
+      const approvedExpenses = expenses.filter((e: any) => e.status === "APPROVED");
+      const clubContribution = approvedPayments.filter((p: any) => p.paidBy !== "PLAYER").reduce((s: number, p: any) => s + p.amount, 0) +
+        approvedExpenses.filter((e: any) => e.paidBy !== "PLAYER").reduce((s: number, e: any) => s + e.amount, 0);
+
+      res.json({
+        playerName: `${player.firstName} ${player.lastName}`,
+        totalFeesDue, totalPaidByPlayer, clubContribution,
+        outstandingBalance: Math.max(0, totalFeesDue - totalPaidByPlayer - clubContribution),
+        statement: `Exit statement for ${player.firstName} ${player.lastName}: Total fees due N$${totalFeesDue}, Paid by player N$${totalPaidByPlayer}, Club contribution N$${clubContribution}.`,
+      });
+    } catch (e) { next(e); }
+  });
+
+  // ─── FINANCE: SUMMARY REPORT ──────────
+  app.get("/api/finance/summary", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const from = req.query.from as string | undefined;
+      const to = req.query.to as string | undefined;
+      let payments = await storage.getPlayerPayments();
+      let expenses = await storage.getPlayerExpenses();
+      if (from) {
+        payments = payments.filter((p: any) => p.paymentDate >= from);
+        expenses = expenses.filter((e: any) => e.expenseDate >= from);
+      }
+      if (to) {
+        payments = payments.filter((p: any) => p.paymentDate <= to);
+        expenses = expenses.filter((e: any) => e.expenseDate <= to);
+      }
+      const approvedPayments = payments.filter((p: any) => p.status === "APPROVED");
+      const approvedExpenses = expenses.filter((e: any) => e.status === "APPROVED");
+      const totalReceived = approvedPayments.reduce((s: number, p: any) => s + p.amount, 0);
+      const totalExpenses = approvedExpenses.reduce((s: number, e: any) => s + e.amount, 0);
+      const pendingPayments = payments.filter((p: any) => p.status === "PENDING_APPROVAL").reduce((s: number, p: any) => s + p.amount, 0);
+      res.json({ totalReceived, totalExpenses, netPosition: totalReceived - totalExpenses, pendingPayments, paymentCount: approvedPayments.length, expenseCount: approvedExpenses.length });
+    } catch (e) { next(e); }
+  });
+
+  // ─── COACH: MY TEAMS + TRENDS ──────────
+  app.get("/api/coach/my-teams", requireAuth, async (req, res, next) => {
+    try {
+      const userId = req.user!.userId;
+      const allAssignments = await db.select().from(schema.coachAssignments).where(and(eq(schema.coachAssignments.coachUserId, userId), eq(schema.coachAssignments.active, true)));
+      const teams = await storage.getTeams();
+      const myTeams = teams.filter((t: any) => allAssignments.some((a: any) => a.teamId === t.id));
+      res.json(myTeams);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/coach/attendance-trends", requireAuth, async (req, res, next) => {
+    try {
+      const teamId = req.query.teamId as string;
+      if (!teamId) return res.status(400).json({ error: "teamId required" });
+      const sessions = await storage.getAttendanceSessions();
+      const teamSessions = sessions.filter((s: any) => s.teamId === teamId);
+      const weeks: Record<string, { total: number; present: number }> = {};
+      const playerAttendance: Record<string, { name: string; total: number; present: number }> = {};
+
+      for (const sess of teamSessions) {
+        const records = await storage.getAttendanceRecords(sess.id);
+        const weekKey = sess.sessionDate?.substring(0, 7) || "unknown";
+        if (!weeks[weekKey]) weeks[weekKey] = { total: 0, present: 0 };
+        weeks[weekKey].total += records.length;
+        weeks[weekKey].present += records.filter((r: any) => r.status === "PRESENT" || r.status === "LATE").length;
+
+        for (const r of records) {
+          if (!playerAttendance[r.playerId]) {
+            const player = await storage.getPlayer(r.playerId);
+            playerAttendance[r.playerId] = { name: player ? `${player.firstName} ${player.lastName}` : "Unknown", total: 0, present: 0 };
+          }
+          playerAttendance[r.playerId].total++;
+          if (r.status === "PRESENT" || r.status === "LATE") playerAttendance[r.playerId].present++;
+        }
+      }
+
+      const monthlyTrends = Object.entries(weeks).map(([month, data]) => ({
+        month, percentage: data.total > 0 ? Math.round((data.present / data.total) * 100) : 0,
+      })).sort((a, b) => a.month.localeCompare(b.month));
+
+      const playerList = Object.entries(playerAttendance).map(([id, data]) => ({
+        playerId: id, playerName: data.name, percentage: data.total > 0 ? Math.round((data.present / data.total) * 100) : 0, sessions: data.total,
+      })).sort((a, b) => b.percentage - a.percentage);
+
+      res.json({ monthlyTrends, topAttendees: playerList.slice(0, 5), lowAttendees: playerList.slice(-5).reverse() });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/coach/performance-trends", requireAuth, async (req, res, next) => {
+    try {
+      const teamId = req.query.teamId as string;
+      if (!teamId) return res.status(400).json({ error: "teamId required" });
+      const matches = await storage.getMatches();
+      const teamMatches = matches
+        .filter((m: any) => (m.homeTeamId === teamId || m.awayTeamId === teamId) && m.statsEntered)
+        .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""))
+        .slice(0, 5);
+
+      const trends = [];
+      for (const match of teamMatches) {
+        const stats = await storage.getPlayerMatchStats(match.id);
+        const teamStats = stats.filter((s: any) => {
+          const player = s.playerId;
+          return true;
+        });
+        const totalServes = teamStats.reduce((s: number, st: any) => s + (st.serveAttempts || 0), 0);
+        const serveErrors = teamStats.reduce((s: number, st: any) => s + (st.serviceErrors || 0), 0);
+        const totalReceives = teamStats.reduce((s: number, st: any) => s + (st.receptionAttempts || 0), 0);
+        const perfectReceives = teamStats.reduce((s: number, st: any) => s + (st.receptionPerfect || 0), 0);
+        const totalAttacks = teamStats.reduce((s: number, st: any) => s + (st.attackAttempts || 0), 0);
+        const kills = teamStats.reduce((s: number, st: any) => s + (st.kills || 0), 0);
+        const attackErrors = teamStats.reduce((s: number, st: any) => s + (st.attackErrors || 0), 0);
+
+        trends.push({
+          matchId: match.id,
+          opponent: match.opponent || "Unknown",
+          date: match.date,
+          serveErrorPct: totalServes > 0 ? Math.round((serveErrors / totalServes) * 100) : 0,
+          receivePerfectPct: totalReceives > 0 ? Math.round((perfectReceives / totalReceives) * 100) : 0,
+          attackEfficiency: totalAttacks > 0 ? Math.round(((kills - attackErrors) / totalAttacks) * 100) : 0,
+        });
+      }
+
+      res.json(trends.reverse());
+    } catch (e) { next(e); }
+  });
+
+  // ─── FINANCE: PLAYER OUTSTANDING FEES (for player dashboard) ──────────
+  app.get("/api/finance/my-outstanding", requireAuth, async (req, res, next) => {
+    try {
+      const playerId = req.user!.playerId;
+      if (!playerId) return res.json({ outstanding: [], totalDue: 0 });
+      const player = await storage.getPlayer(playerId);
+      if (!player) return res.json({ outstanding: [], totalDue: 0 });
+      const payments = await storage.getPlayerPayments(playerId);
+      const configs = await storage.getFeeConfigs();
+      const feeMap: Record<string, number> = {};
+      configs.forEach((c: any) => { feeMap[c.key] = parseInt(c.value) || 0; });
+
+      const membershipFee = player.employmentClass === "WORKING" ? (feeMap.membershipFeeWorking || 800) : (feeMap.membershipFeeNonWorking || 400);
+      const developmentFee = feeMap.developmentFee || 2500;
+      const resourceFee = feeMap.resourceFee || 1500;
+      const leagueFee = feeMap.leagueAffiliationFeePerPlayer || 0;
+
+      const approved = payments.filter((p: any) => p.status === "APPROVED");
+      const paidByType: Record<string, number> = {};
+      approved.forEach((p: any) => { paidByType[p.feeType] = (paidByType[p.feeType] || 0) + p.amount; });
+
+      const outstanding: { feeType: string; due: number; paid: number; remaining: number }[] = [];
+      const feeTypes = [
+        { type: "MEMBERSHIP", due: membershipFee },
+        { type: "DEVELOPMENT", due: developmentFee },
+        { type: "RESOURCE", due: resourceFee },
+        { type: "LEAGUE_AFFILIATION", due: leagueFee },
+      ];
+      for (const ft of feeTypes) {
+        const paid = paidByType[ft.type] || 0;
+        if (paid < ft.due) outstanding.push({ feeType: ft.type, due: ft.due, paid, remaining: ft.due - paid });
+      }
+
+      res.json({ outstanding, totalDue: outstanding.reduce((s, o) => s + o.remaining, 0) });
     } catch (e) { next(e); }
   });
 

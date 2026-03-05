@@ -114,6 +114,8 @@ export const players = pgTable("players", {
   heightCm: integer("height_cm"),
   weightKg: integer("weight_kg"),
   lastWeightUpdatedAt: timestamp("last_weight_updated_at"),
+  employmentClass: text("employment_class").default("NON_WORKING"),
+  joinedAt: text("joined_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -815,3 +817,83 @@ export const playerInterviews = pgTable("player_interviews", {
 export const insertPlayerInterviewSchema = createInsertSchema(playerInterviews).omit({ id: true, publishedAt: true });
 export type InsertPlayerInterview = z.infer<typeof insertPlayerInterviewSchema>;
 export type PlayerInterview = typeof playerInterviews.$inferSelect;
+
+export const trainingSessions = pgTable("training_sessions", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  teamId: varchar("team_id", { length: 36 }).notNull(),
+  dateTimeStart: text("date_time_start").notNull(),
+  dateTimeEnd: text("date_time_end"),
+  venue: text("venue"),
+  notes: text("notes"),
+  targetGender: text("target_gender").notNull().default("ALL"),
+  createdBy: varchar("created_by", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertTrainingSessionSchema = createInsertSchema(trainingSessions).omit({ id: true, createdAt: true });
+export type InsertTrainingSession = z.infer<typeof insertTrainingSessionSchema>;
+export type TrainingSession = typeof trainingSessions.$inferSelect;
+
+export const playerExcuseRequests = pgTable("player_excuse_requests", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  sessionId: varchar("session_id", { length: 36 }),
+  sessionDate: text("session_date"),
+  excuseType: text("excuse_type").notNull().default("EXCUSE"),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("PENDING"),
+  reviewedBy: varchar("reviewed_by", { length: 36 }),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertPlayerExcuseRequestSchema = createInsertSchema(playerExcuseRequests).omit({ id: true, createdAt: true });
+export type InsertPlayerExcuseRequest = z.infer<typeof insertPlayerExcuseRequestSchema>;
+export type PlayerExcuseRequest = typeof playerExcuseRequests.$inferSelect;
+
+export const playerPayments = pgTable("player_payments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  feeType: text("fee_type").notNull(),
+  amount: integer("amount").notNull(),
+  paidBy: text("paid_by").notNull().default("PLAYER"),
+  paidByName: text("paid_by_name"),
+  reference: text("reference"),
+  paymentDate: text("payment_date").notNull(),
+  status: text("status").notNull().default("PENDING_APPROVAL"),
+  approvedBy: varchar("approved_by", { length: 36 }),
+  approvedAt: timestamp("approved_at"),
+  createdBy: varchar("created_by", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertPlayerPaymentSchema = createInsertSchema(playerPayments).omit({ id: true, approvedAt: true, createdAt: true });
+export type InsertPlayerPayment = z.infer<typeof insertPlayerPaymentSchema>;
+export type PlayerPayment = typeof playerPayments.$inferSelect;
+
+export const playerExpenses = pgTable("player_expenses", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  amount: integer("amount").notNull(),
+  paidBy: text("paid_by").notNull().default("CLUB"),
+  paidByName: text("paid_by_name"),
+  reason: text("reason").notNull(),
+  notes: text("notes"),
+  expenseDate: text("expense_date").notNull(),
+  status: text("status").notNull().default("PENDING_APPROVAL"),
+  approvedBy: varchar("approved_by", { length: 36 }),
+  approvedAt: timestamp("approved_at"),
+  createdBy: varchar("created_by", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertPlayerExpenseSchema = createInsertSchema(playerExpenses).omit({ id: true, approvedAt: true, createdAt: true });
+export type InsertPlayerExpense = z.infer<typeof insertPlayerExpenseSchema>;
+export type PlayerExpense = typeof playerExpenses.$inferSelect;
+
+export const feeConfig = pgTable("fee_config", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  updatedBy: varchar("updated_by", { length: 36 }),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export const insertFeeConfigSchema = createInsertSchema(feeConfig).omit({ id: true, updatedAt: true });
+export type InsertFeeConfig = z.infer<typeof insertFeeConfigSchema>;
+export type FeeConfig = typeof feeConfig.$inferSelect;
