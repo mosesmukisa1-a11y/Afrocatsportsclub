@@ -7,7 +7,7 @@ import { hashPassword, comparePassword, signToken, requireAuth, requireRole } fr
 import { z } from "zod";
 import crypto from "crypto";
 import cron from "node-cron";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import multer from "multer";
@@ -103,7 +103,45 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.get("/api/health", (_req, res) => res.json({ ok: true }));
+  app.get("/api/health", (_req, res) => res.json({ ok: true, service: "afrocat", time: new Date().toISOString() }));
+
+  app.get("/api/health/modules", async (_req, res) => {
+    const modules: Record<string, boolean> = {};
+    const errors: Record<string, string> = {};
+    const checks: [string, () => Promise<any>][] = [
+      ["teams", () => db.select({ count: sql`count(*)` }).from(schema.teams)],
+      ["players", () => db.select({ count: sql`count(*)` }).from(schema.players)],
+      ["matches", () => db.select({ count: sql`count(*)` }).from(schema.matches)],
+      ["media", () => db.select({ count: sql`count(*)` }).from(schema.mediaPosts)],
+      ["financeFeeConfig", () => db.select({ count: sql`count(*)` }).from(schema.feeConfig)],
+      ["notifications", () => db.select({ count: sql`count(*)` }).from(schema.notifications)],
+      ["chatRooms", () => db.select({ count: sql`count(*)` }).from(schema.chatMessages)],
+      ["notices", () => db.select({ count: sql`count(*)` }).from(schema.noticeBoardPosts)],
+    ];
+    for (const [name, check] of checks) {
+      try {
+        await check();
+        modules[name] = true;
+      } catch (e: any) {
+        modules[name] = false;
+        errors[name] = e.message || "Unknown error";
+      }
+    }
+    res.json({ ok: Object.values(modules).every(Boolean), modules, errors: Object.keys(errors).length > 0 ? errors : undefined });
+  });
+
+  app.get("/api/health/env", (_req, res) => {
+    const env: Record<string, boolean> = {
+      DATABASE_URL: !!process.env.DATABASE_URL,
+      GMAIL_USER: !!process.env.GMAIL_USER,
+      GMAIL_APP_PASSWORD: !!process.env.GMAIL_APP_PASSWORD,
+      EMAIL_AUTO_CC: !!process.env.EMAIL_AUTO_CC,
+      VAPID_PUBLIC_KEY: !!process.env.VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY: !!process.env.VAPID_PRIVATE_KEY,
+    };
+    const dbMissing = !process.env.DATABASE_URL;
+    res.json({ ok: !dbMissing, env, ...(dbMissing ? { error: "DATABASE_URL is not configured — database will not function" } : {}) });
+  });
 
   app.post("/api/log/client-error", (req, res) => {
     const { message, stack, userId, route, componentStack } = req.body || {};
