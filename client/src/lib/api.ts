@@ -292,14 +292,20 @@ export const api = {
     apiFetch<any>(`/matches/${matchId}/events`, { method: "POST", body: JSON.stringify(data) }),
   deleteMatchEvent: (matchId: string, eventId: string) =>
     apiFetch<any>(`/matches/${matchId}/events/${eventId}`, { method: "DELETE" }),
-  scoreboardPoint: (matchId: string, side: "home" | "away") =>
+  scoreboardPoint: (matchId: string, side: "AFROCAT" | "OPP") =>
     apiFetch<any>(`/matches/${matchId}/scoreboard/point`, { method: "POST", body: JSON.stringify({ side }) }),
+  scoreboardUndoLast: (matchId: string) =>
+    apiFetch<any>(`/matches/${matchId}/scoreboard/undo-last`, { method: "POST" }),
   scoreboardUndoPoint: (matchId: string) =>
     apiFetch<any>(`/matches/${matchId}/scoreboard/undo-point`, { method: "POST" }),
   scoreboardEndSet: (matchId: string, winner: "home" | "away") =>
     apiFetch<any>(`/matches/${matchId}/scoreboard/end-set`, { method: "POST", body: JSON.stringify({ winner }) }),
   scoreboardDecrement: (matchId: string, side: "home" | "away") =>
     apiFetch<any>(`/matches/${matchId}/scoreboard/decrement`, { method: "POST", body: JSON.stringify({ side }) }),
+  setMatchFormat: (matchId: string, bestOf: 3 | 5) =>
+    apiFetch<any>(`/matches/${matchId}/format`, { method: "PATCH", body: JSON.stringify({ bestOf }) }),
+  finalizeMatch: (matchId: string) =>
+    apiFetch<any>(`/matches/${matchId}/finalize`, { method: "POST" }),
   getMatchReport: (matchId: string) => apiFetch<any>(`/matches/${matchId}/report`),
 
   getDevStatsInit: (matchId: string, teamId: string) =>

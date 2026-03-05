@@ -157,6 +157,8 @@ export const matches = pgTable("matches", {
   scoringStartedAt: timestamp("scoring_started_at"),
   scoringEndedAt: timestamp("scoring_ended_at"),
   matchDurationMinutes: integer("match_duration_minutes"),
+  bestOf: integer("best_of"),
+  playerOfMatchPlayerId: varchar("player_of_match_player_id", { length: 36 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

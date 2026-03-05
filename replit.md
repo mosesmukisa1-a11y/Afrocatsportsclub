@@ -106,21 +106,18 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - **Matches.tsx UI**: Edit button (ADMIN), Staff Assignment button, O2BIS generation button on upcoming match cards.
 - **Touch Stats Sync**: `POST /api/matches/:matchId/stats-touch/sync` — aggregates all touch events into `playerMatchStats` table. Calculates pointsTotal, generates Smart Focus recommendations, marks match as statsEntered.
 
-## Touch Stats Scoreboard Upgrade
-- **Live Scoreboard**: Match header shows Points (P) + Sets Won (S) for Home/Away, Current Set Number, Scorer Name. Fields: `liveHomePoints`, `liveAwayPoints`, `homeSetsWon`, `awaySetsWon`, `currentSetNumber`, `scorerUserId`, `scoringStartedAt` on matches table.
-- **Set Scoring**: "End Set — Home Wins" / "End Set — Away Wins" buttons. Increments sets, resets points to 0, advances set number. Max 5 sets.
-- **Points**: Auto-attributed from stat events (ACE→home, KILL→home, STUFF→home, serve NET/OUT→away, attack OUT/BLOCKED→away, etc.). Manual "+1 Home" / "+1 Away" / "Undo Point" buttons.
-- **Expanded Outcome Panels**: Step 3 now shows skill-specific outcome buttons (not just +/0/−). Each button shows outcome detail + point attribution.
-  - SERVE: ACE, In Play, Net, Out
-  - RECEIVE: Perfect, Positive, Off System, Error
-  - SET: Perfect, Slightly Off, Out of System, Out, Net Touch, Double Touch, Lift
-  - ATTACK: Kill, Tool Block, Dug, Blocked, Out, Net
-  - BLOCK: Stuff Block, Touch, Block Out, Net Touch, Overreach, Error
-  - DIG: Controlled, Not Controlled, Error
-- **Setter Combinations**: After SET success (Perfect/Slightly Off), shows combo picker: ONE / ZERO / FAST_BALL / SKIP. Stored in `matchEvents.combinationType`.
-- **New Event Fields**: `setNumber` (int), `combinationType` (text), `pointWonByTeamId` (varchar) on `matchEvents` table.
-- **New Enums**: NET_TOUCH/OVERREACH/BLOCK_OUT for blocks, SET_OUT_OF_SYSTEM/SET_OUT/NET_TOUCH for sets, TOOL_BLOCK/BLOCK_OUT for attacks.
-- **Endpoints**: `POST /api/matches/:matchId/scoreboard/point` (+1 side), `POST /api/matches/:matchId/scoreboard/undo-point`, `POST /api/matches/:matchId/scoreboard/end-set` (winner side). Events endpoint accepts `outcomeDetail`, `combinationType`, `pointSide`.
+## Touch Stats Scoreboard & FIVB Scoring
+- **FIVB Auto Set-End**: Sets end automatically when score reaches target (25pts for normal sets, 15pts for deciding set) AND lead >= 2. Deciding set = set 3 for Best-of-3, set 5 for Best-of-5. Match auto-finalizes when a team reaches needed wins (2 for Bo3, 3 for Bo5).
+- **Match Format**: `PATCH /api/matches/:matchId/format` sets bestOf (3|5) before scoring starts. UI shows format selector pre-scoring.
+- **Big Sticky Point Pad**: Fixed bottom bar with "+1 AFROCAT" (teal), "+1 OPP" (gold), "UNDO" buttons. Min 70px height. Replaces old small +1 Home/Away/End Set/Switch Side buttons.
+- **Match Finalize**: `POST /api/matches/:matchId/finalize` or auto-triggered on match completion. Locks match, aggregates stats, computes Player of Match, creates notifications for all players (stat summary + improvement areas) and coaches (report ready).
+- **Player of Match**: Auto-computed weighted index (Kill+3, Ace+3, Stuff+3, Perfect+2, Positive+1, Assist+1, Dig+2, minus errors). Tiebreak: fewer total errors → higher receive quality → most scoring plays. Stored in `matches.playerOfMatchPlayerId`. Shown with gold star badge in UI.
+- **Schema Fields**: `bestOf` (integer), `playerOfMatchPlayerId` (varchar) added to matches table.
+- **Live Scoreboard**: Points + Sets + Current Set + Best-of indicator + Match Complete badge. Points hidden when match complete.
+- **Auto Notifications**: Player stats notification with kills/aces/blocks/digs/errors + improvement focus. Coach/admin notification when match report is ready. All-user notification for Player of Match.
+- **Expanded Outcome Panels**: Skill-specific outcome buttons with point attribution arrows.
+- **Setter Combinations**: After SET success, combo picker: ONE / ZERO / FAST_BALL / SKIP.
+- **Legacy Guard**: Manual end-set endpoint blocked for FIVB-format matches (bestOf set).
 
 ## Advanced Development Stats Platform
 - **Dev Stats Page** (`/dev-stats`): Full development-focused stat tracking with detailed fields per skill type (Serve types, Receive ratings, Set quality, Attack outcomes, Block types, Dig types). Error classification (Technical/Decision/Pressure/Fatigue). Pressure + Fatigue flags. Zones, tactical intentions, notes.

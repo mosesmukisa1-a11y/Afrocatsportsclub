@@ -7,8 +7,8 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Zap, Target, Shield, Hand, ArrowUpCircle, CircleDot,
   Undo2, Lock, Unlock, User, Trophy, Upload, CheckCircle2,
-  Plus, Minus, Maximize, Minimize, ArrowLeftRight, Clock,
-  FileText, ChevronDown, ChevronUp, Printer
+  Plus, Minus, Maximize, Minimize, Clock,
+  FileText, ChevronDown, ChevronUp, Printer, Star
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -112,7 +112,6 @@ export default function TouchStats() {
   const [showCombo, setShowCombo] = useState(false);
   const [pendingSetEvent, setPendingSetEvent] = useState<any | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
-  const [recordingSide, setRecordingSide] = useState<"home" | "away">("home");
   const [showReport, setShowReport] = useState(false);
   const [elapsedTime, setElapsedTime] = useState("");
 
@@ -122,9 +121,6 @@ export default function TouchStats() {
   const eligibleMatches = useMemo(() => {
     return matches.filter((m: any) => {
       if (m.status === "CANCELLED") return false;
-      if (m.scoreLocked) return false;
-      if (m.statsEntered) return false;
-      if (m.scoreSource === "STATS") return false;
       return true;
     });
   }, [matches]);
@@ -135,7 +131,6 @@ export default function TouchStats() {
     setSelectedAction(null);
     setRecentEvents([]);
     setSyncResetKey(k => k + 1);
-    setRecordingSide("home");
     setShowReport(false);
     const match = matches.find((m: any) => m.id === matchId);
     if (match?.teamId) setSelectedTeamId(match.teamId);
@@ -157,13 +152,16 @@ export default function TouchStats() {
   const players = touchInit?.players || [];
   const matchData = touchInit?.match;
   const isLocked = !!matchData?.isLocked;
-  const teamName = touchInit?.teamName || "Home";
+  const teamName = touchInit?.teamName || "Afrocat";
   const scorerName = touchInit?.scorerName || "-";
   const homePoints = matchData?.liveHomePoints || 0;
   const awayPoints = matchData?.liveAwayPoints || 0;
   const homeSets = matchData?.homeSetsWon || 0;
   const awaySets = matchData?.awaySetsWon || 0;
   const currentSet = matchData?.currentSetNumber || 1;
+  const bestOf = matchData?.bestOf || 3;
+  const playerOfMatchPlayerId = matchData?.playerOfMatchPlayerId;
+  const scoringStarted = !!matchData?.scoringStartedAt;
 
   useEffect(() => {
     if (!matchData?.scoringStartedAt) { setElapsedTime(""); return; }
@@ -189,6 +187,11 @@ export default function TouchStats() {
     [players, selectedPlayerId]
   );
 
+  const pomPlayer = useMemo(
+    () => playerOfMatchPlayerId ? players.find((p: any) => p.id === playerOfMatchPlayerId) : null,
+    [players, playerOfMatchPlayerId]
+  );
+
   const serverEvents = touchInit?.events || [];
   const allEvents = useMemo(() => {
     return [...recentEvents.filter((e: any) => e.id.startsWith("temp_")), ...serverEvents].sort(
@@ -203,7 +206,14 @@ export default function TouchStats() {
       setRecentEvents((prev) =>
         prev.map((e) => (e.id.startsWith("temp_") ? { ...e, id: result.event.id } : e))
       );
+      if (result.setResult?.setEnded) {
+        toast({
+          title: `Set ${result.setResult.setNumber} Complete!`,
+          description: `${result.setResult.winner === "AFROCAT" ? teamName : (selectedMatch?.opponent || "OPP")} wins ${result.setResult.homePoints}-${result.setResult.awayPoints}${result.setResult.matchComplete ? " — MATCH OVER!" : ""}`,
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
     },
     onError: (err: any) => {
       setRecentEvents((prev) => prev.filter((e) => !e.id.startsWith("temp_")));
@@ -234,45 +244,55 @@ export default function TouchStats() {
   });
 
   const pointMut = useMutation({
-    mutationFn: ({ side }: { side: "home" | "away" }) => api.scoreboardPoint(selectedMatchId, side),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] }),
-  });
-
-  const decrementMut = useMutation({
-    mutationFn: ({ side }: { side: "home" | "away" }) => api.scoreboardDecrement(selectedMatchId, side),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] }),
+    mutationFn: ({ side }: { side: "AFROCAT" | "OPP" }) => api.scoreboardPoint(selectedMatchId, side),
+    onSuccess: (result: any) => {
+      if (result.setResult?.setEnded) {
+        toast({
+          title: `Set ${result.setResult.setNumber} Complete!`,
+          description: `${result.setResult.winner === "AFROCAT" ? teamName : (selectedMatch?.opponent || "OPP")} wins ${result.setResult.homePoints}-${result.setResult.awayPoints}${result.setResult.matchComplete ? " — MATCH OVER!" : ""}`,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+    },
   });
 
   const undoPointMut = useMutation({
-    mutationFn: () => api.scoreboardUndoPoint(selectedMatchId),
+    mutationFn: () => api.scoreboardUndoLast(selectedMatchId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] }),
   });
 
-  const endSetMut = useMutation({
-    mutationFn: ({ winner }: { winner: "home" | "away" }) => api.scoreboardEndSet(selectedMatchId, winner),
+  const formatMut = useMutation({
+    mutationFn: (bo: 3 | 5) => api.setMatchFormat(selectedMatchId, bo),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
-      toast({ title: "Set ended" });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
     },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const finalizeMut = useMutation({
+    mutationFn: () => api.finalizeMatch(selectedMatchId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      toast({ title: "Match Finalized!", description: "Stats synced, Player of Match computed, notifications sent." });
+    },
+    onError: (err: any) => toast({ title: "Finalize Failed", description: err.message, variant: "destructive" }),
   });
 
   const handleDetailedOutcome = useCallback((detail: OutcomeDetailOption) => {
     if (!selectedPlayerId || !selectedAction || isLocked) return;
 
-    const adjustedDetail = { ...detail };
-    if (recordingSide === "away") {
-      if (detail.pointTo === "home") adjustedDetail.pointTo = "away";
-      else if (detail.pointTo === "away") adjustedDetail.pointTo = "home";
-    }
-
     if (selectedAction === "SET" && (detail.outcome === "PLUS" || detail.outcome === "ZERO") && detail.value !== "SET_OUT_OF_SYSTEM") {
-      setPendingSetEvent(adjustedDetail);
+      setPendingSetEvent(detail);
       setShowCombo(true);
       return;
     }
 
-    fireEvent(adjustedDetail, null);
-  }, [selectedPlayerId, selectedAction, isLocked, recordingSide, selectedMatchId, selectedTeamId, selectedPlayer]);
+    fireEvent(detail, null);
+  }, [selectedPlayerId, selectedAction, isLocked, selectedMatchId, selectedTeamId, selectedPlayer]);
 
   const fireEvent = useCallback((detail: OutcomeDetailOption, combo: string | null) => {
     if (!selectedPlayerId || !selectedAction) return;
@@ -345,24 +365,12 @@ export default function TouchStats() {
     }
   }, []);
 
-  const handleSwitchSide = useCallback(() => {
-    const newSide = recordingSide === "home" ? "away" : "home";
-    setRecordingSide(newSide);
-    setSelectedPlayerId(null);
-    setSelectedAction(null);
-    setShowCombo(false);
-    setPendingSetEvent(null);
-    toast({
-      title: `Court Side Switched`,
-      description: newSide === "home"
-        ? `Points for your players go to ${teamName}`
-        : `Points for your players go to ${selectedMatch?.opponent || "opponent"}`,
-    });
-  }, [recordingSide, toast, teamName, selectedMatch]);
-
   const currentActionDetails = selectedAction ? (OUTCOME_DETAILS[selectedAction] || []) : [];
 
-  const Wrapper = fullscreen ? ({ children }: { children: React.ReactNode }) => <div className="min-h-screen bg-afrocat-bg p-4">{children}</div> : Layout;
+  const neededToWin = bestOf === 5 ? 3 : 2;
+  const matchComplete = homeSets >= neededToWin || awaySets >= neededToWin;
+
+  const Wrapper = fullscreen ? ({ children }: { children: React.ReactNode }) => <div className="min-h-screen bg-afrocat-bg p-4 pb-48">{children}</div> : Layout;
 
   return (
     <Wrapper>
@@ -403,14 +411,15 @@ export default function TouchStats() {
                   <SelectContent>
                     {eligibleMatches.map((m: any) => {
                       const team = teams.find((t: any) => t.id === m.teamId);
+                      const locked = !!(m.scoreLocked || m.statsEntered);
                       return (
                         <SelectItem key={m.id} value={m.id} data-testid={`select-touch-match-${m.id}`}>
-                          {m.matchDate} - {team?.name || "?"} vs {m.opponent}
+                          {m.matchDate} - {team?.name || "?"} vs {m.opponent} {locked ? "(Finalized)" : ""}
                         </SelectItem>
                       );
                     })}
                     {eligibleMatches.length === 0 && (
-                      <div className="px-3 py-2 text-xs text-afrocat-muted">No available matches to enter stats for.</div>
+                      <div className="px-3 py-2 text-xs text-afrocat-muted">No available matches.</div>
                     )}
                   </SelectContent>
                 </Select>
@@ -435,18 +444,59 @@ export default function TouchStats() {
           </div>
         </div>
 
+        {selectedMatchId && matchData && !scoringStarted && !isLocked && (
+          <div className="afrocat-card p-5" data-testid="format-selector">
+            <h3 className="text-sm font-bold text-afrocat-muted uppercase tracking-wider mb-3">Match Format</h3>
+            <p className="text-xs text-afrocat-muted mb-4">Select the match format before scoring begins. This determines FIVB set-end rules.</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => formatMut.mutate(3)}
+                disabled={formatMut.isPending}
+                className={`p-4 rounded-xl border-2 font-bold text-center transition-all cursor-pointer ${
+                  bestOf === 3
+                    ? "border-afrocat-teal bg-afrocat-teal-soft text-afrocat-teal ring-1 ring-afrocat-teal"
+                    : "border-afrocat-border bg-afrocat-white-3 text-afrocat-text hover:border-afrocat-teal/30"
+                }`}
+                data-testid="button-format-bo3"
+              >
+                <div className="text-lg">Best of 3</div>
+                <div className="text-[10px] opacity-70 mt-1">2 sets to win &bull; 25pt sets &bull; 15pt decider</div>
+              </button>
+              <button
+                onClick={() => formatMut.mutate(5)}
+                disabled={formatMut.isPending}
+                className={`p-4 rounded-xl border-2 font-bold text-center transition-all cursor-pointer ${
+                  bestOf === 5
+                    ? "border-afrocat-gold bg-afrocat-gold-soft text-afrocat-gold ring-1 ring-afrocat-gold"
+                    : "border-afrocat-border bg-afrocat-white-3 text-afrocat-text hover:border-afrocat-gold/30"
+                }`}
+                data-testid="button-format-bo5"
+              >
+                <div className="text-lg">Best of 5</div>
+                <div className="text-[10px] opacity-70 mt-1">3 sets to win &bull; 25pt sets &bull; 15pt decider</div>
+              </button>
+            </div>
+          </div>
+        )}
+
         {selectedMatchId && matchData && (
           <div className="afrocat-card overflow-hidden" data-testid="scoreboard">
             <div className="bg-gradient-to-r from-afrocat-bg via-afrocat-card to-afrocat-bg p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-gold">Live Scoreboard</span>
                 <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-bold text-afrocat-muted">Best of {bestOf}</span>
                   {matchData?.matchDurationMinutes && (
                     <span className="text-[10px] font-bold text-afrocat-muted" data-testid="text-match-duration">
                       Duration: {formatDuration(matchData.matchDurationMinutes)}
                     </span>
                   )}
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-teal" data-testid="text-current-set">Set {currentSet}</span>
+                  {!matchComplete && (
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-teal" data-testid="text-current-set">Set {currentSet}</span>
+                  )}
+                  {matchComplete && (
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-green" data-testid="text-match-complete">MATCH COMPLETE</span>
+                  )}
                 </div>
               </div>
 
@@ -456,8 +506,12 @@ export default function TouchStats() {
                   <div className="flex items-center justify-end gap-3 mt-1">
                     <span className="text-xs text-afrocat-muted">S</span>
                     <span className="text-lg font-black text-afrocat-teal" data-testid="text-home-sets">{homeSets}</span>
-                    <span className="text-xs text-afrocat-muted">P</span>
-                    <span className="text-3xl font-black text-afrocat-text" data-testid="text-home-points">{homePoints}</span>
+                    {!matchComplete && (
+                      <>
+                        <span className="text-xs text-afrocat-muted">P</span>
+                        <span className="text-3xl font-black text-afrocat-text" data-testid="text-home-points">{homePoints}</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -468,8 +522,12 @@ export default function TouchStats() {
                 <div className="text-left">
                   <p className="font-display font-bold text-sm text-afrocat-text truncate" data-testid="text-away-team">{selectedMatch?.opponent || "Away"}</p>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className="text-3xl font-black text-afrocat-text" data-testid="text-away-points">{awayPoints}</span>
-                    <span className="text-xs text-afrocat-muted">P</span>
+                    {!matchComplete && (
+                      <>
+                        <span className="text-3xl font-black text-afrocat-text" data-testid="text-away-points">{awayPoints}</span>
+                        <span className="text-xs text-afrocat-muted">P</span>
+                      </>
+                    )}
                     <span className="text-lg font-black text-afrocat-teal" data-testid="text-away-sets">{awaySets}</span>
                     <span className="text-xs text-afrocat-muted">S</span>
                   </div>
@@ -481,78 +539,44 @@ export default function TouchStats() {
                   <User className="w-3 h-3" />
                   <span data-testid="text-scorer-name">Scorer: {scorerName}</span>
                 </div>
-                <div className="flex items-center gap-1 flex-wrap">
-                  <button
-                    onClick={() => pointMut.mutate({ side: "home" })}
-                    disabled={isLocked}
-                    className="px-2 py-1 rounded text-[10px] font-bold bg-afrocat-teal-soft text-afrocat-teal hover:bg-afrocat-teal/20 disabled:opacity-40 cursor-pointer"
-                    data-testid="button-point-home"
-                  >+1 Home</button>
-                  <button
-                    onClick={() => decrementMut.mutate({ side: "home" })}
-                    disabled={isLocked || homePoints <= 0}
-                    className="px-2 py-1 rounded text-[10px] font-bold bg-afrocat-red-soft text-afrocat-red hover:bg-afrocat-red/20 disabled:opacity-40 cursor-pointer"
-                    data-testid="button-decrement-home"
-                  >-1 Home</button>
-                  <button
-                    onClick={() => pointMut.mutate({ side: "away" })}
-                    disabled={isLocked}
-                    className="px-2 py-1 rounded text-[10px] font-bold bg-afrocat-gold-soft text-afrocat-gold hover:bg-afrocat-gold/20 disabled:opacity-40 cursor-pointer"
-                    data-testid="button-point-away"
-                  >+1 Away</button>
-                  <button
-                    onClick={() => decrementMut.mutate({ side: "away" })}
-                    disabled={isLocked || awayPoints <= 0}
-                    className="px-2 py-1 rounded text-[10px] font-bold bg-afrocat-red-soft text-afrocat-red hover:bg-afrocat-red/20 disabled:opacity-40 cursor-pointer"
-                    data-testid="button-decrement-away"
-                  >-1 Away</button>
-                  <button
-                    onClick={() => undoPointMut.mutate()}
-                    disabled={isLocked}
-                    className="px-2 py-1 rounded text-[10px] font-bold bg-afrocat-white-5 text-afrocat-muted hover:bg-afrocat-white-10 disabled:opacity-40 cursor-pointer"
-                    data-testid="button-undo-point"
-                  >Undo Pt</button>
-                </div>
               </div>
-
-              {!isLocked && currentSet <= 5 && (
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => endSetMut.mutate({ winner: "home" })}
-                    disabled={endSetMut.isPending}
-                    className="flex-1 py-2 rounded-lg text-xs font-bold bg-afrocat-teal text-white hover:bg-afrocat-teal/80 disabled:opacity-50 cursor-pointer"
-                    data-testid="button-end-set-home"
-                  >End Set - Home Wins</button>
-                  <button
-                    onClick={() => endSetMut.mutate({ winner: "away" })}
-                    disabled={endSetMut.isPending}
-                    className="flex-1 py-2 rounded-lg text-xs font-bold bg-afrocat-gold text-white hover:bg-afrocat-gold/80 disabled:opacity-50 cursor-pointer"
-                    data-testid="button-end-set-away"
-                  >End Set - Away Wins</button>
-                </div>
-              )}
-
-              {!isLocked && (
-                <div className="mt-3 pt-3 border-t border-afrocat-border">
-                  <button
-                    onClick={handleSwitchSide}
-                    className="w-full py-2 rounded-lg text-xs font-bold bg-afrocat-white-5 text-afrocat-text hover:bg-afrocat-white-10 border border-afrocat-border flex items-center justify-center gap-2 cursor-pointer"
-                    data-testid="button-switch-side"
-                  >
-                    <ArrowLeftRight className="w-4 h-4" />
-                    Recording: {recordingSide === "home" ? teamName : (selectedMatch?.opponent || "Away")} — Tap to Switch
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {selectedMatchId && !initLoading && players.length > 0 && (
+        {selectedMatchId && matchData && isLocked && pomPlayer && (
+          <div className="afrocat-card p-5 border-afrocat-gold/30" data-testid="player-of-match">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-afrocat-gold/30 to-afrocat-teal/30 flex items-center justify-center border-2 border-afrocat-gold/50">
+                  {pomPlayer.photoUrl ? (
+                    <img src={pomPlayer.photoUrl} alt="" className="w-14 h-14 rounded-full object-cover" />
+                  ) : (
+                    <span className="text-xl font-bold text-afrocat-gold">{getInitials(pomPlayer.firstName, pomPlayer.lastName)}</span>
+                  )}
+                </div>
+                <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-afrocat-gold flex items-center justify-center">
+                  <Star className="w-3.5 h-3.5 text-white fill-white" />
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-afrocat-gold mb-1">Player of the Match</div>
+                <div className="font-display font-bold text-lg text-afrocat-text">
+                  {pomPlayer.firstName} {pomPlayer.lastName}
+                </div>
+                <div className="text-xs text-afrocat-muted">
+                  #{pomPlayer.jerseyNo} &bull; {pomPlayer.position || "-"}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedMatchId && !initLoading && players.length > 0 && !isLocked && (
           <>
             <div>
               <h3 className="text-sm font-bold text-afrocat-muted uppercase tracking-wider mb-3" data-testid="text-step-player">
-                1. Select Player ({recordingSide === "home" ? teamName : selectedMatch?.opponent || "Away"})
+                1. Select Player
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                 {players.map((p: any) => {
@@ -620,9 +644,6 @@ export default function TouchStats() {
                       {selectedPlayer?.firstName} {selectedPlayer?.lastName}
                     </span>
                     <span className="ml-2 text-xs text-afrocat-teal font-bold">#{selectedPlayer?.jerseyNo}</span>
-                    {recordingSide === "away" && (
-                      <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-afrocat-gold-soft text-afrocat-gold font-bold">AWAY</span>
-                    )}
                   </div>
                 </div>
 
@@ -665,9 +686,6 @@ export default function TouchStats() {
                           : d.outcome === "MINUS"
                             ? "bg-afrocat-red-soft border-afrocat-red/40 text-afrocat-red"
                             : "bg-afrocat-white-5 border-afrocat-border text-afrocat-muted";
-                        const displayPointTo = recordingSide === "away"
-                          ? (d.pointTo === "home" ? "away" : d.pointTo === "away" ? "home" : undefined)
-                          : d.pointTo;
                         return (
                           <button
                             key={d.value}
@@ -681,7 +699,7 @@ export default function TouchStats() {
                             <div className="text-sm font-black">{d.label}</div>
                             <div className="text-[10px] mt-0.5 opacity-70">
                               {d.outcome === "PLUS" ? "+" : d.outcome === "MINUS" ? "-" : "0"}
-                              {displayPointTo ? ` -> ${displayPointTo === "home" ? "us" : "opp"}` : ""}
+                              {d.pointTo ? ` -> ${d.pointTo === "home" ? "us" : "opp"}` : ""}
                             </div>
                           </button>
                         );
@@ -719,237 +737,238 @@ export default function TouchStats() {
               </div>
             )}
 
-            {allEvents.length > 0 && !isLocked && (
+            {allEvents.length > 0 && !isLocked && !matchComplete && (
               <div className="afrocat-card p-5">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-display font-bold text-afrocat-text text-sm" data-testid="text-sync-title">
-                      Sync Touch Stats to Player Stats
+                      Manual Finalize
                     </h3>
                     <p className="text-xs text-afrocat-muted mt-1">
-                      Aggregate all {allEvents.length} touch events into official player match statistics.
+                      If the match ended without reaching FIVB auto-end, you can manually finalize stats ({allEvents.length} events).
                     </p>
                   </div>
                   <button
-                    onClick={() => syncMut.mutate()}
-                    disabled={syncMut.isPending}
+                    onClick={() => finalizeMut.mutate()}
+                    disabled={finalizeMut.isPending}
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-afrocat-teal text-white font-bold text-sm hover:bg-afrocat-teal/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
-                    data-testid="button-sync-stats"
+                    data-testid="button-finalize-stats"
                   >
-                    {syncMut.isPending ? (
-                      <><Upload className="w-4 h-4 animate-spin" /> Syncing...</>
-                    ) : syncMut.isSuccess ? (
-                      <><CheckCircle2 className="w-4 h-4" /> Synced!</>
+                    {finalizeMut.isPending ? (
+                      <><Upload className="w-4 h-4 animate-spin" /> Finalizing...</>
                     ) : (
-                      <><Upload className="w-4 h-4" /> Sync to Stats</>
+                      <><Upload className="w-4 h-4" /> Finalize Match</>
                     )}
                   </button>
                 </div>
               </div>
             )}
+          </>
+        )}
 
-            {isLocked && allEvents.length > 0 && (
-              <div className="space-y-3">
-                <div className="afrocat-card p-4 flex items-center gap-3 border-afrocat-green/30">
-                  <CheckCircle2 className="w-5 h-5 text-afrocat-green shrink-0" />
-                  <p className="text-sm text-afrocat-green font-medium" data-testid="text-stats-synced">
-                    Stats have been synced to player records. Match is locked.
-                    {matchData?.matchDurationMinutes && ` Duration: ${formatDuration(matchData.matchDurationMinutes)}`}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowReport(!showReport)}
-                  className="w-full afrocat-card p-4 flex items-center justify-between hover:border-afrocat-teal/30 transition-all cursor-pointer"
-                  data-testid="button-toggle-report"
-                >
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-afrocat-teal" />
-                    <span className="text-sm font-bold text-afrocat-text">Match Report</span>
+        {isLocked && allEvents.length > 0 && (
+          <div className="space-y-3">
+            <div className="afrocat-card p-4 flex items-center gap-3 border-afrocat-green/30">
+              <CheckCircle2 className="w-5 h-5 text-afrocat-green shrink-0" />
+              <p className="text-sm text-afrocat-green font-medium" data-testid="text-stats-synced">
+                Stats have been synced to player records. Match is finalized.
+                {matchData?.matchDurationMinutes && ` Duration: ${formatDuration(matchData.matchDurationMinutes)}`}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowReport(!showReport)}
+              className="w-full afrocat-card p-4 flex items-center justify-between hover:border-afrocat-teal/30 transition-all cursor-pointer"
+              data-testid="button-toggle-report"
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-afrocat-teal" />
+                <span className="text-sm font-bold text-afrocat-text">Match Report</span>
+              </div>
+              {showReport ? <ChevronUp className="w-4 h-4 text-afrocat-muted" /> : <ChevronDown className="w-4 h-4 text-afrocat-muted" />}
+            </button>
+
+            {showReport && matchReport && (
+              <div className="afrocat-card p-5 space-y-5" data-testid="match-report" id="match-report-printable">
+                <div className="flex items-center justify-between pb-3 border-b border-afrocat-border">
+                  <div>
+                    <h2 className="font-display font-bold text-lg text-afrocat-text">
+                      {matchReport.team?.name} vs {matchReport.match.opponent}
+                    </h2>
+                    <p className="text-xs text-afrocat-muted mt-1">
+                      {matchReport.match.matchDate} | {matchReport.match.venue} | {matchReport.match.competition}
+                      {matchReport.match.round ? ` - ${matchReport.match.round}` : ""}
+                    </p>
                   </div>
-                  {showReport ? <ChevronUp className="w-4 h-4 text-afrocat-muted" /> : <ChevronDown className="w-4 h-4 text-afrocat-muted" />}
-                </button>
-
-                {showReport && matchReport && (
-                  <div className="afrocat-card p-5 space-y-5" data-testid="match-report" id="match-report-printable">
-                    <div className="flex items-center justify-between pb-3 border-b border-afrocat-border">
-                      <div>
-                        <h2 className="font-display font-bold text-lg text-afrocat-text">
-                          {matchReport.team?.name} vs {matchReport.match.opponent}
-                        </h2>
-                        <p className="text-xs text-afrocat-muted mt-1">
-                          {matchReport.match.matchDate} | {matchReport.match.venue} | {matchReport.match.competition}
-                          {matchReport.match.round ? ` - ${matchReport.match.round}` : ""}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-black text-afrocat-text">
-                          {matchReport.match.homeSetsWon} - {matchReport.match.awaySetsWon}
-                        </div>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                          matchReport.match.result === "W" ? "bg-afrocat-green-soft text-afrocat-green" :
-                          matchReport.match.result === "L" ? "bg-afrocat-red-soft text-afrocat-red" :
-                          "bg-afrocat-white-5 text-afrocat-muted"
-                        }`}>{matchReport.match.result === "W" ? "WIN" : matchReport.match.result === "L" ? "LOSS" : "N/A"}</span>
-                      </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-black text-afrocat-text">
+                      {matchReport.match.homeSetsWon} - {matchReport.match.awaySetsWon}
                     </div>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                      matchReport.match.result === "W" ? "bg-afrocat-green-soft text-afrocat-green" :
+                      matchReport.match.result === "L" ? "bg-afrocat-red-soft text-afrocat-red" :
+                      "bg-afrocat-white-5 text-afrocat-muted"
+                    }`}>{matchReport.match.result === "W" ? "WIN" : matchReport.match.result === "L" ? "LOSS" : "N/A"}</span>
+                  </div>
+                </div>
 
-                    {matchReport.match.matchDurationMinutes && (
-                      <div className="flex items-center gap-2 text-xs text-afrocat-muted">
-                        <Clock className="w-3.5 h-3.5" /> Match Duration: {formatDuration(matchReport.match.matchDurationMinutes)}
-                      </div>
-                    )}
+                {matchReport.match.matchDurationMinutes && (
+                  <div className="flex items-center gap-2 text-xs text-afrocat-muted">
+                    <Clock className="w-3.5 h-3.5" /> Match Duration: {formatDuration(matchReport.match.matchDurationMinutes)}
+                  </div>
+                )}
 
-                    {Object.keys(matchReport.setBreakdown || {}).length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-2">Set Breakdown</h4>
-                        <div className="grid grid-cols-5 gap-2">
-                          {Object.entries(matchReport.setBreakdown).map(([setNum, data]: any) => (
-                            <div key={setNum} className="afrocat-card p-2 text-center">
-                              <div className="text-[10px] text-afrocat-muted">Set {setNum}</div>
-                              <div className="font-bold text-sm text-afrocat-text">{data.homePoints} - {data.awayPoints}</div>
-                            </div>
-                          ))}
+                {Object.keys(matchReport.setBreakdown || {}).length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-2">Set Breakdown</h4>
+                    <div className="grid grid-cols-5 gap-2">
+                      {Object.entries(matchReport.setBreakdown).map(([setNum, data]: any) => (
+                        <div key={setNum} className="afrocat-card p-2 text-center">
+                          <div className="text-[10px] text-afrocat-muted">Set {setNum}</div>
+                          <div className="font-bold text-sm text-afrocat-text">{data.homePoints} - {data.awayPoints}</div>
                         </div>
-                      </div>
-                    )}
-
-                    {Object.keys(matchReport.staff || {}).length > 0 && (
-                      <div>
-                        <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-2">Match Staff</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                          {matchReport.staff.headCoach && (
-                            <div className="bg-afrocat-white-5 rounded-lg p-2">
-                              <div className="text-afrocat-muted">Head Coach</div>
-                              <div className="font-bold text-afrocat-text">{matchReport.staff.headCoach.firstName} {matchReport.staff.headCoach.lastName}</div>
-                            </div>
-                          )}
-                          {matchReport.staff.assistantCoach && (
-                            <div className="bg-afrocat-white-5 rounded-lg p-2">
-                              <div className="text-afrocat-muted">Assistant Coach</div>
-                              <div className="font-bold text-afrocat-text">{matchReport.staff.assistantCoach.firstName} {matchReport.staff.assistantCoach.lastName}</div>
-                            </div>
-                          )}
-                          {matchReport.staff.medic && (
-                            <div className="bg-afrocat-white-5 rounded-lg p-2">
-                              <div className="text-afrocat-muted">Medic</div>
-                              <div className="font-bold text-afrocat-text">{matchReport.staff.medic.firstName} {matchReport.staff.medic.lastName}</div>
-                            </div>
-                          )}
-                          {matchReport.staff.teamManager && (
-                            <div className="bg-afrocat-white-5 rounded-lg p-2">
-                              <div className="text-afrocat-muted">Team Manager</div>
-                              <div className="font-bold text-afrocat-text">{matchReport.staff.teamManager.firstName} {matchReport.staff.teamManager.lastName}</div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    <div>
-                      <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-3">Player Performance</h4>
-                      <div className="space-y-2">
-                        {matchReport.players.map((p: any) => (
-                          <div key={p.id} className="bg-afrocat-white-3 rounded-xl border border-afrocat-border p-3" data-testid={`report-player-${p.id}`}>
-                            <div className="flex items-center gap-3">
-                              {p.photoUrl ? (
-                                <img src={p.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-afrocat-teal/20" />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-afrocat-white-5 flex items-center justify-center text-sm font-bold text-afrocat-muted border border-afrocat-teal/20">
-                                  {getInitials(p.firstName, p.lastName)}
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-sm text-afrocat-text">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
-                                  <span className="text-[10px] text-afrocat-muted">{p.position}</span>
-                                  {p.isLibero && <span className="text-[10px] px-1.5 py-0.5 rounded bg-afrocat-gold-soft text-afrocat-gold font-bold">L</span>}
-                                </div>
-                                {p.stats ? (
-                                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
-                                    <span className="text-afrocat-green font-bold">K:{p.stats.spikesKill}</span>
-                                    <span className="text-afrocat-teal font-bold">A:{p.stats.servesAce}</span>
-                                    <span className="text-afrocat-gold font-bold">B:{p.stats.blocksSolo + p.stats.blocksAssist}</span>
-                                    <span className="text-afrocat-green font-bold">D:{p.stats.digs}</span>
-                                    <span className="text-afrocat-teal font-bold">SA:{p.stats.settingAssist}</span>
-                                    <span className="text-afrocat-red">E:{(p.stats.spikesError || 0) + (p.stats.servesError || 0) + (p.stats.receiveError || 0) + (p.stats.settingError || 0)}</span>
-                                    <span className="font-black text-afrocat-text">Pts:{p.stats.pointsTotal}</span>
-                                  </div>
-                                ) : (
-                                  <div className="text-[10px] text-afrocat-muted mt-1">No stats recorded</div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-afrocat-border flex justify-end">
-                      <button
-                        onClick={() => window.print()}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-xs hover:bg-afrocat-teal/90 cursor-pointer"
-                        data-testid="button-print-report"
-                      >
-                        <Printer className="w-4 h-4" /> Print Report
-                      </button>
+                      ))}
                     </div>
                   </div>
                 )}
+
+                {Object.keys(matchReport.staff || {}).length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-2">Match Staff</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                      {matchReport.staff.headCoach && (
+                        <div className="bg-afrocat-white-5 rounded-lg p-2">
+                          <div className="text-afrocat-muted">Head Coach</div>
+                          <div className="font-bold text-afrocat-text">{matchReport.staff.headCoach.firstName} {matchReport.staff.headCoach.lastName}</div>
+                        </div>
+                      )}
+                      {matchReport.staff.assistantCoach && (
+                        <div className="bg-afrocat-white-5 rounded-lg p-2">
+                          <div className="text-afrocat-muted">Assistant Coach</div>
+                          <div className="font-bold text-afrocat-text">{matchReport.staff.assistantCoach.firstName} {matchReport.staff.assistantCoach.lastName}</div>
+                        </div>
+                      )}
+                      {matchReport.staff.medic && (
+                        <div className="bg-afrocat-white-5 rounded-lg p-2">
+                          <div className="text-afrocat-muted">Medic</div>
+                          <div className="font-bold text-afrocat-text">{matchReport.staff.medic.firstName} {matchReport.staff.medic.lastName}</div>
+                        </div>
+                      )}
+                      {matchReport.staff.teamManager && (
+                        <div className="bg-afrocat-white-5 rounded-lg p-2">
+                          <div className="text-afrocat-muted">Team Manager</div>
+                          <div className="font-bold text-afrocat-text">{matchReport.staff.teamManager.firstName} {matchReport.staff.teamManager.lastName}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <h4 className="text-xs font-bold text-afrocat-muted uppercase tracking-wider mb-3">Player Performance</h4>
+                  <div className="space-y-2">
+                    {matchReport.players.map((p: any) => (
+                      <div key={p.id} className="bg-afrocat-white-3 rounded-xl border border-afrocat-border p-3" data-testid={`report-player-${p.id}`}>
+                        <div className="flex items-center gap-3">
+                          {p.photoUrl ? (
+                            <img src={p.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-afrocat-teal/20" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-full bg-afrocat-white-5 flex items-center justify-center text-sm font-bold text-afrocat-muted border border-afrocat-teal/20">
+                              {getInitials(p.firstName, p.lastName)}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-afrocat-text">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
+                              <span className="text-[10px] text-afrocat-muted">{p.position}</span>
+                              {p.isLibero && <span className="text-[10px] px-1.5 py-0.5 rounded bg-afrocat-gold-soft text-afrocat-gold font-bold">L</span>}
+                              {p.id === playerOfMatchPlayerId && <span className="text-[10px] px-1.5 py-0.5 rounded bg-afrocat-gold text-white font-bold flex items-center gap-0.5"><Star className="w-2.5 h-2.5 fill-white" /> POM</span>}
+                            </div>
+                            {p.stats ? (
+                              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
+                                <span className="text-afrocat-green font-bold">K:{p.stats.spikesKill}</span>
+                                <span className="text-afrocat-teal font-bold">A:{p.stats.servesAce}</span>
+                                <span className="text-afrocat-gold font-bold">B:{p.stats.blocksSolo + p.stats.blocksAssist}</span>
+                                <span className="text-afrocat-green font-bold">D:{p.stats.digs}</span>
+                                <span className="text-afrocat-teal font-bold">SA:{p.stats.settingAssist}</span>
+                                <span className="text-afrocat-red">E:{(p.stats.spikesError || 0) + (p.stats.servesError || 0) + (p.stats.receiveError || 0) + (p.stats.settingError || 0)}</span>
+                                <span className="font-black text-afrocat-text">Pts:{p.stats.pointsTotal}</span>
+                              </div>
+                            ) : (
+                              <div className="text-[10px] text-afrocat-muted mt-1">No stats recorded</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-afrocat-border flex justify-end">
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-xs hover:bg-afrocat-teal/90 cursor-pointer"
+                    data-testid="button-print-report"
+                  >
+                    <Printer className="w-4 h-4" /> Print Report
+                  </button>
+                </div>
               </div>
             )}
+          </div>
+        )}
 
-            <div className="afrocat-card overflow-hidden">
-              <div className="bg-afrocat-white-5 border-b border-afrocat-border p-4 rounded-t-[18px] flex items-center justify-between">
-                <h3 className="text-sm font-display font-bold text-afrocat-text" data-testid="text-recent-title">
-                  Recent Events ({allEvents.length})
-                </h3>
-                <button
-                  onClick={handleUndo}
-                  disabled={allEvents.length === 0 || isLocked || undoMut.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-afrocat-white-10 text-afrocat-text font-bold text-xs hover:bg-afrocat-white-5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                  data-testid="button-undo"
-                >
-                  <Undo2 className="w-3.5 h-3.5" />
-                  {undoMut.isPending ? "Undoing..." : "Undo Last"}
-                </button>
-              </div>
-              <div className="p-4 space-y-2 max-h-[300px] overflow-y-auto">
-                {allEvents.length === 0 ? (
-                  <p className="text-sm text-afrocat-muted text-center py-6" data-testid="text-no-events">
-                    No events recorded yet. Select a player and start tapping!
-                  </p>
-                ) : (
-                  allEvents.slice(0, 20).map((e: any) => {
-                    const player = players.find((p: any) => p.id === e.playerId);
-                    const pName = e.playerName || (player ? `${player.firstName} ${player.lastName}` : "Unknown");
-                    const jersey = e.jerseyNo ?? player?.jerseyNo ?? "";
-                    return (
-                      <div
-                        key={e.id}
-                        className={`flex items-center justify-between p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border ${
-                          e.id.startsWith("temp_") ? "opacity-60" : ""
-                        }`}
-                        data-testid={`event-${e.id}`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-afrocat-white-5 flex items-center justify-center text-xs font-bold text-afrocat-teal border border-afrocat-teal/20">
-                            {jersey}
-                          </div>
-                          <div>
-                            <div className="font-bold text-xs text-afrocat-text">{pName}</div>
-                            <div className="text-[10px] text-afrocat-muted">
-                              {e.action}{e.outcomeDetail ? ` - ${e.outcomeDetail}` : ""} | {new Date(e.createdAt).toLocaleTimeString()}
-                            </div>
+        {selectedMatchId && !isLocked && (
+          <div className="afrocat-card overflow-hidden">
+            <div className="bg-afrocat-white-5 border-b border-afrocat-border p-4 rounded-t-[18px] flex items-center justify-between">
+              <h3 className="text-sm font-display font-bold text-afrocat-text" data-testid="text-recent-title">
+                Recent Events ({allEvents.length})
+              </h3>
+              <button
+                onClick={handleUndo}
+                disabled={allEvents.length === 0 || isLocked || undoMut.isPending}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-afrocat-white-10 text-afrocat-text font-bold text-xs hover:bg-afrocat-white-5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                data-testid="button-undo"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                {undoMut.isPending ? "Undoing..." : "Undo Last"}
+              </button>
+            </div>
+            <div className="p-4 space-y-2 max-h-[300px] overflow-y-auto">
+              {allEvents.length === 0 ? (
+                <p className="text-sm text-afrocat-muted text-center py-6" data-testid="text-no-events">
+                  No events recorded yet. Select a player and start tapping!
+                </p>
+              ) : (
+                allEvents.slice(0, 20).map((e: any) => {
+                  const player = players.find((p: any) => p.id === e.playerId);
+                  const pName = e.playerName || (player ? `${player.firstName} ${player.lastName}` : "Unknown");
+                  const jersey = e.jerseyNo ?? player?.jerseyNo ?? "";
+                  return (
+                    <div
+                      key={e.id}
+                      className={`flex items-center justify-between p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border ${
+                        e.id.startsWith("temp_") ? "opacity-60" : ""
+                      }`}
+                      data-testid={`event-${e.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-afrocat-white-5 flex items-center justify-center text-xs font-bold text-afrocat-teal border border-afrocat-teal/20">
+                          {jersey}
+                        </div>
+                        <div>
+                          <div className="font-bold text-xs text-afrocat-text">{pName}</div>
+                          <div className="text-[10px] text-afrocat-muted">
+                            {e.action}{e.outcomeDetail ? ` - ${e.outcomeDetail}` : ""} | {new Date(e.createdAt).toLocaleTimeString()}
                           </div>
                         </div>
-                        {outcomeBadge(e.outcome)}
                       </div>
-                    );
-                  })
-                )}
-              </div>
+                      {outcomeBadge(e.outcome)}
+                    </div>
+                  );
+                })
+              )}
             </div>
-          </>
+          </div>
         )}
 
         {selectedMatchId && !initLoading && players.length === 0 && (
@@ -963,7 +982,43 @@ export default function TouchStats() {
             Loading players...
           </div>
         )}
+
+        <div className="h-48" />
       </div>
+
+      {selectedMatchId && matchData && !isLocked && !matchComplete && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-afrocat-bg/95 backdrop-blur-md border-t-2 border-afrocat-teal/30 p-3 safe-area-bottom" data-testid="point-pad">
+          <div className="max-w-4xl mx-auto grid grid-cols-[1fr_1fr_auto] gap-2">
+            <button
+              onClick={() => pointMut.mutate({ side: "AFROCAT" })}
+              disabled={pointMut.isPending}
+              className="min-h-[70px] rounded-xl bg-afrocat-teal text-white font-black text-lg tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-transform cursor-pointer disabled:opacity-60 shadow-lg shadow-afrocat-teal/30"
+              data-testid="button-point-afrocat"
+            >
+              <Plus className="w-6 h-6" />
+              +1 {teamName.length > 12 ? "AFROCAT" : teamName.toUpperCase()}
+            </button>
+            <button
+              onClick={() => pointMut.mutate({ side: "OPP" })}
+              disabled={pointMut.isPending}
+              className="min-h-[70px] rounded-xl bg-afrocat-gold text-white font-black text-lg tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-transform cursor-pointer disabled:opacity-60 shadow-lg shadow-afrocat-gold/30"
+              data-testid="button-point-opp"
+            >
+              <Plus className="w-6 h-6" />
+              +1 OPP
+            </button>
+            <button
+              onClick={() => undoPointMut.mutate()}
+              disabled={undoPointMut.isPending || (homePoints + awayPoints <= 0)}
+              className="min-h-[70px] w-16 rounded-xl bg-afrocat-white-10 text-afrocat-muted font-bold text-xs flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform cursor-pointer disabled:opacity-30 border border-afrocat-border"
+              data-testid="button-undo-point"
+            >
+              <Undo2 className="w-5 h-5" />
+              UNDO
+            </button>
+          </div>
+        </div>
+      )}
     </Wrapper>
   );
 }

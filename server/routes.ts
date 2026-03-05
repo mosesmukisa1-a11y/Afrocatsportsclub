@@ -5253,6 +5253,8 @@ th{background:#0d7377;color:white}
           homeSetsWon: (match as any).homeSetsWon || 0,
           awaySetsWon: (match as any).awaySetsWon || 0,
           currentSetNumber: (match as any).currentSetNumber || 1,
+          bestOf: (match as any).bestOf || 3,
+          playerOfMatchPlayerId: (match as any).playerOfMatchPlayerId || null,
         },
         teamName: team?.name || "Home",
         scorerName,
@@ -5335,47 +5337,218 @@ th{background:#0d7377;color:white}
         createdBy: req.user?.userId || null,
       });
 
+      let setResult = null;
       if (resolvedPointSide) {
         const isHome = resolvedPointSide === "home";
         await storage.updateMatch(matchId, {
           liveHomePoints: ((match as any).liveHomePoints || 0) + (isHome ? 1 : 0),
           liveAwayPoints: ((match as any).liveAwayPoints || 0) + (isHome ? 0 : 1),
         } as any);
+        setResult = await checkSetEndFIVB(matchId);
       }
 
       const updatedMatch = await storage.getMatch(matchId);
-      res.json({ event, match: updatedMatch });
+      res.json({ event, match: updatedMatch, setResult });
     } catch (err) { next(err); }
   });
 
-  app.post("/api/matches/:matchId/scoreboard/point", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+  app.patch("/api/matches/:matchId/format", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
       const { matchId } = req.params;
-      const { side } = req.body;
-      if (!["home", "away"].includes(side)) return res.status(400).json({ error: "side must be 'home' or 'away'" });
-
+      const body = z.object({ bestOf: z.union([z.literal(3), z.literal(5)]) }).parse(req.body);
       const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ error: "Match not found" });
-
-      await storage.updateMatch(matchId, {
-        liveHomePoints: ((match as any).liveHomePoints || 0) + (side === "home" ? 1 : 0),
-        liveAwayPoints: ((match as any).liveAwayPoints || 0) + (side === "away" ? 1 : 0),
-      } as any);
-
+      if ((match as any).scoringStartedAt) return res.status(400).json({ error: "Cannot change format after scoring has started" });
+      await storage.updateMatch(matchId, { bestOf: body.bestOf } as any);
       const updated = await storage.getMatch(matchId);
       res.json(updated);
     } catch (err) { next(err); }
   });
 
-  app.post("/api/matches/:matchId/scoreboard/undo-point", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+  async function checkSetEndFIVB(matchId: string) {
+    const match = await storage.getMatch(matchId);
+    if (!match) return null;
+    const bestOf = (match as any).bestOf || 3;
+    const currentSet = (match as any).currentSetNumber || 1;
+    const hp = (match as any).liveHomePoints || 0;
+    const ap = (match as any).liveAwayPoints || 0;
+    const homeSets = (match as any).homeSetsWon || 0;
+    const awaySets = (match as any).awaySetsWon || 0;
+    const neededToWin = bestOf === 5 ? 3 : 2;
+    const isDecidingSet = (bestOf === 5 && currentSet === 5) || (bestOf === 3 && currentSet === 3);
+    const target = isDecidingSet ? 15 : 25;
+    const lead = Math.abs(hp - ap);
+    if ((hp >= target || ap >= target) && lead >= 2) {
+      const homeWon = hp > ap;
+      const newHomeSets = homeSets + (homeWon ? 1 : 0);
+      const newAwaySets = awaySets + (homeWon ? 0 : 1);
+      const matchComplete = newHomeSets >= neededToWin || newAwaySets >= neededToWin;
+      await storage.updateMatch(matchId, {
+        homeSetsWon: newHomeSets,
+        awaySetsWon: newAwaySets,
+        currentSetNumber: currentSet + 1,
+        liveHomePoints: 0,
+        liveAwayPoints: 0,
+      } as any);
+      if (matchComplete) {
+        await finalizeMatchInternal(matchId);
+      }
+      return { setEnded: true, setNumber: currentSet, winner: homeWon ? "AFROCAT" : "OPP", homePoints: hp, awayPoints: ap, matchComplete, homeSets: newHomeSets, awaySets: newAwaySets };
+    }
+    return null;
+  }
+
+  async function finalizeMatchInternal(matchId: string) {
+    const match = await storage.getMatch(matchId);
+    if (!match) return;
+    const events = await storage.getMatchEvents(matchId);
+    const playerAgg: Record<string, { spikesKill: number; spikesError: number; servesAce: number; servesError: number; blocksSolo: number; blocksAssist: number; receivePerfect: number; receivePositive: number; receiveError: number; digs: number; settingAssist: number; settingError: number; }> = {};
+    for (const ev of events) {
+      if (!playerAgg[ev.playerId]) {
+        playerAgg[ev.playerId] = { spikesKill: 0, spikesError: 0, servesAce: 0, servesError: 0, blocksSolo: 0, blocksAssist: 0, receivePerfect: 0, receivePositive: 0, receiveError: 0, digs: 0, settingAssist: 0, settingError: 0 };
+      }
+      const s = playerAgg[ev.playerId];
+      const a = ev.action; const o = ev.outcome; const od = ev.outcomeDetail || "";
+      if (a === "ATTACK" && o === "PLUS") s.spikesKill++;
+      else if (a === "ATTACK" && o === "MINUS") s.spikesError++;
+      else if (a === "SERVE" && o === "PLUS") s.servesAce++;
+      else if (a === "SERVE" && o === "MINUS") s.servesError++;
+      else if (a === "BLOCK" && o === "PLUS") s.blocksSolo++;
+      else if (a === "BLOCK" && o === "ZERO") s.blocksAssist++;
+      else if (a === "RECEIVE" && o === "PLUS") s.receivePerfect++;
+      else if (a === "RECEIVE" && o === "ZERO" && od === "2_POSITIVE") s.receivePositive++;
+      else if (a === "RECEIVE" && o === "MINUS") s.receiveError++;
+      else if (a === "DIG" && o === "PLUS") s.digs++;
+      else if (a === "SET" && o === "PLUS") s.settingAssist++;
+      else if (a === "SET" && o === "MINUS") s.settingError++;
+    }
+
+    for (const [playerId, stat] of Object.entries(playerAgg)) {
+      const pointsTotal = (stat.spikesKill * 2) + (stat.servesAce * 2) + (stat.blocksSolo * 2) + stat.blocksAssist + stat.digs + stat.settingAssist - (stat.spikesError * 2) - (stat.servesError * 2) - (stat.receiveError * 2) - (stat.settingError * 2);
+      await storage.upsertStat({ ...stat, matchId, playerId, pointsTotal });
+      const player = await storage.getPlayer(playerId);
+      const focusAreas: string[] = [];
+      if (stat.servesError >= 3) focusAreas.push("Serving consistency");
+      if (stat.spikesError >= 3) focusAreas.push("Attack control");
+      if (stat.receiveError >= 3) focusAreas.push("Serve reception");
+      if (stat.settingError >= 3) focusAreas.push("Setting accuracy");
+      if (player?.position?.toLowerCase().includes("middle") && (stat.blocksSolo + stat.blocksAssist) < 2) focusAreas.push("Blocking timing");
+      if (focusAreas.length > 0) await storage.createSmartFocus({ playerId, matchId, focusAreas });
+    }
+
+    let pomScore: Record<string, number> = {};
+    for (const [pid, s] of Object.entries(playerAgg)) {
+      pomScore[pid] = (s.spikesKill * 3) + (s.servesAce * 3) + (s.blocksSolo * 3) + (s.receivePerfect * 2) + (s.receivePositive * 1) + (s.blocksAssist * 1) + (s.digs * 2) + (s.settingAssist * 1) - (s.spikesError * 2) - (s.servesError * 2) - (s.receiveError * 2) - (s.settingError * 1);
+    }
+
+    const pomSorted = Object.entries(pomScore).sort(([pidA, scoreA], [pidB, scoreB]) => {
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      const a = playerAgg[pidA]; const b = playerAgg[pidB];
+      const errA = a.spikesError + a.servesError + a.receiveError + a.settingError;
+      const errB = b.spikesError + b.servesError + b.receiveError + b.settingError;
+      if (errA !== errB) return errA - errB;
+      if (a.receivePerfect !== b.receivePerfect) return b.receivePerfect - a.receivePerfect;
+      const ptsA = a.spikesKill + a.servesAce + a.blocksSolo;
+      const ptsB = b.spikesKill + b.servesAce + b.blocksSolo;
+      return ptsB - ptsA;
+    });
+
+    let pomPlayerId: string | null = null;
+    if (pomSorted.length > 0) {
+      pomPlayerId = pomSorted[0][0];
+    }
+
+    const updatedMatch = await storage.getMatch(matchId);
+    const updateData: any = {
+      statsEntered: true,
+      scoreLocked: true,
+      scoreSource: "STATS",
+      scoringEndedAt: new Date(),
+      playerOfMatchPlayerId: pomPlayerId,
+      homeScore: (updatedMatch as any)?.homeSetsWon || 0,
+      awayScore: (updatedMatch as any)?.awaySetsWon || 0,
+      setsFor: (updatedMatch as any)?.homeSetsWon || 0,
+      setsAgainst: (updatedMatch as any)?.awaySetsWon || 0,
+    };
+    if ((match as any).scoringStartedAt) {
+      updateData.matchDurationMinutes = Math.round((Date.now() - new Date((match as any).scoringStartedAt).getTime()) / 60000);
+    }
+    updateData.result = updateData.homeScore > updateData.awayScore ? "W" : updateData.homeScore < updateData.awayScore ? "L" : "D";
+    await storage.updateMatch(matchId, updateData);
+
+    const team = await storage.getTeam(match.teamId);
+    const matchLabel = `${team?.name || "Afrocat"} vs ${match.opponent}`;
+
+    if (pomPlayerId) {
+      const pomPlayer = await storage.getPlayer(pomPlayerId);
+      if (pomPlayer) {
+        const allUsers = await storage.getUsers();
+        for (const u of allUsers) {
+          if (u.accountStatus !== "ACTIVE") continue;
+          try {
+            await storage.createNotification({ userId: u.id, type: "MATCH_SELECTION", title: "Player of the Match", message: `${pomPlayer.firstName} ${pomPlayer.lastName} (#${pomPlayer.jerseyNo}) — ${matchLabel}`, metadata: { matchId } });
+          } catch (_) {}
+        }
+      }
+    }
+
+    for (const [playerId, stat] of Object.entries(playerAgg)) {
+      const player = await storage.getPlayer(playerId);
+      if (!player?.userId) continue;
+      const totalErrors = stat.spikesError + stat.servesError + stat.receiveError + stat.settingError;
+      const improvements: string[] = [];
+      if (stat.servesError >= 2) improvements.push("Serving consistency");
+      if (stat.spikesError >= 2) improvements.push("Attack accuracy");
+      if (stat.receiveError >= 2) improvements.push("Reception quality");
+      const msg = `Kills: ${stat.spikesKill}, Aces: ${stat.servesAce}, Blocks: ${stat.blocksSolo}, Digs: ${stat.digs}, Errors: ${totalErrors}. ${improvements.length > 0 ? `Focus: ${improvements.join(", ")}` : "Keep up the good work!"}`;
+      try {
+        await storage.createNotification({ userId: player.userId, type: "MATCH_SELECTION", title: "Your Match Stats", message: msg, metadata: { matchId } });
+      } catch (_) {}
+    }
+
+    const allUsers = await storage.getUsers();
+    const coaches = allUsers.filter((u: any) => u.role === "ADMIN" || u.role === "COACH" || (u.roles && (u.roles.includes("ADMIN") || u.roles.includes("COACH"))));
+    for (const c of coaches) {
+      try {
+        await storage.createNotification({ userId: c.id, type: "MATCH_SELECTION", title: "Match Report Ready", message: `Stats finalized for ${matchLabel}. Check coach dashboard for player alerts and training focus.`, metadata: { matchId } });
+      } catch (_) {}
+    }
+  }
+
+  app.post("/api/matches/:matchId/scoreboard/point", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const { side } = req.body;
+      if (!["AFROCAT", "OPP", "home", "away"].includes(side)) return res.status(400).json({ error: "side must be 'AFROCAT' or 'OPP'" });
+
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+      const isLocked = !!(match.statsEntered || match.scoreLocked);
+      if (isLocked) return res.status(403).json({ error: "Match is locked" });
+
+      const isHome = side === "AFROCAT" || side === "home";
+      await storage.updateMatch(matchId, {
+        liveHomePoints: ((match as any).liveHomePoints || 0) + (isHome ? 1 : 0),
+        liveAwayPoints: ((match as any).liveAwayPoints || 0) + (isHome ? 0 : 1),
+      } as any);
+
+      const setResult = await checkSetEndFIVB(matchId);
+      const updated = await storage.getMatch(matchId);
+      res.json({ match: updated, setResult });
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/matches/:matchId/scoreboard/undo-last", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
       const { matchId } = req.params;
       const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ error: "Match not found" });
+      const isLocked = !!(match.statsEntered || match.scoreLocked);
+      if (isLocked) return res.status(403).json({ error: "Match is locked" });
 
       const hp = (match as any).liveHomePoints || 0;
       const ap = (match as any).liveAwayPoints || 0;
-      if (hp + ap <= 0) return res.json(match);
+      if (hp + ap <= 0) return res.json({ match });
 
       const events = await storage.getMatchEvents(matchId);
       const lastWithPoint = events
@@ -5394,6 +5567,29 @@ th{background:#0d7377;color:white}
         await storage.updateMatch(matchId, { liveAwayPoints: ap - 1 } as any);
       }
 
+      const updated = await storage.getMatch(matchId);
+      res.json({ match: updated });
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/matches/:matchId/scoreboard/undo-point", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+      const hp = (match as any).liveHomePoints || 0;
+      const ap = (match as any).liveAwayPoints || 0;
+      if (hp + ap <= 0) return res.json(match);
+      const events = await storage.getMatchEvents(matchId);
+      const lastWithPoint = events.filter((e: any) => e.pointWonByTeamId).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (lastWithPoint) {
+        const isHome = lastWithPoint.pointWonByTeamId === (match as any).teamId;
+        await storage.updateMatch(matchId, { liveHomePoints: Math.max(0, hp - (isHome ? 1 : 0)), liveAwayPoints: Math.max(0, ap - (isHome ? 0 : 1)) } as any);
+      } else if (hp >= ap && hp > 0) {
+        await storage.updateMatch(matchId, { liveHomePoints: hp - 1 } as any);
+      } else if (ap > 0) {
+        await storage.updateMatch(matchId, { liveAwayPoints: ap - 1 } as any);
+      }
       const updated = await storage.getMatch(matchId);
       res.json(updated);
     } catch (err) { next(err); }
@@ -5420,15 +5616,13 @@ th{background:#0d7377;color:white}
   app.post("/api/matches/:matchId/scoreboard/end-set", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
       const { matchId } = req.params;
-      const { winner } = req.body;
-      if (!["home", "away"].includes(winner)) return res.status(400).json({ error: "winner must be 'home' or 'away'" });
-
       const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ error: "Match not found" });
-
+      if ((match as any).bestOf) return res.status(400).json({ error: "Manual end-set disabled for FIVB-format matches. Sets end automatically." });
+      const { winner } = req.body;
+      if (!["home", "away"].includes(winner)) return res.status(400).json({ error: "winner must be 'home' or 'away'" });
       const currentSet = (match as any).currentSetNumber || 1;
       if (currentSet > 5) return res.status(400).json({ error: "Maximum 5 sets" });
-
       await storage.updateMatch(matchId, {
         homeSetsWon: ((match as any).homeSetsWon || 0) + (winner === "home" ? 1 : 0),
         awaySetsWon: ((match as any).awaySetsWon || 0) + (winner === "away" ? 1 : 0),
@@ -5436,9 +5630,20 @@ th{background:#0d7377;color:white}
         liveHomePoints: 0,
         liveAwayPoints: 0,
       } as any);
-
       const updated = await storage.getMatch(matchId);
       res.json(updated);
+    } catch (err) { next(err); }
+  });
+
+  app.post("/api/matches/:matchId/finalize", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+      if (match.statsEntered || match.scoreLocked) return res.status(400).json({ error: "Match already finalized" });
+      await finalizeMatchInternal(matchId);
+      const updated = await storage.getMatch(matchId);
+      res.json({ ok: true, match: updated });
     } catch (err) { next(err); }
   });
 
