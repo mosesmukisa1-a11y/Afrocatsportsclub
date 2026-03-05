@@ -6931,15 +6931,59 @@ th{background:#0d7377;color:white}
       const users = await db.select().from(schema.users);
       const assignments = await storage.getOfficialTeamAssignments();
       const teams = await db.select().from(schema.teams);
+      const teamOfficialRows = await db.select().from(schema.teamOfficials);
       const teamMap = Object.fromEntries(teams.map(t => [t.id, t.name]));
+
       const officialUserIds = [...new Set(assignments.map(a => a.officialUserId))];
-      const officials = users.filter(u => ["OFFICIAL","ADMIN","MANAGER","COACH","MEDICAL"].includes(u.role || "") || officialUserIds.includes(u.id));
-      const result = officials.map(o => ({
-        ...o, password: undefined,
-        assignments: assignments.filter(a => a.officialUserId === o.id).map(a => ({
-          ...a, teamName: teamMap[a.teamId] || "",
-        })),
-      }));
+      const staffRoles = ["ADMIN","MANAGER","COACH","MEDICAL","FINANCE","STATISTICIAN","CAPTAIN"];
+      const officials = users.filter(u => {
+        const userRoles = (u.roles && u.roles.length > 0) ? u.roles : [u.role];
+        return userRoles.some((r: string) => staffRoles.includes(r)) || officialUserIds.includes(u.id);
+      });
+
+      const teamOfficialsByTeam: Record<string, any[]> = {};
+      teamOfficialRows.forEach(to => {
+        if (!teamOfficialsByTeam[to.teamId]) teamOfficialsByTeam[to.teamId] = [];
+        teamOfficialsByTeam[to.teamId].push(to);
+      });
+
+      const result = officials.map(o => {
+        const adminAssignments = assignments.filter(a => a.officialUserId === o.id).map(a => ({
+          ...a, teamName: teamMap[a.teamId] || "", source: "ADMIN_ASSIGNMENT" as const,
+        }));
+
+        const userRoles = (o.roles && o.roles.length > 0) ? o.roles : [o.role];
+        const registrationRoles = userRoles.filter((r: string) => staffRoles.includes(r)).map((r: string) => ({
+          id: `reg-${o.id}-${r}`, officialRole: r, teamName: "All Teams",
+          teamId: null, source: "REGISTRATION" as const, active: true,
+        }));
+
+        const o2bisRoles: any[] = [];
+        const nameLC = (o.fullName || "").toLowerCase();
+        teamOfficialRows.forEach(to => {
+          if ((to.name || "").toLowerCase() === nameLC) {
+            const roleMap: Record<string, string> = {
+              HEAD_COACH: "HEAD COACH", ASSISTANT_COACH: "ASSISTANT COACH",
+              TRAINER: "TRAINER", TEAM_MANAGER: "TEAM MANAGER",
+              PHYSIOTHERAPIST: "PHYSIOTHERAPIST", MEDIC: "MEDIC",
+            };
+            o2bisRoles.push({
+              id: `o2bis-${to.id}`, officialRole: roleMap[to.role] || to.role,
+              teamName: teamMap[to.teamId] || "", teamId: to.teamId,
+              source: "O2BIS_TEAM_OFFICIAL" as const, active: true,
+            });
+          }
+        });
+
+        return {
+          id: o.id, fullName: o.fullName, email: o.email, phone: o.phone || null,
+          role: o.role, roles: o.roles, gender: o.gender || null,
+          registrationRoles,
+          adminAssignments,
+          o2bisRoles,
+          allRoles: [...registrationRoles, ...adminAssignments, ...o2bisRoles],
+        };
+      });
       res.json(result);
     } catch (e) { next(e); }
   });

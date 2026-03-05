@@ -4,21 +4,21 @@ import { Layout } from "@/components/Layout";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Plus, Trash2, UserPlus, Search } from "lucide-react";
+import { Shield, Plus, Trash2, UserPlus, Search, Mail, Phone, Tag, Users, FileText, UserCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 const OFFICIAL_ROLES = [
-  "REFEREE", "ASSISTANT_REFEREE", "SCORER", "LINE_JUDGE", "MATCH_COMMISSIONER", "OTHER"
+  "REFEREE", "ASSISTANT_REFEREE", "SCORER", "LINE_JUDGE", "MATCH_COMMISSIONER",
+  "HEAD_COACH", "ASSISTANT_COACH", "TEAM_MANAGER", "TRAINER", "MEDIC", "PHYSIOTHERAPIST", "OTHER"
 ];
 
-interface FlatAssignment {
-  assignmentId: string;
-  officialName: string;
-  officialRole: string;
-  teamName: string;
-  active: boolean;
-  userId: string;
-}
+const SOURCE_LABELS: Record<string, { label: string; color: string; icon: any }> = {
+  REGISTRATION: { label: "Registration", color: "text-blue-400 bg-blue-500/10", icon: UserCheck },
+  ADMIN_ASSIGNMENT: { label: "Admin Assigned", color: "text-afrocat-teal bg-afrocat-teal/10", icon: Shield },
+  O2BIS_TEAM_OFFICIAL: { label: "O2BIS", color: "text-afrocat-gold bg-afrocat-gold-soft", icon: FileText },
+};
+
+type ViewMode = "by-person" | "by-role" | "by-team";
 
 export default function Officials() {
   const { user } = useAuth();
@@ -29,6 +29,9 @@ export default function Officials() {
   const [showAssign, setShowAssign] = useState(false);
   const [searchQ, setSearchQ] = useState("");
   const [searchGender, setSearchGender] = useState("");
+  const [filterTeam, setFilterTeam] = useState("");
+  const [filterSource, setFilterSource] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("by-person");
   const [assignForm, setAssignForm] = useState({ officialUserId: "", teamId: "", officialRole: "REFEREE" });
 
   const { data: officials = [], isLoading } = useQuery({
@@ -67,38 +70,127 @@ export default function Officials() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const flatAssignments: FlatAssignment[] = [];
-  officials.forEach((o: any) => {
-    const assignments = o.assignments || [];
-    if (assignments.length === 0) return;
-    assignments.forEach((a: any) => {
-      flatAssignments.push({
-        assignmentId: a.id,
-        officialName: o.fullName || "Unknown",
-        officialRole: a.officialRole || "OTHER",
-        teamName: a.teamName || "—",
-        active: a.active !== false,
-        userId: o.id || o.userId,
-      });
+  const filteredOfficials = (officials as any[]).filter((o: any) => {
+    const allRoles = o.allRoles || [];
+    if (filterTeam && !allRoles.some((r: any) => r.teamId === filterTeam || r.teamName === "All Teams")) return false;
+    if (filterSource && !allRoles.some((r: any) => r.source === filterSource)) return false;
+    return true;
+  }).sort((a: any, b: any) => (a.fullName || "").localeCompare(b.fullName || ""));
+
+  const allFlatRoles: any[] = [];
+  filteredOfficials.forEach((o: any) => {
+    (o.allRoles || []).forEach((r: any) => {
+      if (filterSource && r.source !== filterSource) return;
+      if (filterTeam && r.teamId !== filterTeam && r.teamName !== "All Teams") return;
+      allFlatRoles.push({ ...r, official: o });
     });
   });
 
-  const grouped: Record<string, FlatAssignment[]> = {};
-  flatAssignments.forEach(a => {
-    const key = a.officialRole;
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(a);
+  const groupedByRole: Record<string, any[]> = {};
+  allFlatRoles.forEach(r => {
+    const key = r.officialRole || "OTHER";
+    if (!groupedByRole[key]) groupedByRole[key] = [];
+    groupedByRole[key].push(r);
   });
+
+  const groupedByTeam: Record<string, any[]> = {};
+  allFlatRoles.forEach(r => {
+    const key = r.teamName || "Unassigned";
+    if (!groupedByTeam[key]) groupedByTeam[key] = [];
+    groupedByTeam[key].push(r);
+  });
+
+  const renderSourceBadge = (source: string) => {
+    const info = SOURCE_LABELS[source];
+    if (!info) return null;
+    const Icon = info.icon;
+    return (
+      <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${info.color} uppercase tracking-wider`}>
+        <Icon size={10} /> {info.label}
+      </span>
+    );
+  };
+
+  const renderOfficialCard = (o: any, showRoles = true) => (
+    <div key={o.id} className="afrocat-card p-4 space-y-2" data-testid={`official-card-${o.id}`}>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-afrocat-gold-soft flex items-center justify-center text-sm font-bold text-afrocat-gold shrink-0">
+          {(o.fullName || "?").charAt(0)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-afrocat-text" data-testid={`text-official-name-${o.id}`}>{o.fullName || "Unknown"}</p>
+          <div className="flex items-center gap-3 flex-wrap mt-0.5">
+            {o.email && (
+              <span className="flex items-center gap-1 text-[10px] text-afrocat-muted">
+                <Mail size={10} /> {o.email}
+              </span>
+            )}
+            {o.phone && (
+              <span className="flex items-center gap-1 text-[10px] text-afrocat-muted">
+                <Phone size={10} /> {o.phone}
+              </span>
+            )}
+            {o.gender && (
+              <span className="flex items-center gap-1 text-[10px] text-afrocat-muted">
+                {o.gender}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      {showRoles && (o.allRoles || []).length > 0 && (
+        <div className="pl-13 space-y-1">
+          {(o.allRoles || []).map((r: any, i: number) => (
+            <div key={r.id || i} className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-bold text-afrocat-text">{(r.officialRole || "").replace(/_/g, " ")}</span>
+              <span className="text-[10px] text-afrocat-muted">→ {r.teamName || "—"}</span>
+              {renderSourceBadge(r.source)}
+              {!r.active && <span className="text-[9px] font-bold text-afrocat-red bg-afrocat-red-soft px-1.5 py-0.5 rounded-full">Inactive</span>}
+              {canManage && r.source === "ADMIN_ASSIGNMENT" && (
+                <button onClick={() => { if (confirm("Remove this assignment?")) removeMut.mutate(r.id); }}
+                  className="p-0.5 rounded hover:bg-afrocat-red-soft text-afrocat-muted hover:text-afrocat-red transition-colors cursor-pointer" data-testid={`button-remove-${r.id}`}>
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderRoleRow = (r: any) => (
+    <div key={`${r.id}-${r.official?.id}`} className="afrocat-card p-3 flex items-center gap-3" data-testid={`role-row-${r.id}`}>
+      <div className="w-8 h-8 rounded-full bg-afrocat-gold-soft flex items-center justify-center text-xs font-bold text-afrocat-gold shrink-0">
+        {(r.official?.fullName || "?").charAt(0)}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-afrocat-text">{r.official?.fullName}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] text-afrocat-muted">{r.teamName}</span>
+          {r.official?.email && <span className="text-[10px] text-afrocat-muted"><Mail size={9} className="inline mr-0.5" />{r.official.email}</span>}
+          {r.official?.phone && <span className="text-[10px] text-afrocat-muted"><Phone size={9} className="inline mr-0.5" />{r.official.phone}</span>}
+        </div>
+      </div>
+      {renderSourceBadge(r.source)}
+      {canManage && r.source === "ADMIN_ASSIGNMENT" && (
+        <button onClick={() => { if (confirm("Remove?")) removeMut.mutate(r.id); }}
+          className="p-1 rounded hover:bg-afrocat-red-soft text-afrocat-muted hover:text-afrocat-red cursor-pointer">
+          <Trash2 size={14} />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <Layout>
-      <div className="p-6 max-w-4xl mx-auto space-y-6">
+      <div className="space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <Shield className="h-7 w-7 text-afrocat-gold" />
             <div>
               <h1 className="text-2xl font-display font-bold text-afrocat-text" data-testid="text-officials-title">Officials</h1>
-              <p className="text-xs text-afrocat-muted">Match officials and their team assignments</p>
+              <p className="text-xs text-afrocat-muted">Unified view from Registration, Admin Assignments, and O2BIS roles</p>
             </div>
           </div>
           {canManage && (
@@ -109,38 +201,95 @@ export default function Officials() {
           )}
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center bg-afrocat-card border border-afrocat-border rounded-lg overflow-hidden">
+            {(["by-person", "by-role", "by-team"] as ViewMode[]).map(mode => (
+              <button key={mode} onClick={() => setViewMode(mode)}
+                className={`px-3 py-1.5 text-xs font-bold transition-colors cursor-pointer ${viewMode === mode ? "bg-afrocat-teal text-white" : "text-afrocat-muted hover:bg-afrocat-white-5"}`}
+                data-testid={`button-view-${mode}`}>
+                {mode === "by-person" ? "By Person" : mode === "by-role" ? "By Role" : "By Team"}
+              </button>
+            ))}
+          </div>
+          <select value={filterTeam} onChange={e => setFilterTeam(e.target.value)}
+            className="px-3 py-1.5 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-xs" data-testid="select-filter-team">
+            <option value="">All Teams</option>
+            {(teams as any[]).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <select value={filterSource} onChange={e => setFilterSource(e.target.value)}
+            className="px-3 py-1.5 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-xs" data-testid="select-filter-source">
+            <option value="">All Sources</option>
+            <option value="REGISTRATION">Registration</option>
+            <option value="ADMIN_ASSIGNMENT">Admin Assigned</option>
+            <option value="O2BIS_TEAM_OFFICIAL">O2BIS</option>
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="afrocat-card p-3 flex items-center gap-2" data-testid="stat-total-officials">
+            <Users size={18} className="text-afrocat-teal" />
+            <div>
+              <p className="text-lg font-bold text-afrocat-text">{filteredOfficials.length}</p>
+              <p className="text-[10px] text-afrocat-muted">Total Officials</p>
+            </div>
+          </div>
+          <div className="afrocat-card p-3 flex items-center gap-2" data-testid="stat-registration">
+            <UserCheck size={18} className="text-blue-400" />
+            <div>
+              <p className="text-lg font-bold text-afrocat-text">{allFlatRoles.filter(r => r.source === "REGISTRATION").length}</p>
+              <p className="text-[10px] text-afrocat-muted">From Registration</p>
+            </div>
+          </div>
+          <div className="afrocat-card p-3 flex items-center gap-2" data-testid="stat-admin">
+            <Shield size={18} className="text-afrocat-teal" />
+            <div>
+              <p className="text-lg font-bold text-afrocat-text">{allFlatRoles.filter(r => r.source === "ADMIN_ASSIGNMENT").length}</p>
+              <p className="text-[10px] text-afrocat-muted">Admin Assigned</p>
+            </div>
+          </div>
+          <div className="afrocat-card p-3 flex items-center gap-2" data-testid="stat-o2bis">
+            <FileText size={18} className="text-afrocat-gold" />
+            <div>
+              <p className="text-lg font-bold text-afrocat-text">{allFlatRoles.filter(r => r.source === "O2BIS_TEAM_OFFICIAL").length}</p>
+              <p className="text-[10px] text-afrocat-muted">O2BIS Roles</p>
+            </div>
+          </div>
+        </div>
+
         {isLoading ? (
           <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-afrocat-teal" /></div>
-        ) : flatAssignments.length === 0 ? (
+        ) : filteredOfficials.length === 0 ? (
           <div className="afrocat-card p-12 text-center">
             <Shield className="h-16 w-16 mx-auto mb-4 text-afrocat-muted opacity-30" />
-            <h3 className="text-lg font-display font-bold text-afrocat-text mb-1">No officials assigned</h3>
+            <h3 className="text-lg font-display font-bold text-afrocat-text mb-1">No officials found</h3>
             <p className="text-sm text-afrocat-muted">{canManage ? "Assign officials to teams to get started." : "No officials have been assigned yet."}</p>
+          </div>
+        ) : viewMode === "by-person" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {filteredOfficials.map((o: any) => renderOfficialCard(o))}
+          </div>
+        ) : viewMode === "by-role" ? (
+          <div className="space-y-6">
+            {Object.entries(groupedByRole).sort(([a], [b]) => a.localeCompare(b)).map(([role, items]) => (
+              <div key={role}>
+                <h2 className="text-xs font-bold text-afrocat-gold uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Tag size={12} /> {role.replace(/_/g, " ")} <span className="text-afrocat-muted font-normal">({items.length})</span>
+                </h2>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {items.map(renderRoleRow)}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="space-y-6">
-            {Object.entries(grouped).map(([role, items]) => (
-              <div key={role}>
-                <h2 className="text-sm font-bold text-afrocat-gold uppercase tracking-wider mb-3">{role.replace(/_/g, " ")}</h2>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {items.map((a) => (
-                    <div key={a.assignmentId} className="afrocat-card p-4 flex items-center gap-3" data-testid={`official-card-${a.assignmentId}`}>
-                      <div className="w-10 h-10 rounded-full bg-afrocat-gold-soft flex items-center justify-center text-sm font-bold text-afrocat-gold">
-                        {a.officialName.charAt(0)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-afrocat-text">{a.officialName}</p>
-                        <p className="text-[10px] text-afrocat-muted">Team: {a.teamName}</p>
-                      </div>
-                      {!a.active && <span className="text-[10px] font-bold text-afrocat-red bg-afrocat-red-soft px-2 py-0.5 rounded-full">Inactive</span>}
-                      {canManage && (
-                        <button onClick={() => { if (confirm("Remove this assignment?")) removeMut.mutate(a.assignmentId); }}
-                          className="p-1.5 rounded-lg hover:bg-afrocat-red-soft text-afrocat-muted hover:text-afrocat-red transition-colors cursor-pointer" data-testid={`button-remove-official-${a.assignmentId}`}>
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+            {Object.entries(groupedByTeam).sort(([a], [b]) => a.localeCompare(b)).map(([teamName, items]) => (
+              <div key={teamName}>
+                <h2 className="text-xs font-bold text-afrocat-gold uppercase tracking-wider mb-2 flex items-center gap-2">
+                  <Users size={12} /> {teamName} <span className="text-afrocat-muted font-normal">({items.length})</span>
+                </h2>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {items.map(renderRoleRow)}
                 </div>
               </div>
             ))}
@@ -165,12 +314,17 @@ export default function Officials() {
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
               </select>
-              <div className="max-h-40 overflow-y-auto mt-2 space-y-1">
-                {[...members].filter((m: any) => !searchGender || (m.gender || "").toLowerCase() === searchGender.toLowerCase()).sort((a: any, b: any) => (a.fullName || "").localeCompare(b.fullName || "")).map((m: any) => (
+              <div className="max-h-48 overflow-y-auto mt-2 space-y-1">
+                {[...(members as any[])].filter((m: any) => !searchGender || (m.gender || "").toLowerCase() === searchGender.toLowerCase()).sort((a: any, b: any) => (a.fullName || "").localeCompare(b.fullName || "")).map((m: any) => (
                   <button key={m.id} onClick={() => setAssignForm(f => ({ ...f, officialUserId: m.id }))}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${assignForm.officialUserId === m.id ? "bg-afrocat-teal/15 text-afrocat-teal" : "hover:bg-afrocat-white-5 text-afrocat-text"}`}
+                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors ${assignForm.officialUserId === m.id ? "bg-afrocat-teal/15 text-afrocat-teal" : "hover:bg-afrocat-white-5 text-afrocat-text"}`}
                     data-testid={`pick-official-${m.id}`}>
-                    <UserPlus className="h-3 w-3" /> {m.fullName} <span className="text-afrocat-muted">({m.role})</span>
+                    <UserPlus className="h-3 w-3 shrink-0" />
+                    <div className="flex-1 text-left">
+                      <span className="font-bold">{m.fullName}</span>
+                      <span className="text-afrocat-muted ml-1">({m.role})</span>
+                      {m.email && <span className="text-afrocat-muted ml-1 text-[10px]">{m.email}</span>}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -181,7 +335,7 @@ export default function Officials() {
               <select value={assignForm.teamId} onChange={e => setAssignForm(f => ({ ...f, teamId: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm" data-testid="select-official-team">
                 <option value="">Select team...</option>
-                {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                {(teams as any[]).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
 
