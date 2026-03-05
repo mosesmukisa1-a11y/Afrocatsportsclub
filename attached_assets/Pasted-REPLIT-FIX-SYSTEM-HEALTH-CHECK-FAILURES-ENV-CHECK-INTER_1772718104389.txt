@@ -1,0 +1,151 @@
+REPLIT – FIX SYSTEM HEALTH CHECK FAILURES + ENV CHECK + INTERVIEW (MIC PERMISSION + FRONT/BACK CAMERA) – AT NO EXTRA COST
+
+You currently show:
+- 0 Passed, 8 Failed (Teams, Players, Matches, Media, Finance Fee Config, Notifications, Chat Rooms, Notices)
+- “Failed to check environment variables”
+
+These are core stability items and were part of the planned build. Please fix ALL below at no cost (your implementation is incomplete).
+
+=====================================================================
+1) FIX HEALTH CHECK: ALL 8 MODULES FAILING
+=====================================================================
+
+ROOT CAUSE (most common):
+A) Health check is calling routes that do not exist (404)
+B) Health check calls routes that require auth, but the check runs without token (401/403)
+C) Base API path mismatch (/api vs /v1 vs serverless path)
+D) Server not serving static / missing middleware / DB not connected
+
+REQUIRED SOLUTION:
+Create ONE public endpoint:
+GET /api/health
+Return always:
+{ ok:true, service:"afrocat", time: ISO_STRING }
+
+Then create module health endpoints (public OR provide service-token):
+GET /api/health/modules
+Return:
+{
+  ok:true,
+  modules:{
+    teams:true/false,
+    players:true/false,
+    matches:true/false,
+    media:true/false,
+    financeFeeConfig:true/false,
+    notifications:true/false,
+    chatRooms:true/false,
+    notices:true/false
+  },
+  errors:{ ...optional }
+}
+
+IMPLEMENTATION RULE:
+- Each module check should call INTERNAL DB query (fast) instead of calling secured app routes.
+- Example checks:
+  teams: await db.team.count()
+  players: await db.player.count()
+  matches: await db.match.count()
+  media: await db.mediaItem.count()
+  financeFeeConfig: await db.financeConfig.findFirst()
+  notifications: await db.notification.count()
+  chatRooms: await db.chatThread.count()
+  notices: await db.noticeBoardPost.count()
+
+IMPORTANT:
+Do NOT rely on frontend calling protected endpoints for health checks.
+Health checks must not fail just because user isn’t logged in.
+
+=====================================================================
+2) FIX “FAILED TO CHECK ENVIRONMENT VARIABLES”
+=====================================================================
+
+Problem seen on screen: “Failed to check environment variables”
+This happens when:
+- the endpoint doesn’t exist, or
+- it’s blocked by auth/CORS, or
+- the server can’t read process.env / crashes.
+
+REQUIRED:
+Add endpoint:
+GET /api/health/env
+Return:
+{
+  ok:true,
+  env:{
+    DATABASE_URL: true/false,
+    GMAIL_USER: true/false,
+    GMAIL_APP_PASSWORD: true/false,
+    EMAIL_AUTO_CC: true/false,
+    VAPID_PUBLIC_KEY: true/false,
+    VAPID_PRIVATE_KEY: true/false
+  }
+}
+
+SECURITY RULE:
+Never return actual secret values; only booleans.
+
+ALSO:
+If DATABASE_URL missing -> show explicit error message in response.
+
+=====================================================================
+3) FRONTEND HEALTH CHECK – MAKE IT RELIABLE
+=====================================================================
+
+Update the frontend health screen to call ONLY:
+- GET /api/health
+- GET /api/health/modules
+- GET /api/health/env
+
+Do NOT call:
+- /api/teams
+- /api/players
+etc. (those may require auth, filters, and can fail)
+
+This is why all modules show FAIL.
+
+=====================================================================
+4) INTERVIEW – MIC PERMISSION + FRONT/BACK CAMERA
+=====================================================================
+
+A) Microphone permission
+- Ensure the interview recording uses:
+  navigator.mediaDevices.getUserMedia({ video: {...}, audio: true })
+- The UI must show a clear button:
+  “Enable Microphone” / “Start Recording”
+- If user denies permission, show message with retry.
+
+B) Front AND Back camera selection
+- Add a camera selector toggle:
+  [Front Camera] [Back Camera]
+- Implement with facingMode:
+  Front: facingMode: "user"
+  Back:  facingMode: { exact: "environment" }  (fallback to "environment" if exact fails)
+
+Required video constraints:
+video: {
+  width: { ideal: 1280 },
+  height:{ ideal: 720 },
+  facingMode: selectedFacingMode
+},
+audio: true
+
+C) Save interview video
+- Store uploaded video URL against interview record
+- Ensure mobile Safari/Chrome works (use MediaRecorder where supported)
+
+=====================================================================
+5) CONFIRM THIS IS A NO-COST FIX
+=====================================================================
+
+Replit: These failures (8 module health failures + env check failing + missing interview mic/camera support) are NOT new scope; they are incomplete or incorrect implementation of already requested features and system stability. Please fix all items above at no additional cost and confirm:
+
+- The exact endpoints you added:
+  /api/health
+  /api/health/modules
+  /api/health/env
+- That the health screen now shows Pass for each module
+- That interview recording prompts for microphone
+- That interview recording supports both front and back camera
+
+END
