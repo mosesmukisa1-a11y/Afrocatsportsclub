@@ -1,0 +1,89 @@
+REPLIT – FIX ROLE SWITCHING: KEEP SELECTED ROLE AFTER REFRESH (MULTI-ROLE USERS)
+
+PROBLEM:
+Multi-role users (e.g., PLAYER + COACH + ADMIN) lose their selected role view after page refresh.
+
+REQUIREMENT:
+- The role switcher must remain visible at ALL times.
+- The user’s last selected role must persist after refresh.
+- Selection must only allow roles that the user actually has.
+- Switching roles changes the dashboard view ONLY (not permissions).
+
+========================================================
+1) FRONTEND: PERSIST ACTIVE ROLE IN localStorage
+========================================================
+
+KEYS:
+- localStorage["afrocat_active_role"] = "PLAYER" | "COACH" | "OFFICIAL" | "ADMIN" | "SUPER_ADMIN"
+- localStorage["afrocat_active_teamId"] = "..." (optional if needed)
+
+ON ROLE CHANGE:
+- Save the selected role:
+  localStorage.setItem("afrocat_active_role", role)
+
+ON APP LOAD:
+- Read saved role:
+  const saved = localStorage.getItem("afrocat_active_role")
+
+- Validate it is still allowed:
+  if (saved && user.roles.includes(saved)) use it
+  else fallback to best default:
+     if user.roles includes "COACH" use "COACH"
+     else if includes "PLAYER" use "PLAYER"
+     else use user.roles[0]
+
+- Keep switcher always rendered in Navbar (desktop + mobile).
+
+========================================================
+2) SERVER: OPTIONAL SESSION PERSIST (IF YOU WANT STRONGER)
+========================================================
+
+If you want persistence across devices, also store in DB:
+
+UserPreferences:
+- userId
+- activeRole
+- activeTeamId
+
+Endpoint:
+POST /api/user/preferences
+Body: { activeRole, activeTeamId }
+
+On login:
+Return preferences with user object so UI initializes correctly.
+
+NOTE:
+Even if you do DB, still keep localStorage so refresh is instant.
+
+========================================================
+3) DO NOT REMOVE SWITCHER ON ROUTE CHANGES
+========================================================
+
+Current issue often happens because:
+- navbar unmounts on refresh
+- role state is kept only in component state
+
+Fix:
+- Move role state to a global store (Context/Zustand/Redux) OR initialize it in App root.
+- Always read localStorage in App root before rendering routes.
+
+========================================================
+4) UI: ALWAYS SHOW ROLE SWITCHER
+========================================================
+
+RoleSwitcher rules:
+- Only show roles the user has: user.roles[]
+- Highlight current activeRole
+- On click: set activeRole + save localStorage + redirect to correct dashboard page
+
+========================================================
+5) SECURITY NOTE (IMPORTANT)
+========================================================
+
+Active role only changes UI view.
+Backend permissions MUST still check real user.role(s) on server.
+Never trust localStorage role for authorization.
+
+========================================================
+END – IMPLEMENT EXACTLY
+========================================================

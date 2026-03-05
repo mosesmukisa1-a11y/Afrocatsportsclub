@@ -47,22 +47,34 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeRole, setActiveRole] = useState<string>("");
+  const [activeRole, setActiveRole] = useState<string>(() => {
+    return localStorage.getItem("afrocat_active_role") || "";
+  });
   const [, setLocation] = useLocation();
+
+  function resolveRole(savedRole: string | null, allRoles: string[]): string {
+    if (savedRole && allRoles.includes(savedRole)) return savedRole;
+    if (allRoles.includes("COACH")) return "COACH";
+    if (allRoles.includes("PLAYER")) return "PLAYER";
+    return allRoles[0] || "PLAYER";
+  }
+
+  function getAllRoles(u: any): string[] {
+    const roles = u.roles && u.roles.length > 0 ? [...u.roles] : [u.role];
+    if (u.isSuperAdmin && !roles.includes("ADMIN")) roles.unshift("ADMIN");
+    return roles;
+  }
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (token) {
       api.me().then(u => {
-        setUser(u);
-        const savedRole = localStorage.getItem(`activeRole_${u.id}`);
-        const allRoles = u.roles && u.roles.length > 0 ? u.roles : [u.role];
-        if (savedRole && allRoles.includes(savedRole)) {
-          setActiveRole(savedRole);
-          setUser({ ...u, role: savedRole });
-        } else {
-          setActiveRole(u.role);
-        }
+        const allRoles = getAllRoles(u);
+        const saved = localStorage.getItem("afrocat_active_role");
+        const resolved = resolveRole(saved, allRoles);
+        setActiveRole(resolved);
+        localStorage.setItem("afrocat_active_role", resolved);
+        setUser({ ...u, role: resolved });
       }).catch(() => clearToken()).finally(() => setLoading(false));
     } else {
       setLoading(false);
@@ -72,15 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string): Promise<LoginResult> => {
     const res = await api.login({ email, password });
     setToken(res.token);
-    const savedRole = localStorage.getItem(`activeRole_${res.user.id}`);
-    const allRoles = res.user.roles && res.user.roles.length > 0 ? res.user.roles : [res.user.role];
-    if (savedRole && allRoles.includes(savedRole)) {
-      setUser({ ...res.user, role: savedRole });
-      setActiveRole(savedRole);
-    } else {
-      setUser(res.user);
-      setActiveRole(res.user.role);
-    }
+    const allRoles = getAllRoles(res.user);
+    const saved = localStorage.getItem("afrocat_active_role");
+    const resolved = resolveRole(saved, allRoles);
+    setActiveRole(resolved);
+    localStorage.setItem("afrocat_active_role", resolved);
+    setUser({ ...res.user, role: resolved });
     registerPushNotifications();
     return { mustChangePassword: res.mustChangePassword };
   };
@@ -92,16 +101,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchRole = (role: string) => {
     if (!user) return;
-    const allRoles = user.roles && user.roles.length > 0 ? user.roles : [user.role];
+    const allRoles = getAllRoles(user);
     if (!allRoles.includes(role)) return;
     setActiveRole(role);
     setUser({ ...user, role });
-    localStorage.setItem(`activeRole_${user.id}`, role);
+    localStorage.setItem("afrocat_active_role", role);
     setLocation("/dashboard");
   };
 
   const logout = () => {
     clearToken();
+    localStorage.removeItem("afrocat_active_role");
     setUser(null);
     setActiveRole("");
     setLocation("/login");

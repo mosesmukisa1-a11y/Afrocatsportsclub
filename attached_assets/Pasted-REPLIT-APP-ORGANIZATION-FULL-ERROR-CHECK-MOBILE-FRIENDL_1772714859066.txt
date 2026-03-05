@@ -1,0 +1,261 @@
+REPLIT – APP ORGANIZATION + FULL ERROR CHECK + MOBILE FRIENDLY + NULL-SAFETY (NO CRASHES)
+
+GOAL:
+Clean up the app, ensure all modules work as planned, improve mobile UX, and eliminate null/undefined errors.
+
+========================================================
+1) APP RE-ORGANIZATION (STRUCTURE)
+========================================================
+
+A) Server folders
+/server
+  /routes
+    auth.js
+    players.js
+    teams.js
+    matches.js
+    devstats.js
+    o2bis.js
+    media.js
+    chat.js
+    notice.js
+    attendance.js
+    finance.js
+    notifications.js
+    email.js
+  /services
+    matchStatus.js
+    o2bisGenerator.js
+    devstatsReport.js
+    notificationsService.js
+    financeService.js
+    attendanceRules.js
+  /middleware
+    requireAuth.js
+    requireRole.js
+    validate.js
+  db.js
+  index.js
+
+B) Frontend folders
+/src
+  /pages
+    Dashboard.jsx
+    CoachDashboard.jsx
+    AdminDashboard.jsx
+    EnterStats.jsx
+    MatchDetails.jsx
+  /components
+    Navbar.jsx
+    RoleSwitcher.jsx
+    MobileTabs.jsx
+    MediaFeed.jsx
+    MediaSlideshow.jsx
+    ChatUI.jsx
+    NoticeBoard.jsx
+    AttendanceUI.jsx
+    FinanceUI.jsx
+    O2bisPreview.jsx
+    ErrorBoundary.jsx
+  /utils
+    api.js
+    dates.js
+    safe.js
+    validators.js
+  /styles
+    mobile.css
+
+========================================================
+2) GLOBAL NULL/UNDEFINED SAFETY (STOP ALL CRASHES)
+========================================================
+
+A) Server: validate ALL inputs
+- Never assume req.body fields exist.
+- Validate matchId/teamId/playerId always.
+- Return { ok:false, error:"..." } on bad inputs.
+
+Add a shared validator helper:
+validateRequired(body, ["teamId","playerId"])
+
+B) Server: never return null objects
+- If not found => 404 with friendly message
+- If arrays => always return [] not null
+
+C) Frontend: safe rendering
+- Always default arrays: (data?.items || [])
+- Always default strings: (user?.name || "")
+- Date parsing safe: if (!date) show “—”
+- Prevent undefined mapping: (list || []).map()
+
+========================================================
+3) STANDARD API RESPONSE FORMAT (CONSISTENT)
+========================================================
+
+All endpoints must return:
+Success:
+{ ok:true, data: ... }
+Error:
+{ ok:false, error:"message", code?:"VALIDATION_ERROR" }
+
+Update frontend api.js to handle:
+- if ok:false => toast error and never crash
+
+========================================================
+4) MOBILE FRIENDLY UI (REQUIRED)
+========================================================
+
+A) Add a bottom navigation bar (mobile):
+Tabs:
+- Home
+- Matches
+- Stats
+- Chat
+- Media
+- More
+
+B) Big touch targets
+- Buttons min height: 44–56px
+- Inputs full width
+- Cards with spacing
+
+C) Reduce tables on mobile
+- Convert big tables to card lists
+- Use collapsible sections
+
+D) Fullscreen support for Enter Stats + Court Board
+- Fullscreen button persists
+- Sticky controls at bottom
+
+========================================================
+5) ERROR LOGGER + CRASH PROTECTION
+========================================================
+
+A) Frontend ErrorBoundary
+Wrap the whole app:
+<ErrorBoundary>
+  <App />
+</ErrorBoundary>
+
+If crash occurs:
+- show “Something went wrong”
+- button “Reload”
+- log error to server endpoint
+
+B) Server log endpoint:
+POST /api/log/client-error
+Body: { message, stack, userId, route }
+
+========================================================
+6) MATCH STATUS CONSISTENCY (FIX MIXUPS)
+========================================================
+
+Create ONE function:
+normalizeMatchStatus(match, now)
+
+All match lists MUST call this before returning:
+- UPCOMING: now < startTime
+- LIVE: startTime <= now <= endTime
+- PAST_NO_SCORE: now > endTime AND no score AND no stats
+- PLAYED: scoreLocked OR statsEntered OR scoreSource != NONE
+
+Return computed:
+- countdown label for upcoming
+- isPast/isUpcoming/isLive flags
+
+========================================================
+7) O2BIS / TEAM LIST PRINT SAFETY
+========================================================
+
+- Add preview-before-save/print everywhere
+- Always apply margins and prevent cut-off:
+  - wrap long names
+  - enforce row height
+  - validate page bounds
+
+Before generating PDF:
+- Ensure required player fields exist; else block selection.
+
+========================================================
+8) MODULE SMOKE TESTS (MUST PASS)
+========================================================
+
+Run these checks inside the app (admin-only “System Check” page):
+
+A) Auth
+- login works
+- role switch persists after refresh
+
+B) Registration
+- gender/team filtering correct
+- alphabetical player lists
+
+C) Match scheduling
+- no score required on schedule
+- upcoming/past correct
+- edit scheduled match allowed (admin)
+- o2bis uses assigned staff
+
+D) Enter Stats
+- auto-save stable
+- fullscreen works
+- big point pad works
+- best-of 3/5 works
+- fivb set end logic works
+- generates match report + player stats notifications
+
+E) Media
+- multi upload works
+- download works
+- slideshow works
+- admin-only upload enforced
+
+F) Chat
+- mobile friendly
+- notifications delivered
+- participants display names correctly
+
+G) Attendance
+- correct day rules:
+  Mon+Wed female, Tue+Thu male, Fri all
+- excuses/late requests flow works
+
+H) Finance
+- fees calculations correct
+- payment approval required
+- reminders show if unpaid
+- player value rules correct (exclude player-paid)
+
+========================================================
+9) “SYSTEM CHECK” IMPLEMENTATION (ADMIN)
+========================================================
+
+Create /admin/system-check page:
+- Runs API calls and shows PASS/FAIL:
+  - /api/health
+  - /api/media
+  - /api/matches?type=upcoming
+  - /api/chat/threads
+  - /api/finance/summary
+  - /api/notice
+
+Also checks:
+- required env vars exist:
+  GMAIL_USER, GMAIL_APP_PASSWORD, EMAIL_AUTO_CC
+
+========================================================
+10) QUICK FIXES TO AVOID NULL ERRORS (MUST APPLY)
+========================================================
+
+Frontend patterns to enforce everywhere:
+- const items = Array.isArray(d?.items) ? d.items : [];
+- const name = [u?.firstName, u?.lastName].filter(Boolean).join(" ") || "—";
+- const teamName = team?.name || "—";
+- const photo = p?.photoUrl || "/default-avatar.png";
+
+Server patterns:
+- if (!id) return res.status(400).json({ ok:false, error:"Missing id" });
+- if (!record) return res.status(404).json({ ok:false, error:"Not found" });
+
+========================================================
+END – APPLY THIS AS A CLEANUP PHASE BEFORE ADDING MORE FEATURES
+========================================================

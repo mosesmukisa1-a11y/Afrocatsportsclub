@@ -63,7 +63,12 @@ export function Layout({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
 
-  const userRoles = user?.roles && user.roles.length > 0 ? user.roles : user ? [user.role] : [];
+  const userRoles = (() => {
+    if (!user) return [];
+    const roles = user.roles && user.roles.length > 0 ? [...user.roles] : [user.role];
+    if (user.isSuperAdmin && !roles.includes("ADMIN")) roles.unshift("ADMIN");
+    return roles;
+  })();
   const hasMultipleRoles = userRoles.length > 1;
   const currentRoleColor = ROLE_COLORS[activeRole || user?.role || ""] || ROLE_COLORS.PLAYER;
   const effectiveRole = activeRole || user?.role || "";
@@ -81,9 +86,16 @@ export function Layout({ children }: { children: ReactNode }) {
           <img src={logo} alt="Afrocat Logo" className="w-8 h-8 object-contain" />
           <span className="font-display font-bold text-afrocat-text">Afrocat Portal</span>
         </div>
-        <button onClick={() => setMobileOpen(!mobileOpen)} data-testid="button-mobile-menu" className="text-afrocat-text">
-          {mobileOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        <div className="flex items-center gap-2">
+          {hasMultipleRoles && (
+            <span className={`text-[10px] font-bold px-2 py-1 rounded ${currentRoleColor.bg} ${currentRoleColor.text} uppercase tracking-wider`}>
+              {effectiveRole}
+            </span>
+          )}
+          <button onClick={() => setMobileOpen(!mobileOpen)} data-testid="button-mobile-menu" className="text-afrocat-text">
+            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </div>
 
       <aside
