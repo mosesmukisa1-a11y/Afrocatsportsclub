@@ -1,0 +1,113 @@
+REPLIT – ADD THESE CONDITIONS / FIXES (GLOBAL PLAYER SEARCH FILTERS + INTERVIEW VIDEO RECORDING + ENTER STATS UI BUGS + TRAINING DAYS CORRECTION)
+
+========================================================
+1) GLOBAL PLAYER SEARCH (EVERYWHERE IN APP)
+========================================================
+
+Wherever there is “Search Players” (match selection, o2bis, documents, chat add members, finance, attendance, etc.), implement the SAME reusable component:
+
+PLAYER PICKER REQUIREMENTS:
+A) Scrollable list
+- The player results container must have:
+  max-height: 60vh
+  overflow-y: auto
+So users can scroll down to see more results.
+
+B) Search box
+- Search by name, jersey number, phone, ID (if any)
+- Debounced input (250ms)
+
+C) Filters (must exist everywhere)
+- Filter by TEAM (dropdown)
+- Filter by GENDER (dropdown: MALE / FEMALE / ALL)
+
+D) Sorting
+- Always alphabetical:
+  lastName ASC, firstName ASC
+
+E) API (shared)
+GET /api/players/search?q=...&teamId=...&gender=...
+Return:
+{ ok:true, players:[...] }
+
+IMPORTANT:
+Use this same API & UI component everywhere, no duplicates.
+
+========================================================
+2) INTERVIEW – ADD VIDEO RECORDING SECTION
+========================================================
+
+In the Interview form/page:
+Add “Video Recording” section using device camera (mobile friendly):
+
+UI:
+- “Record Video” button
+- Preview playback after recording
+- “Save Upload” button
+
+Backend:
+POST /api/interview/video/upload
+multipart/form-data:
+- videoFile
+- interviewId
+
+Storage:
+- save under public/uploads/interviews/
+- store url in Interview table:
+  interview.videoUrl
+
+Permissions:
+- Admin / interviewer roles only (or whoever is allowed in the interview module)
+
+========================================================
+3) ENTER STATS BUGS
+========================================================
+
+A) Match option is blinking when selected
+Fix:
+- Remove any CSS animation class applied to “selected match”.
+- Selected state should be a solid highlight only:
+  background: #111, color: #fff (no animation)
+
+B) Best of Five selection bug
+Current problem:
+- In some matches it’s not selecting Best of Five.
+Requirement:
+- Best of Five must be the DEFAULT.
+
+Fix logic:
+- On match init:
+  if match.bestOf is null => set match.bestOf = 5 immediately (server-side default)
+- In UI:
+  default radio selected = 5
+- When user changes to 3:
+  PATCH /api/matches/:matchId/format { bestOf: 3 }
+- After statsStartedAt exists, block changing bestOf:
+  “Cannot change match format after stats started.”
+
+Also ensure:
+- UI radio state is controlled by match.bestOf returned from server.
+- Do not keep a separate local default that can desync.
+
+========================================================
+4) TRAINING DAYS – CORRECT ORDER (FINAL)
+========================================================
+
+Correct training schedule:
+- Women: Monday and Wednesday
+- Men: Tuesday and Thursday
+- Friday: Combined (ALL genders)
+
+Apply everywhere:
+- Attendance default training rules
+- Training schedule generator
+- Automated reminders
+
+Rule mapping:
+if day in (Mon, Wed) => targetGender=FEMALE
+if day in (Tue, Thu) => targetGender=MALE
+if day == Fri => targetGender=ALL
+
+========================================================
+END – IMPLEMENT EXACTLY
+========================================================
