@@ -66,16 +66,15 @@ export async function generateO2BISPdf(storage: IStorage, options: O2BISOptions)
   if (squad) {
     const entries = await storage.getMatchSquadEntries(squad.id);
     const allPlayers = await storage.getPlayersByTeam(teamId);
-    const captainIds = await getCaptainPlayerIds(storage);
     players = entries.map((e: any) => {
       const p = allPlayers.find(pl => pl.id === e.playerId);
       return p ? {
         jerseyNo: e.jerseyNo ?? p.jerseyNo ?? "",
         name: `${(p.lastName || "").toUpperCase()} ${p.firstName || ""}`.trim(),
-        position: p.position || "",
+        position: e.matchPosition || p.position || "",
         dob: p.dob || "",
         age: calculateAge(p.dob || ""),
-        isCaptain: captainIds.has(p.id),
+        isCaptain: e.isCaptain === true,
         isLibero: e.isLibero === true,
         nationality: p.nationality || "",
         gender: (p.gender || "").charAt(0).toUpperCase() || "",
@@ -99,8 +98,8 @@ export async function generateO2BISPdf(storage: IStorage, options: O2BISOptions)
   const lightGray = rgb(0.85, 0.85, 0.85);
   const white = rgb(1, 1, 1);
   const tealBg = rgb(0.06, 0.55, 0.49);
-  const lM = 40;
-  const rM = pageW - 40;
+  const lM = 42;
+  const rM = pageW - 42;
   const tableW = rM - lM;
 
   let y = pageH - 40;
@@ -227,8 +226,13 @@ export async function generateO2BISPdf(storage: IStorage, options: O2BISOptions)
 
     drawText(String(i + 1), cols[0].x + 5, y - 2, 8, font);
     drawText(String(p.jerseyNo || ""), cols[1].x + 10, y - 2, 9, fontBold);
-    const nameStr = p.isLibero ? `${p.name} (L)` : p.isCaptain ? `${p.name} (C)` : p.name;
-    drawText(nameStr, cols[2].x + 3, y - 2, 8, font);
+    const nameFont = p.isCaptain ? fontBold : font;
+    const nameSuffix = p.isLibero ? " (L)" : p.isCaptain ? " (C)" : "";
+    const nameStr = p.name + nameSuffix;
+    const maxNameW = cols[2].w - 6;
+    let nameSize = 8;
+    while (nameSize > 5 && nameFont.widthOfTextAtSize(nameStr, nameSize) > maxNameW) nameSize -= 0.5;
+    drawText(nameStr, cols[2].x + 3, y - 2, nameSize, nameFont);
     drawText(String(p.dob || ""), cols[3].x + 3, y - 2, 7, font);
     drawText(String(p.age || ""), cols[4].x + 5, y - 2, 8, font);
     drawText(String(p.country || ""), cols[5].x + 3, y - 2, 8, font);

@@ -195,7 +195,7 @@ export const api = {
 
   getSquadEligibility: (teamId: string) => apiFetch<any[]>(`/squad/eligibility/${teamId}`),
   getMatchSquad: (matchId: string, teamId: string) => apiFetch<any>(`/squad/${matchId}/${teamId}`),
-  saveMatchSquad: (data: { matchId: string; teamId: string; playerIds: string[] }) =>
+  saveMatchSquad: (data: { matchId: string; teamId: string; playerIds: string[]; playerDetails?: Record<string, { isLibero?: boolean; isCaptain?: boolean; matchPosition?: string }> }) =>
     apiFetch<any>("/squad", { method: "POST", body: JSON.stringify(data) }),
   deleteMatchSquad: (matchId: string, teamId: string) =>
     apiFetch<void>(`/squad/${matchId}/${teamId}`, { method: "DELETE" }),

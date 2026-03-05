@@ -2935,6 +2935,20 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  app.get("/api/docs/o2bis/:matchId/preview.pdf", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const matchId = req.params.matchId;
+      const teamId = (req.query.teamId as string) || undefined;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+      const resolvedTeamId = teamId || match.teamId;
+      const pdfBuffer = await generateO2BISPdf(storage, { matchId, teamId: resolvedTeamId, skipMissing: true });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="O2BIS_Preview_${matchId}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (e) { next(e); }
+  });
+
   // ─── AUTO-SELECT LIBEROS ─────────────────────────
   app.post("/api/matches/:matchId/squad/auto-select-liberos", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
     try {
@@ -3198,11 +3212,19 @@ th{background:#0d7377;color:white}
         if (openInjury) reasons.push(`Injury: ${openInjury.injuryType}`);
         const activeContract = contracts.find(c => c.playerId === p.id && c.status === "ACTIVE");
         const contractWarning = !activeContract;
+        const missingFields: string[] = [];
+        if (!p.firstName) missingFields.push("firstName");
+        if (!p.lastName) missingFields.push("lastName");
+        if (!p.dob) missingFields.push("dob");
+        if (!p.nationality) missingFields.push("nationality");
+        if (!p.jerseyNo) missingFields.push("jerseyNo");
+        if (!p.position) missingFields.push("position");
         return {
           ...p,
           eligible: reasons.length === 0,
           ineligibilityReasons: reasons,
           contractWarning,
+          missingFields,
         };
       });
       res.json(enriched);
@@ -3223,8 +3245,30 @@ th{background:#0d7377;color:white}
       const body = z.object({
         matchId: z.string(),
         teamId: z.string(),
-        playerIds: z.array(z.string()).min(1).max(12),
+        playerIds: z.array(z.string()).min(1).max(14),
+        playerDetails: z.record(z.string(), z.object({
+          isLibero: z.boolean().optional(),
+          isCaptain: z.boolean().optional(),
+          matchPosition: z.string().optional(),
+        })).optional(),
       }).parse(req.body);
+
+      if (body.playerIds.length > 14) {
+        return res.status(400).json({ message: "Maximum 14 players allowed in a match squad" });
+      }
+
+      const details = body.playerDetails || {};
+      const captainCount = Object.values(details).filter(d => d.isCaptain).length;
+      if (captainCount > 1) {
+        return res.status(400).json({ message: "Only one captain allowed per squad" });
+      }
+
+      if (body.playerIds.length >= 14) {
+        const liberoCount = Object.values(details).filter(d => d.isLibero).length;
+        if (liberoCount < 2) {
+          return res.status(400).json({ message: "Squads with 14 players must have at least 2 liberos designated" });
+        }
+      }
 
       const teamPlayers = await storage.getPlayersByTeam(body.teamId);
       const teamPlayerIds = new Set(teamPlayers.map(p => p.id));
@@ -3245,6 +3289,21 @@ th{background:#0d7377;color:white}
         return res.status(400).json({ message: "Some selected players are not eligible" });
       }
 
+      const missingFieldPlayers = body.playerIds.filter(pid => {
+        const p = teamPlayers.find(tp => tp.id === pid)!;
+        const d = details[pid] || {};
+        if (!p.firstName || !p.lastName || !p.dob || !p.nationality || !p.jerseyNo) return true;
+        if (!d.matchPosition && !p.position) return true;
+        return false;
+      });
+      if (missingFieldPlayers.length > 0) {
+        const names = missingFieldPlayers.map(pid => {
+          const p = teamPlayers.find(tp => tp.id === pid);
+          return p ? `${p.lastName} ${p.firstName}` : pid;
+        });
+        return res.status(400).json({ message: `Players with missing required fields (name, DOB, nationality, jersey, position): ${names.join(", ")}` });
+      }
+
       const existing = await storage.getMatchSquad(body.matchId, body.teamId);
       let previousPlayerIds: Set<string> = new Set();
       if (existing) {
@@ -3262,10 +3321,14 @@ th{background:#0d7377;color:white}
       const entries = [];
       for (const pid of body.playerIds) {
         const player = teamPlayers.find(p => p.id === pid);
+        const d = details[pid] || {};
         const entry = await storage.createMatchSquadEntry({
           squadId: squad.id,
           playerId: pid,
           jerseyNo: player?.jerseyNo || null,
+          isLibero: d.isLibero || false,
+          isCaptain: d.isCaptain || false,
+          matchPosition: d.matchPosition || null,
         });
         entries.push(entry);
       }

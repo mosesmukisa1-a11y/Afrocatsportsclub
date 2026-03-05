@@ -414,6 +414,8 @@ export const matchSquadEntries = pgTable("match_squad_entries", {
   playerId: varchar("player_id", { length: 36 }).notNull(),
   jerseyNo: integer("jersey_no"),
   isLibero: boolean("is_libero").default(false),
+  isCaptain: boolean("is_captain").default(false),
+  matchPosition: text("match_position"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

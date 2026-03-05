@@ -1,0 +1,215 @@
+REPLIT – FINAL LONG UPDATES (REGISTRATION FILTERS + ALPHABETICAL PLAYERS + MATCH POSITIONS + FIVB 14/2 LIBEROS + O2BIS/TEAM LIST QUALITY + CAPTAIN MARK + REQUIRED FIELDS + PREVIEW BEFORE SAVE/PRINT)
+
+========================================================
+A) PLAYERS REGISTRATION – GENDER ↔ TEAM LINKING
+========================================================
+
+1) DATA RULES (TEAM GENDER)
+Each Team must have:
+- team.genderRule = "MALE_ONLY" | "FEMALE_ONLY" | "ANY"
+(For Afrocat, you’ll use male/female only for most teams)
+
+2) REGISTRATION UI BEHAVIOR
+A) If user chooses GENDER first:
+- Team dropdown must show ONLY teams that match that genderRule:
+  - If gender="MALE" => MALE_ONLY + ANY
+  - If gender="FEMALE" => FEMALE_ONLY + ANY
+
+B) If user chooses TEAM first:
+- Auto-set gender based on team.genderRule:
+  - MALE_ONLY => gender="MALE"
+  - FEMALE_ONLY => gender="FEMALE"
+  - ANY => do not override
+
+3) ENFORCE SERVER-SIDE VALIDATION
+When saving registration:
+- If team.genderRule=MALE_ONLY then gender must be MALE
+- If team.genderRule=FEMALE_ONLY then gender must be FEMALE
+
+========================================================
+B) PLAYERS LIST – ALPHABETICAL ORDER
+========================================================
+
+All player lists must be sorted by:
+1) lastName ASC
+2) firstName ASC
+3) jerseyNumber ASC
+
+Apply on:
+- team roster
+- match selection lists
+- document centre lists
+- admin player tables
+
+========================================================
+C) MATCHES – STARTING LINEUP / SQUAD RULE (FIVB)
+========================================================
+
+Rule:
+- Allow selecting up to 14 players for a match roster.
+- If roster size >= 14 => MUST have at least 2 liberos marked.
+(Keep your earlier rule: <=12 just fill; but now align with “up to 14 with 2 liberos”)
+
+IMPLEMENT:
+- MatchSquad table fields:
+  - matchId, playerId, teamId
+  - isLibero boolean default false
+  - isCaptain boolean default false
+  - matchPosition (string nullable)  // coach-selected for that match only
+  - role: STARTER | SUB | RESERVE (optional)
+
+VALIDATION:
+- totalSelected must be <= 14 (hard block if >14)
+- if totalSelected == 14 then liberosCount >= 2 (hard block)
+- if totalSelected < 14, allow 0–2 liberos (no block)
+
+========================================================
+D) MATCH POSITIONS – COACH OVERRIDE FOR THAT MATCH ONLY
+========================================================
+
+Requirement:
+- Coach can allocate player positions specifically for that match.
+- Coach must see the player’s registered position as reference.
+- O2BIS for that match must use the coach-selected matchPosition.
+- After match, player profile reverts to registered position (no changes to registration record).
+
+Implementation:
+1) Player profile has:
+- registeredPosition (string)  // stored at registration
+
+2) MatchSquad has:
+- matchPosition (string nullable)
+
+UI:
+- In lineup selection, show:
+  “Registered: OH”
+  “Match: [dropdown]” (coach picks for this match)
+
+O2BIS Generation:
+- Position shown = MatchSquad.matchPosition if exists, else Player.registeredPosition
+
+After match:
+- DO NOT write back to Player.registeredPosition (never modify).
+
+========================================================
+E) O2BIS + TEAM LIST PRINT QUALITY (NO CUT/OFF)
+========================================================
+
+Problem:
+Some components are cut/hidden in PDF/print.
+
+Fix requirements:
+- Use ONE shared PDF generator for both Document Centre and Match section.
+- Apply safe margins:
+  - top/bottom/left/right at least 12–15mm
+- Row heights consistent
+- Font size consistent (10–11 for rows)
+- Avoid overflow:
+  - long names wrap OR reduce font only for that row
+- Ensure ALL columns are within page width
+
+Add “Print Safe Layout” checks:
+- Before saving PDF: validate text widths and wrap if needed.
+
+========================================================
+F) CAPTAIN MARKING ON O2BIS + TEAM LIST
+========================================================
+
+Data:
+- MatchSquad.isCaptain boolean
+Only ONE captain allowed per team per match.
+
+Validation:
+- if user sets captain on player A, auto-unset captain on others for same team+match.
+
+Print rules:
+- Captain name must be:
+  - Bold
+  - Append “ (C)” next to the name OR a “C” column
+NO layout change requested, so do:
+- same row, after name: “C”
+- and make name bold in PDF
+
+========================================================
+G) REQUIRED PLAYER DETAILS BEFORE SELECTION FOR O2BIS
+========================================================
+
+Requirement:
+“All details required on o2bis like name, age, nationality must be filled for a player to be selected.”
+
+Define required fields (server-enforced) before player can be added to MatchSquad:
+- firstName
+- lastName
+- dob (to compute age)
+- nationality
+- jerseyNumber
+- registeredPosition (or matchPosition must be set)
+
+Selection behavior:
+- If any required fields missing:
+  - Block selection
+  - Show message listing missing fields
+Example:
+“Cannot select player for O2BIS. Missing: DOB, Nationality.”
+
+Age:
+- Always compute from DOB at match date (or today if needed).
+- Store computedAge on O2BIS render only (do not store permanently).
+
+========================================================
+H) O2BIS PREVIEW BEFORE SAVE/PRINT
+========================================================
+
+Requirement:
+“Let the o2b be viewed before saving and printing.”
+
+Implement flow:
+1) User clicks “Generate O2BIS”
+2) System generates a PREVIEW PDF (temporary) and opens in an embedded viewer (iframe)
+3) Buttons:
+   - “Save & Print”
+   - “Back”
+4) Only on “Save & Print”:
+   - Save the PDF file record (if you store docs)
+   - Trigger download/print
+
+Endpoints:
+- GET /api/docs/o2bis/:matchId/preview.pdf?teamId=...
+  (generates on the fly; not stored)
+- POST /api/docs/o2bis/:matchId/save?teamId=...
+  (stores and returns final url)
+OR simpler:
+- GET preview returns pdf + user can download; if you need saving, store on server after confirm.
+
+========================================================
+I) IMPLEMENTATION CHECKLIST (REPLIT MUST DO)
+========================================================
+
+1) Registration:
+- Gender first filters teams
+- Team first auto-sets gender
+- Server validates mismatch
+
+2) Sorting:
+- all player lists alphabetical
+
+3) Match selection:
+- max 14 players
+- if 14 => 2 liberos required
+- coach assigns matchPosition (does not change registration)
+
+4) Captain:
+- single captain per team/match
+- printed bold + “C”
+
+5) Selection blocking:
+- cannot add player to match squad if missing required O2BIS fields
+
+6) O2BIS:
+- uses matchPosition override
+- preview before save/print
+- print layout safe (no cut)
+
+========================================================
+END – IMPLEMENT EXACTLY
+========================================================

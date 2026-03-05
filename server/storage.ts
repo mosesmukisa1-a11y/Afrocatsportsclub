@@ -254,9 +254,9 @@ export class DatabaseStorage implements IStorage {
     await db.delete(schema.teams).where(eq(schema.teams.id, id));
   }
 
-  async getPlayers() { return db.select().from(schema.players).orderBy(schema.players.lastName); }
+  async getPlayers() { return db.select().from(schema.players).orderBy(schema.players.lastName, schema.players.firstName, schema.players.jerseyNo); }
   async getPlayersByTeam(teamId: string) {
-    return db.select().from(schema.players).where(eq(schema.players.teamId, teamId));
+    return db.select().from(schema.players).where(eq(schema.players.teamId, teamId)).orderBy(schema.players.lastName, schema.players.firstName, schema.players.jerseyNo);
   }
   async getPlayer(id: string) {
     const [player] = await db.select().from(schema.players).where(eq(schema.players.id, id));

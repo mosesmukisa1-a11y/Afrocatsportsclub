@@ -33,12 +33,13 @@ export function signToken(payload: JwtPayload): string {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
+  const queryToken = req.query.token as string | undefined;
+  const tokenStr = header?.startsWith("Bearer ") ? header.split(" ")[1] : queryToken;
+  if (!tokenStr) {
     return res.status(401).json({ message: "Authentication required" });
   }
   try {
-    const token = header.split(" ")[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    const decoded = jwt.verify(tokenStr, JWT_SECRET) as JwtPayload;
     req.user = decoded;
     next();
   } catch {
