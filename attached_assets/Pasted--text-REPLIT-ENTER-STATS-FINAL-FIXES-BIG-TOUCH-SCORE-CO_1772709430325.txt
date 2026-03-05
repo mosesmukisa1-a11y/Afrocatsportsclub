@@ -1,0 +1,252 @@
+```text
+REPLIT – ENTER STATS FINAL FIXES (BIG TOUCH SCORE CONTROLS + BEST OF 3/5 + FIVB SET RULE AUTO-END + REMOVE SWITCH BUTTON + FAST POINT AWARD + PLAYER OF MATCH + AUTO PLAYER STAT MESSAGES + COACH REPORT)
+
+========================================================
+1) MAKE +1 / -1 BIGGER + MOVE THEM FOR FAST TOUCH
+========================================================
+
+Problem: +1 / -1 too small.
+
+Fix:
+- Replace small buttons with a BIG “POINT PAD” area at bottom (sticky).
+- Two huge buttons:
+  [ +1 AFROCAT ]   [ -1 AFROCAT ]
+- Also add “UNDO LAST POINT” (big).
+
+UI rules:
+- Buttons minimum height 70px (mobile)
+- Full width half-screen buttons
+- Sticky at bottom in fullscreen.
+
+Server endpoint:
+POST /api/matches/:matchId/score/point
+Body: { delta: 1 | -1 }
+
+Store a scoreHistory log:
+ScoreEvent:
+- matchId
+- delta
+- byUserId
+- createdAt
+
+So Undo works:
+POST /api/matches/:matchId/score/undo-last
+
+========================================================
+2) REMOVE “END SET” BUTTONS – AUTO SET END BY FIVB RULE
+========================================================
+
+Remove:
+- “End Set – Home Wins”
+- “End Set – Away Wins”
+
+Replace with:
+- Match Settings modal at start: “Best of 3” or “Best of 5”
+
+Store on Match:
+- bestOf = 3 | 5
+- setTargetPoints = 25 (default)
+- decidingSetTargetPoints = 15 (optional if you implement 5th set rule)
+- currentSetNumber
+- setsWonAfrocat
+- setsWonOpponent
+- pointsAfrocat
+- pointsOpponent
+
+FIVB set-end logic (auto):
+Set ends when:
+A) points >= target AND lead >= 2
+
+Target points:
+- If bestOf=3:
+  Set 1–3: 25 points
+- If bestOf=5:
+  Sets 1–4: 25 points
+  Set 5: 15 points (FIVB deciding set)
+
+So:
+target = (bestOf===5 && currentSetNumber===5) ? 15 : 25
+
+When user presses +1:
+- update points
+- immediately run checkSetEnd()
+
+If set ends:
+- increment setsWon for the winning side
+- push SetResult record:
+  { setNumber, afrocatPoints, oppPoints, winner }
+- reset points to 0–0
+- increment currentSetNumber
+- If setsWon reaches neededToWin:
+  bestOf=3 => 2 sets
+  bestOf=5 => 3 sets
+  then match ends => lock stats + compute report
+
+========================================================
+3) REMOVE “SWITCH TEAM” BUTTON (IRRELEVANT)
+========================================================
+
+Requirement: “we only take stats for Afrocat”
+- Remove UI to switch between teams for stat entry.
+- Stat entry actions always record events for Afrocat players only.
+
+Opponent score still tracked via big point pad (for opp points too):
+Add two big buttons:
+[ +1 AFROCAT ] [ +1 OPPONENT ]
+Optional minus/undo:
+[ UNDO LAST POINT ]
+
+So 3 big controls:
+- +1 Afrocat
+- +1 Opponent
+- Undo last point
+
+No more -1 needed if Undo exists, but you can keep -1 as secondary.
+
+========================================================
+4) SPEED UP POINT AWARD FROM ACTIONS (TOO SLOW)
+========================================================
+
+Currently: action -> save event -> wait -> update score
+Fix: optimistic scoring + single tap workflow.
+
+Fast workflow:
+- When user taps an action option (e.g., ACE, KILL, NET):
+  1) Immediately add event to UI (optimistic)
+  2) Immediately apply point delta locally (optimistic)
+  3) Fire API call in background
+  4) If API fails: rollback that one point + show toast
+
+To be fast:
+- Do NOT require extra modal steps.
+- For MINUS errors, default errorCategory=TECHNICAL unless user long-press to add detail.
+(Provide “More details” button, but not required in live game.)
+
+Define “point triggers” (fast set):
+Award point automatically ONLY for these fast outcomes:
+- SERVE: ACE => Afrocat +1
+- SERVE ERROR: NET/OUT => Opponent +1
+- ATTACK: KILL => Afrocat +1
+- ATTACK ERROR: OUT/NET/BLOCKED => Opponent +1
+- BLOCK: STUFF => Afrocat +1
+- RECEIVE: 0_ERROR => Opponent +1
+
+All other events do NOT auto-score (just recorded).
+
+========================================================
+5) PLAYER OF THE MATCH (AUTO IDENTIFY AFTER SCORES FINAL)
+========================================================
+
+Compute at match end (after set win achieved):
+PlayerOfMatch score = weighted index:
+
+Example weights:
+- Attack: KILL +3, ERROR -2, BLOCKED -1
+- Serve: ACE +3, ERROR -2
+- Receive: 3_PERFECT +2, 2_POSITIVE +1, 0_ERROR -2
+- Block: STUFF +3, NET/OVERREACH -2, TOUCH +1
+- Dig: CONTROLLED +2, ERROR -2
+
+Pick max total.
+Tie-break:
+1) fewer errors
+2) higher receive quality
+3) most points (kill+ace+block)
+
+Store:
+match.playerOfMatchPlayerId
+
+Notify everyone:
+- “🏆 Player of the Match: NAME (#Jersey)”
+
+========================================================
+6) AUTO SEND EACH PLAYER THEIR STATS + IMPROVEMENT AREAS
+========================================================
+
+At match end:
+- Generate PlayerMatchSummary (already in dev stats report generator)
+- For each player:
+  Create Notification:
+    type="MATCH_PLAYER_STATS"
+    title="📊 Your Match Stats"
+    message="Serve: ace%..., Receive: perfect%..., Attack eff..., Top errors: ... Focus: ..."
+    linkUrl="/dashboard?tab=stats&matchId=..."
+
+Use rule-based “where to improve”:
+- Top 1–2 weaknesses from summary:
+  receive error%, serve error%, attack efficiency, decision errors, etc.
+
+========================================================
+7) AUTO SEND MATCH REPORT TO COACH DASHBOARD + ADVICE
+========================================================
+
+At match end:
+- Generate Development Report once (Team + Players)
+- Store MatchDevelopmentReport JSON
+- On coach dashboard:
+  - show alerts (RED/YELLOW/GREEN)
+  - show top errors & focus areas
+  - show suggested training plan for next session
+
+Auto notify coaches/admins:
+Notification:
+type="MATCH_REPORT_READY"
+title="✅ Match Report Ready"
+message="Team summary + player focus areas generated. Open coach dashboard."
+linkUrl="/coach/dashboard?matchId=..."
+
+Coach advice rules:
+- If receive minus% high => training: passing platform + communication
+- If serve error high => serving consistency under pressure
+- If attack blocked high => tooling + shot selection
+- If decision errors high => game IQ + video review
+- If block late read high => blocking read drills
+
+========================================================
+8) REQUIRED ENDPOINTS (IMPLEMENT)
+========================================================
+
+A) Set match format (best of 3/5) – required before scoring starts:
+PATCH /api/matches/:matchId/format
+Body: { bestOf: 3|5 }
+
+Block changing format after statsStartedAt set.
+
+B) Point add:
+POST /api/matches/:matchId/score/point
+Body: { side: "AFROCAT"|"OPP", delta: 1 }
+
+C) Undo:
+POST /api/matches/:matchId/score/undo-last
+
+D) On every point change:
+Server runs checkSetEndFIVB() and updates:
+- setsWon, currentSetNumber, points reset if needed
+- if match complete => finalizeMatch()
+
+E) Finalize match:
+POST /api/matches/:matchId/finalize
+(Or called internally when set win reached)
+Does:
+- lock stats (scoreSource="STATS", scoreLocked=true, statsEndedAt=now)
+- generate reports
+- compute player of match
+- create notifications for players/coaches
+
+========================================================
+9) UI CLEANUP LIST
+========================================================
+
+REMOVE:
+- End set buttons
+- Switch team button (stats only Afrocat)
+
+ADD:
+- Match Format selector (Best of 3 / Best of 5) before starting
+- Big sticky point pad (+1 Afrocat, +1 Opponent, Undo)
+- Fullscreen toggle stays
+
+========================================================
+END – IMPLEMENT EXACTLY
+========================================================
+```
