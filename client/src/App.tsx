@@ -44,6 +44,7 @@ import NoticeBoard from "@/pages/NoticeBoard";
 import EmailCompose from "@/pages/EmailCompose";
 import CoachBlog from "@/pages/CoachBlog";
 import Media from "@/pages/Media";
+import PlayerInterviews from "@/pages/PlayerInterviews";
 
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
@@ -94,6 +95,7 @@ function Router() {
       <Route path="/email-compose">{() => <ProtectedRoute component={EmailCompose} />}</Route>
       <Route path="/coach-blog">{() => <ProtectedRoute component={CoachBlog} />}</Route>
       <Route path="/media-gallery">{() => <ProtectedRoute component={Media} />}</Route>
+      <Route path="/interviews">{() => <ProtectedRoute component={PlayerInterviews} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

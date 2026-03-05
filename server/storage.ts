@@ -31,7 +31,8 @@ import type {
   MatchEvent, InsertMatchEvent,
   PlayerUpdateRequest, InsertPlayerUpdateRequest,
   NoticeBoardPost, InsertNoticeBoardPost,
-  PushSubscription, InsertPushSubscription
+  PushSubscription, InsertPushSubscription,
+  PlayerInterview, InsertPlayerInterview
 } from "@shared/schema";
 
 export interface IStorage {
@@ -197,6 +198,11 @@ export interface IStorage {
   createNoticeBoardPost(post: InsertNoticeBoardPost): Promise<NoticeBoardPost>;
   createPushSubscription(sub: InsertPushSubscription): Promise<PushSubscription>;
   getPushSubscriptionsByUser(userId: string): Promise<PushSubscription[]>;
+  getPlayerInterviews(): Promise<PlayerInterview[]>;
+  getPlayerInterview(id: string): Promise<PlayerInterview | undefined>;
+  createPlayerInterview(interview: InsertPlayerInterview): Promise<PlayerInterview>;
+  updatePlayerInterview(id: string, data: Partial<InsertPlayerInterview>): Promise<PlayerInterview | undefined>;
+  deletePlayerInterview(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -976,6 +982,24 @@ export class DatabaseStorage implements IStorage {
   }
   async getPushSubscriptionsByUser(userId: string) {
     return db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
+  }
+  async getPlayerInterviews() {
+    return db.select().from(schema.playerInterviews).orderBy(desc(schema.playerInterviews.publishedAt));
+  }
+  async getPlayerInterview(id: string) {
+    const [interview] = await db.select().from(schema.playerInterviews).where(eq(schema.playerInterviews.id, id));
+    return interview;
+  }
+  async createPlayerInterview(interview: InsertPlayerInterview) {
+    const [created] = await db.insert(schema.playerInterviews).values(interview).returning();
+    return created;
+  }
+  async updatePlayerInterview(id: string, data: Partial<InsertPlayerInterview>) {
+    const [updated] = await db.update(schema.playerInterviews).set(data).where(eq(schema.playerInterviews.id, id)).returning();
+    return updated;
+  }
+  async deletePlayerInterview(id: string) {
+    await db.delete(schema.playerInterviews).where(eq(schema.playerInterviews.id, id));
   }
 }
 

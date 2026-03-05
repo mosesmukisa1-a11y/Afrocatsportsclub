@@ -390,6 +390,15 @@ export const api = {
     apiFetch<any>(`/coach-blog/${postId}/comments`, { method: "POST", body: JSON.stringify({ body }) }),
   deleteCoachBlogComment: (postId: string, commentId: string) =>
     apiFetch<void>(`/coach-blog/${postId}/comments/${commentId}`, { method: "DELETE" }),
+
+  getInterviews: () => apiFetch<any[]>("/interviews"),
+  getInterview: (id: string) => apiFetch<any>(`/interviews/${id}`),
+  createInterview: (data: any) =>
+    apiFetch<any>("/interviews", { method: "POST", body: JSON.stringify(data) }),
+  updateInterview: (id: string, data: any) =>
+    apiFetch<any>(`/interviews/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteInterview: (id: string) =>
+    apiFetch<void>(`/interviews/${id}`, { method: "DELETE" }),
 };
 
 export async function registerPushNotifications() {

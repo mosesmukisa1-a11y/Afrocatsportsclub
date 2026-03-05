@@ -6189,5 +6189,109 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  app.get("/api/interviews", requireAuth, async (_req, res, next) => {
+    try {
+      const interviews = await storage.getPlayerInterviews();
+      const enriched = await Promise.all(interviews.map(async (i: any) => {
+        const player = await storage.getPlayer(i.playerId);
+        const publisher = await storage.getUser(i.publishedBy);
+        return {
+          ...i,
+          playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
+          playerJerseyNo: player?.jerseyNo,
+          playerPosition: player?.position,
+          playerPhotoUrl: player?.photoUrl,
+          playerTeamId: player?.teamId,
+          publisherName: publisher?.fullName || "Unknown",
+        };
+      }));
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/interviews/:id", requireAuth, async (req, res, next) => {
+    try {
+      const interview = await storage.getPlayerInterview(req.params.id);
+      if (!interview) return res.status(404).json({ error: "Interview not found" });
+      const player = await storage.getPlayer(interview.playerId);
+      const publisher = await storage.getUser(interview.publishedBy);
+      res.json({
+        ...interview,
+        playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
+        playerJerseyNo: player?.jerseyNo,
+        playerPosition: player?.position,
+        playerPhotoUrl: player?.photoUrl,
+        playerTeamId: player?.teamId,
+        publisherName: publisher?.fullName || "Unknown",
+      });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/interviews", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const body = req.body;
+      if (!body.playerId || !body.title || !body.questions?.length || !body.answers?.length) {
+        return res.status(400).json({ error: "playerId, title, questions[], answers[] required" });
+      }
+      if (body.questions.length !== body.answers.length) {
+        return res.status(400).json({ error: "questions and answers must have same length" });
+      }
+      const format = body.format || "TEXT";
+      if (format === "VIDEO" && !body.videoUrl?.trim()) {
+        return res.status(400).json({ error: "videoUrl required for VIDEO format" });
+      }
+      const interview = await storage.createPlayerInterview({
+        playerId: body.playerId,
+        title: body.title,
+        format,
+        videoUrl: body.videoUrl || null,
+        thumbnailUrl: body.thumbnailUrl || null,
+        questions: body.questions,
+        answers: body.answers,
+        tags: body.tags || [],
+        featured: body.featured || false,
+        publishedBy: req.user!.userId,
+      });
+      res.status(201).json(interview);
+    } catch (e) { next(e); }
+  });
+
+  app.patch("/api/interviews/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const interview = await storage.getPlayerInterview(req.params.id);
+      if (!interview) return res.status(404).json({ error: "Interview not found" });
+      const { publishedBy, publishedAt, id, ...body } = req.body;
+      const allowedFields: Record<string, any> = {};
+      if (body.title !== undefined) allowedFields.title = body.title;
+      if (body.playerId !== undefined) allowedFields.playerId = body.playerId;
+      if (body.format !== undefined) allowedFields.format = body.format;
+      if (body.videoUrl !== undefined) allowedFields.videoUrl = body.videoUrl;
+      if (body.thumbnailUrl !== undefined) allowedFields.thumbnailUrl = body.thumbnailUrl;
+      if (body.tags !== undefined) allowedFields.tags = body.tags;
+      if (body.featured !== undefined) allowedFields.featured = body.featured;
+      if (body.questions !== undefined && body.answers !== undefined) {
+        if (!Array.isArray(body.questions) || !Array.isArray(body.answers) || body.questions.length !== body.answers.length) {
+          return res.status(400).json({ error: "questions and answers must be arrays of same length" });
+        }
+        allowedFields.questions = body.questions;
+        allowedFields.answers = body.answers;
+      }
+      if (allowedFields.format === "VIDEO" && !allowedFields.videoUrl && !interview.videoUrl) {
+        return res.status(400).json({ error: "videoUrl required for VIDEO format" });
+      }
+      const updated = await storage.updatePlayerInterview(req.params.id, allowedFields);
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/interviews/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const interview = await storage.getPlayerInterview(req.params.id);
+      if (!interview) return res.status(404).json({ error: "Interview not found" });
+      await storage.deletePlayerInterview(req.params.id);
+      res.status(204).send();
+    } catch (e) { next(e); }
+  });
+
   return httpServer;
 }

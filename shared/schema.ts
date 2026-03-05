@@ -796,3 +796,22 @@ export type CoachBlogPost = typeof coachBlogPosts.$inferSelect;
 export const insertCoachBlogCommentSchema = createInsertSchema(coachBlogComments).omit({ id: true, createdAt: true });
 export type InsertCoachBlogComment = z.infer<typeof insertCoachBlogCommentSchema>;
 export type CoachBlogComment = typeof coachBlogComments.$inferSelect;
+
+export const playerInterviews = pgTable("player_interviews", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  title: text("title").notNull(),
+  format: text("format").notNull().default("TEXT"),
+  videoUrl: text("video_url"),
+  thumbnailUrl: text("thumbnail_url"),
+  questions: text("questions").array().notNull(),
+  answers: text("answers").array().notNull(),
+  tags: text("tags").array(),
+  featured: boolean("featured").default(false),
+  publishedBy: varchar("published_by", { length: 36 }).notNull(),
+  publishedAt: timestamp("published_at").defaultNow(),
+});
+
+export const insertPlayerInterviewSchema = createInsertSchema(playerInterviews).omit({ id: true, publishedAt: true });
+export type InsertPlayerInterview = z.infer<typeof insertPlayerInterviewSchema>;
+export type PlayerInterview = typeof playerInterviews.$inferSelect;
