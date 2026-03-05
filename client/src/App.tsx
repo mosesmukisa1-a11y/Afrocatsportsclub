@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "./lib/auth";
 import NotFound from "@/pages/not-found";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 import Login from "@/pages/Login";
 import PublicHome from "@/pages/PublicHome";
@@ -46,6 +47,7 @@ import CoachBlog from "@/pages/CoachBlog";
 import Media from "@/pages/Media";
 import PlayerInterviews from "@/pages/PlayerInterviews";
 import Officials from "@/pages/Officials";
+import SystemCheck from "@/pages/SystemCheck";
 
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
@@ -98,6 +100,7 @@ function Router() {
       <Route path="/media-gallery">{() => <ProtectedRoute component={Media} />}</Route>
       <Route path="/interviews">{() => <ProtectedRoute component={PlayerInterviews} />}</Route>
       <Route path="/officials">{() => <ProtectedRoute component={Officials} />}</Route>
+      <Route path="/admin/system-check">{() => <ProtectedRoute component={SystemCheck} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -109,7 +112,9 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <Toaster />
-          <Router />
+          <ErrorBoundary>
+            <Router />
+          </ErrorBoundary>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

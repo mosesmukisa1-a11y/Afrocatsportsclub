@@ -121,8 +121,8 @@ export default function Attendance() {
   };
 
   const filteredPlayers = scheduleForm.teamId
-    ? allPlayers.filter((p: any) => p.teamId === scheduleForm.teamId)
-    : allPlayers;
+    ? (allPlayers || []).filter((p: any) => p.teamId === scheduleForm.teamId)
+    : (allPlayers || []);
 
   return (
     <Layout>
@@ -453,7 +453,7 @@ function ExcuseRequestSection({ user, sessions }: { user: any; sessions: any[] }
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/attendance/excuse-requests"] }); toast({ title: "Rejected" }); },
   });
 
-  const pendingRequests = allRequests.filter((r: any) => r.status === "PENDING");
+  const pendingRequests = (allRequests || []).filter((r: any) => r.status === "PENDING");
 
   return (
     <div className="space-y-4 mt-6">

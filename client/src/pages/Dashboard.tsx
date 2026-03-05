@@ -119,19 +119,19 @@ export default function Dashboard() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const unreadNotifs = notifications.filter((n: any) => !n.read);
+  const unreadNotifs = (notifications || []).filter((n: any) => !n.read);
 
-  const totalIncome = financeTxns.filter((f: any) => f.type === "INCOME").reduce((acc: number, curr: any) => acc + curr.amount, 0);
-  const totalExpense = financeTxns.filter((f: any) => f.type === "EXPENSE").reduce((acc: number, curr: any) => acc + curr.amount, 0);
-  const openInjuries = injuries.filter((i: any) => i.status === "OPEN").length;
-  const playedMatches = matches.filter((m: any) => m.status === "PLAYED");
+  const totalIncome = (financeTxns || []).filter((f: any) => f.type === "INCOME").reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0);
+  const totalExpense = (financeTxns || []).filter((f: any) => f.type === "EXPENSE").reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0);
+  const openInjuries = (injuries || []).filter((i: any) => i.status === "OPEN").length;
+  const playedMatches = (matches || []).filter((m: any) => m.status === "PLAYED");
   const wins = playedMatches.filter((m: any) => m.result === "W").length;
 
   const recentPlayedMatches = [...playedMatches]
     .sort((a: any, b: any) => new Date(b.startTime || b.matchDate).getTime() - new Date(a.startTime || a.matchDate).getTime())
     .slice(0, 5);
 
-  const upcomingMatches = matches
+  const upcomingMatches = (matches || [])
     .filter((m: any) => m.status === "UPCOMING")
     .sort((a: any, b: any) => new Date(a.startTime || a.matchDate).getTime() - new Date(b.startTime || b.matchDate).getTime())
     .slice(0, 5);
@@ -193,7 +193,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {birthdays.length > 0 && (
+        {(birthdays || []).length > 0 && (
           <div className="afrocat-card overflow-hidden" data-testid="card-birthdays">
             <div className="bg-gradient-to-r from-afrocat-gold-soft via-afrocat-teal-soft to-afrocat-gold-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px]">
               <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold" data-testid="text-birthdays-title">
@@ -201,9 +201,9 @@ export default function Dashboard() {
               </h3>
             </div>
             <div className="p-5 space-y-3">
-              {birthdays.filter((b: any) => b.isToday).length > 0 && (
+              {(birthdays || []).filter((b: any) => b.isToday).length > 0 && (
                 <div className="space-y-3">
-                  {birthdays.filter((b: any) => b.isToday).map((b: any) => (
+                  {(birthdays || []).filter((b: any) => b.isToday).map((b: any) => (
                     <div key={b.playerId} className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-afrocat-gold-soft to-afrocat-teal-soft border border-afrocat-gold/30 animate-in fade-in slide-in-from-left-4 duration-500" data-testid={`card-birthday-today-${b.playerId}`}>
                       <div className="relative shrink-0">
                         {b.photoUrl ? (
@@ -234,11 +234,11 @@ export default function Dashboard() {
                   ))}
                 </div>
               )}
-              {birthdays.filter((b: any) => !b.isToday).length > 0 && (
+              {(birthdays || []).filter((b: any) => !b.isToday).length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Upcoming This Week</p>
                   <div className="space-y-2">
-                    {birthdays.filter((b: any) => !b.isToday).map((b: any) => (
+                    {(birthdays || []).filter((b: any) => !b.isToday).map((b: any) => (
                       <div key={b.playerId} className="flex items-center gap-3 p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid={`card-birthday-upcoming-${b.playerId}`}>
                         <div className="shrink-0">
                           {b.photoUrl ? (
@@ -278,8 +278,8 @@ export default function Dashboard() {
                 <span className="text-sm font-medium text-afrocat-muted">Total Players</span>
                 <Users className="h-4 w-4 text-afrocat-muted" />
               </div>
-              <div className="text-2xl font-bold font-display text-afrocat-text" data-testid="text-total-players">{players.length}</div>
-              <p className="text-xs text-afrocat-muted mt-1">Across {teams.length} teams</p>
+              <div className="text-2xl font-bold font-display text-afrocat-text" data-testid="text-total-players">{(players || []).length}</div>
+              <p className="text-xs text-afrocat-muted mt-1">Across {(teams || []).length} teams</p>
             </div>
           )}
 
@@ -381,13 +381,13 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4">
                     {[
-                      { label: "Matches", value: spotlight.careerStats.matchesPlayed, icon: Trophy },
-                      { label: "Kills", value: spotlight.careerStats.totalKills, icon: Zap },
-                      { label: "Aces", value: spotlight.careerStats.totalAces, icon: Target },
-                      { label: "Blocks", value: spotlight.careerStats.totalBlocks, icon: Shield },
-                      { label: "Digs", value: spotlight.careerStats.totalDigs, icon: Heart },
-                      { label: "Assists", value: spotlight.careerStats.totalAssists, icon: Users },
-                      { label: "Points", value: spotlight.careerStats.totalPoints, icon: Star },
+                      { label: "Matches", value: spotlight.careerStats?.matchesPlayed ?? 0, icon: Trophy },
+                      { label: "Kills", value: spotlight.careerStats?.totalKills ?? 0, icon: Zap },
+                      { label: "Aces", value: spotlight.careerStats?.totalAces ?? 0, icon: Target },
+                      { label: "Blocks", value: spotlight.careerStats?.totalBlocks ?? 0, icon: Shield },
+                      { label: "Digs", value: spotlight.careerStats?.totalDigs ?? 0, icon: Heart },
+                      { label: "Assists", value: spotlight.careerStats?.totalAssists ?? 0, icon: Users },
+                      { label: "Points", value: spotlight.careerStats?.totalPoints ?? 0, icon: Star },
                     ].filter(s => s.value > 0 || s.label === "Matches").map((stat) => (
                       <div key={stat.label} className="text-center p-2 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid={`stat-spotlight-${stat.label.toLowerCase()}`}>
                         <stat.icon className="h-4 w-4 mx-auto mb-1 text-afrocat-teal" />
@@ -397,14 +397,14 @@ export default function Dashboard() {
                     ))}
                   </div>
 
-                  {spotlight.awards.length > 0 && (
+                  {(spotlight.awards || []).length > 0 && (
                     <div className="mt-4">
                       <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Achievements</p>
                       <div className="flex flex-wrap gap-2">
-                        {spotlight.awards.map((award: any) => (
+                        {(spotlight.awards || []).map((award: any) => (
                           <Badge key={award.id} className="bg-afrocat-gold-soft text-afrocat-gold border-0 text-xs" data-testid={`badge-spotlight-award-${award.id}`}>
                             <Award className="h-3 w-3 mr-1" />
-                            {award.awardType.replace(/_/g, " ")} — {award.awardMonth}
+                            {(award.awardType || "").replace(/_/g, " ")} — {award.awardMonth ?? "—"}
                           </Badge>
                         ))}
                       </div>
@@ -501,7 +501,7 @@ export default function Dashboard() {
                     <p className="text-sm text-afrocat-muted">No stats recorded yet.</p>
                   ) : (
                     <div className="space-y-3">
-                      {coachDash.topPerformers.map((p: any, i: number) => (
+                      {(coachDash.topPerformers || []).map((p: any, i: number) => (
                         <div key={p.playerId || i} className="flex items-center justify-between" data-testid={`row-top-performer-${i}`}>
                           <div className="flex items-center gap-2">
                             <span className="w-6 h-6 rounded-full bg-afrocat-gold-soft text-afrocat-gold text-xs font-bold flex items-center justify-center">
@@ -524,7 +524,7 @@ export default function Dashboard() {
                     <p className="text-sm text-afrocat-muted">No error data available.</p>
                   ) : (
                     <div className="space-y-3">
-                      {coachDash.errorLeaders.map((p: any, i: number) => (
+                      {(coachDash.errorLeaders || []).map((p: any, i: number) => (
                         <div key={p.playerId || i} className="flex items-center justify-between" data-testid={`row-error-leader-${i}`}>
                           <span className="font-medium text-sm text-afrocat-text">{p.name}</span>
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-afrocat-red-soft text-afrocat-red">{p.totalErrors} errors</span>
@@ -542,7 +542,7 @@ export default function Dashboard() {
                     <p className="text-sm text-afrocat-muted">No focus areas identified.</p>
                   ) : (
                     <div className="space-y-3">
-                      {coachDash.smartFocusHighlights.map((f: any, i: number) => (
+                      {(coachDash.smartFocusHighlights || []).map((f: any, i: number) => (
                         <div key={i} className="flex items-center justify-between" data-testid={`row-focus-area-${i}`}>
                           <div className="flex items-center gap-2">
                             <Zap className="h-4 w-4 text-afrocat-teal" />
@@ -693,10 +693,10 @@ export default function Dashboard() {
               </h3>
             </div>
             <div className="p-5 space-y-4">
-              {trainingSchedule.trainingDays && (
+              {(trainingSchedule.trainingDays || []).length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-afrocat-muted font-semibold uppercase">Your days:</span>
-                  {trainingSchedule.trainingDays.map((d: string) => (
+                  {(trainingSchedule.trainingDays || []).map((d: string) => (
                     <Badge key={d} className="bg-afrocat-teal-soft text-afrocat-teal border-0 text-xs">{d}</Badge>
                   ))}
                 </div>
@@ -746,11 +746,11 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {trainingSchedule.pendingCheckin?.length > 0 && (
+              {(trainingSchedule.pendingCheckin || []).length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Pending Check-in</p>
                   <div className="space-y-2">
-                    {trainingSchedule.pendingCheckin.map((s: any) => (
+                    {(trainingSchedule.pendingCheckin || []).map((s: any) => (
                       <div key={s.id} className="flex items-center justify-between p-3 rounded-xl bg-afrocat-red-soft border border-afrocat-red/20" data-testid={`card-pending-checkin-${s.id}`}>
                         <div>
                           <p className="text-sm font-medium text-afrocat-text">{s.teamName}</p>
@@ -770,11 +770,11 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {trainingSchedule.upcomingSessions?.length > 0 && (
+              {(trainingSchedule.upcomingSessions || []).length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-2">Upcoming Sessions</p>
                   <div className="space-y-2">
-                    {trainingSchedule.upcomingSessions.map((s: any, i: number) => (
+                    {(trainingSchedule.upcomingSessions || []).map((s: any, i: number) => (
                       <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-afrocat-teal" />
@@ -822,7 +822,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {notices.length > 0 && (
+        {(notices || []).length > 0 && (
           <div className="afrocat-card overflow-hidden" data-testid="card-notices">
             <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px]">
               <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-teal">
@@ -830,16 +830,16 @@ export default function Dashboard() {
               </h3>
             </div>
             <div className="p-5 space-y-3">
-              {notices.slice(0, 3).map((n: any) => (
+              {(notices || []).slice(0, 3).map((n: any) => (
                 <div key={n.id} className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border" data-testid={`dash-notice-${n.id}`}>
                   <div className="flex items-start justify-between">
                     <p className="font-semibold text-sm text-afrocat-text">{n.title}</p>
-                    <span className="text-[10px] text-afrocat-muted shrink-0">{new Date(n.createdAt).toLocaleDateString()}</span>
+                    <span className="text-[10px] text-afrocat-muted shrink-0">{n.createdAt ? new Date(n.createdAt).toLocaleDateString() : "—"}</span>
                   </div>
                   <p className="text-xs text-afrocat-muted mt-1 line-clamp-2">{n.body}</p>
                 </div>
               ))}
-              {notices.length > 3 && (
+              {(notices || []).length > 3 && (
                 <Link href="/notices" className="text-xs text-afrocat-teal hover:underline flex items-center gap-1">
                   View all notices <ChevronRight className="h-3 w-3" />
                 </Link>

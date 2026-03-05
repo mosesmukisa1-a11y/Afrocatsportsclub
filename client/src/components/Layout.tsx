@@ -6,9 +6,10 @@ import {
   LogOut, ShieldAlert, Award, Menu, X, Star,
   ScrollText, FolderOpen, UserCircle, UserCheck,
   BarChart3, MessageCircle, Gamepad2, FileSpreadsheet,
-  Microscope, Gauge, ChevronDown, RefreshCw, Megaphone, Mail, BookOpen, Image, Mic
+  Microscope, Gauge, ChevronDown, RefreshCw, Megaphone, Mail, BookOpen, Image, Mic, Wrench
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { MobileNav } from "./MobileNav";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 import { useState } from "react";
 
@@ -44,6 +45,7 @@ const allNavItems = [
   { icon: UserCircle, label: "My Profile", href: "/profile-setup", roles: ["PLAYER"] },
   { icon: UserCheck, label: "Registrations", href: "/admin/registrations", roles: ["ADMIN","MANAGER"] },
   { icon: ShieldAlert, label: "User Management", href: "/admin/users", roles: ["ADMIN"] },
+  { icon: Wrench, label: "System Check", href: "/admin/system-check", roles: ["ADMIN"] },
 ];
 
 const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
@@ -199,10 +201,12 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-afrocat-glow">
-        <div className="p-6 md:p-10 max-w-7xl mx-auto">
+        <div className="p-6 md:p-10 max-w-7xl mx-auto pb-20 md:pb-0">
           {children}
         </div>
       </main>
+
+      {user && <MobileNav onMorePress={() => setMobileOpen(true)} />}
     </div>
   );
 }

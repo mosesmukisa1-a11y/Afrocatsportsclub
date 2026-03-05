@@ -105,6 +105,19 @@ export async function registerRoutes(
 
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+  app.post("/api/log/client-error", (req, res) => {
+    const { message, stack, userId, route, componentStack } = req.body || {};
+    console.error("[CLIENT ERROR]", {
+      message: message || "Unknown error",
+      stack: stack || "",
+      componentStack: componentStack || "",
+      userId: userId || null,
+      route: route || "",
+      timestamp: new Date().toISOString(),
+    });
+    res.json({ ok: true });
+  });
+
   // ─── AUTH ────────────────────────────────────────
   app.post("/api/auth/register", async (req, res, next) => {
     try {
@@ -484,6 +497,16 @@ export async function registerRoutes(
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
     }
+  });
+
+  // ─── ADMIN: ENV CHECK ────────────────────────────
+  app.get("/api/admin/env-check", requireAuth, requireRole(["ADMIN"]), (_req, res) => {
+    res.json({
+      GMAIL_USER: !!process.env.GMAIL_USER,
+      GMAIL_APP_PASSWORD: !!process.env.GMAIL_APP_PASSWORD,
+      EMAIL_AUTO_CC: !!process.env.EMAIL_AUTO_CC,
+      DATABASE_URL: !!process.env.DATABASE_URL,
+    });
   });
 
   // ─── PUBLIC TEAMS (for registration dropdown) ───

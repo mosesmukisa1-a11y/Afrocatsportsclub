@@ -349,15 +349,15 @@ export default function Finance() {
                   </div>
                   <div className="afrocat-card p-4 text-center">
                     <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Paid by Player</div>
-                    <div className="text-xl font-display font-bold text-green-400">N${playerFinance.totalPaidByPlayer}</div>
+                    <div className="text-xl font-display font-bold text-green-400">N${playerFinance.totalPaidByPlayer ?? 0}</div>
                   </div>
                   <div className="afrocat-card p-4 text-center">
                     <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Outstanding</div>
-                    <div className="text-xl font-display font-bold text-red-400">N${playerFinance.outstanding}</div>
+                    <div className="text-xl font-display font-bold text-red-400">N${playerFinance.outstanding ?? 0}</div>
                   </div>
                   <div className="afrocat-card p-4 text-center border-2 border-afrocat-gold/30">
                     <div className="text-xs text-afrocat-gold uppercase font-bold mb-1">Player Value</div>
-                    <div className="text-xl font-display font-bold text-afrocat-gold">N${playerFinance.playerValue}</div>
+                    <div className="text-xl font-display font-bold text-afrocat-gold">N${playerFinance.playerValue ?? 0}</div>
                   </div>
                 </div>
 
@@ -374,7 +374,7 @@ export default function Finance() {
                 </div>
 
                 <div className="afrocat-card p-5">
-                  <h3 className="font-display font-bold text-sm text-afrocat-text mb-3">Club Contribution: N${playerFinance.clubExpenses + playerFinance.totalPaidByOthers}</h3>
+                  <h3 className="font-display font-bold text-sm text-afrocat-text mb-3">Club Contribution: N${(playerFinance.clubExpenses ?? 0) + (playerFinance.totalPaidByOthers ?? 0)}</h3>
                   <p className="text-xs text-afrocat-muted">Includes approved expenses and payments where paidBy ≠ PLAYER</p>
                 </div>
               </div>

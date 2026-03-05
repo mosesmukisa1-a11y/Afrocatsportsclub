@@ -93,7 +93,7 @@ export default function Players() {
   };
 
   const filteredPlayers = useMemo(() => {
-    return players.filter((p: any) => {
+    return (players || []).filter((p: any) => {
       const matchesSearch =
         `${p.firstName} ${p.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (p.position || "").toLowerCase().includes(searchTerm.toLowerCase());
@@ -260,8 +260,8 @@ export default function Players() {
         </div>
 
         <div className="text-xs text-afrocat-muted">
-          Showing {filteredPlayers.length} of {players.length} players
-          {filterTeam !== "ALL" && <span> • Team: {teams.find((t: any) => t.id === filterTeam)?.name}</span>}
+          Showing {(filteredPlayers || []).length} of {(players || []).length} players
+          {filterTeam !== "ALL" && <span> • Team: {(teams || []).find((t: any) => t.id === filterTeam)?.name}</span>}
           {filterGender !== "ALL" && <span> • Gender: {filterGender}</span>}
         </div>
 

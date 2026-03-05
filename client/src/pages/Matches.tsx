@@ -171,7 +171,7 @@ export default function Matches() {
       if (!resp.ok) {
         const errData = await resp.json().catch(() => null);
         if (errData?.needsLiberos) {
-          const allMatches = [...upcomingMatches, ...playedMatches];
+          const allMatches = [...(upcomingMatches || []), ...(playedMatches || [])];
           const match = allMatches.find((m: any) => m.id === matchId);
           setLiberoModal({ matchId, teamId: match?.teamId || "", totalSelected: errData.totalSelected, liberoCount: errData.liberoCount });
           return;
@@ -230,7 +230,7 @@ export default function Matches() {
   const isLoading = loadingUpcoming || loadingPlayed;
 
   const renderMatchCard = (match: any, isUpcoming: boolean) => {
-    const team = teams.find((t: any) => t.id === match.teamId);
+    const team = (teams || []).find((t: any) => t.id === match.teamId);
     const isWin = match.result === "W";
     const showingSquad = squadMatchId === match.id && squadTeamId === match.teamId;
     const isPastNoScore = match.status === "PAST_NO_SCORE";

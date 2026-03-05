@@ -149,6 +149,11 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - **Chat DM Notifications**: When a DM message is sent, a `CHAT_MESSAGE` notification is created for the recipient.
 - **Member Search API**: `GET /api/members/search?q=&role=&teamId=` returns users with id, fullName, email, role, teamName, teamId. Supports name/email/team name fuzzy search plus role and team filters.
 
+- **ErrorBoundary**: React class component wrapping `<Router />` in App.tsx. Catches unhandled React errors, displays a dark-themed "Something went wrong" fallback with Reload button, and logs errors to `POST /api/log/client-error` (message, stack, componentStack, route). Server endpoint logs to console.error, no auth required.
+- **Mobile Bottom Navigation**: Fixed bottom tab bar (`client/src/components/MobileNav.tsx`) visible only on mobile (md:hidden). Tabs: Home, Matches, Stats, Chat, Media, More (opens sidebar). Role-aware — filters tabs based on active role. Active tab highlighted teal. 56px touch targets. Content area has `pb-20 md:pb-0` to avoid overlap.
+- **System Check Admin Page** (`/admin/system-check`): Admin-only page that runs sequential health checks against 8 API endpoints (teams, players, matches, media, finance, notifications, chat, notices) and shows PASS/FAIL status. Also calls `GET /api/admin/env-check` to display which environment variables (GMAIL_USER, GMAIL_APP_PASSWORD, EMAIL_AUTO_CC, DATABASE_URL) are configured without revealing values.
+- **Null-Safety Hardening**: All `.map()`, `.filter()`, `.find()`, `.reduce()`, `.some()`, `.length` calls across Dashboard, CoachDashboard, Finance, Attendance, Players, and Matches pages are guarded with `(arr || [])` patterns. Optional chaining and `?? 0` / `?? "—"` fallbacks added for nested property access.
+
 ## GitHub Repository
 - **Repo**: https://github.com/mosesmukisa1-a11y/afrocat-club-portal
 - **Branch**: main

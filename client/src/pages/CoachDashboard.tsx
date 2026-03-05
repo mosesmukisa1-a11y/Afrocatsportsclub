@@ -38,7 +38,7 @@ export default function CoachDashboard() {
 
   const teams = myTeams.length > 0 ? myTeams : allTeams;
 
-  const teamMatches = matches.filter((m: any) => m.teamId === selectedTeamId || m.homeTeamId === selectedTeamId);
+  const teamMatches = (matches || []).filter((m: any) => m.teamId === selectedTeamId || m.homeTeamId === selectedTeamId);
 
   const { data: dashboard, isLoading: dashLoading } = useQuery({
     queryKey: ["/api/coach/devstats/dashboard", selectedTeamId, selectedMatchId],
@@ -74,7 +74,7 @@ export default function CoachDashboard() {
   const teamSummary = dashboard?.teamSummary || null;
   const focusAreas = dashboard?.focus || [];
 
-  const teamPlayers = players.filter((p: any) => p.teamId === selectedTeamId);
+  const teamPlayers = (players || []).filter((p: any) => p.teamId === selectedTeamId);
 
   const createSessionMut = useMutation({
     mutationFn: (data: any) => api.createTrainingSession(data),
@@ -180,7 +180,7 @@ export default function CoachDashboard() {
                   <div className="afrocat-card p-4 text-center">
                     <Activity className="w-5 h-5 mx-auto text-afrocat-teal mb-1" />
                     <div className="text-2xl font-display font-bold text-afrocat-text">
-                      {attendanceTrends?.monthlyTrends?.length ? `${attendanceTrends.monthlyTrends[attendanceTrends.monthlyTrends.length - 1]?.percentage || 0}%` : "—"}
+                      {(attendanceTrends?.monthlyTrends || []).length ? `${(attendanceTrends?.monthlyTrends || [])[((attendanceTrends?.monthlyTrends || []).length) - 1]?.percentage || 0}%` : "—"}
                     </div>
                     <div className="text-[10px] text-afrocat-muted uppercase font-bold">Attendance</div>
                   </div>
@@ -476,12 +476,12 @@ export default function CoachDashboard() {
 
             {activeTab === "attendance" && (
               <div className="space-y-4">
-                {attendanceTrends?.monthlyTrends?.length > 0 ? (
+                {(attendanceTrends?.monthlyTrends || []).length > 0 ? (
                   <>
                     <div className="afrocat-card p-5">
                       <h3 className="font-display font-bold text-sm text-afrocat-text mb-3">Monthly Attendance %</h3>
                       <div className="space-y-2">
-                        {attendanceTrends.monthlyTrends.map((t: any) => (
+                        {(attendanceTrends?.monthlyTrends || []).map((t: any) => (
                           <div key={t.month} className="flex items-center gap-3">
                             <div className="w-16 text-xs text-afrocat-muted font-bold">{t.month}</div>
                             <div className="flex-1 h-6 bg-afrocat-white-5 rounded-full overflow-hidden">
@@ -537,9 +537,9 @@ export default function CoachDashboard() {
                   {teamPlayers.length === 0 && <p className="text-sm text-afrocat-muted">No players in this team.</p>}
                   <div className="space-y-2">
                     {teamPlayers.map((p: any) => {
-                      const playerPaymentsList = financePayments.filter((pay: any) => pay.playerId === p.id);
+                      const playerPaymentsList = (financePayments || []).filter((pay: any) => pay.playerId === p.id);
                       const approved = playerPaymentsList.filter((pay: any) => pay.status === "APPROVED");
-                      const totalPaid = approved.reduce((s: number, pay: any) => s + pay.amount, 0);
+                      const totalPaid = approved.reduce((s: number, pay: any) => s + (pay.amount || 0), 0);
                       return (
                         <div key={p.id} className="flex items-center gap-3 p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
                           <div className="flex-1">
