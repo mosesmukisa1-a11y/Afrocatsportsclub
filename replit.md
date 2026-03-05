@@ -137,6 +137,7 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - **Web Push Notifications**: Service worker at `client/public/sw.js`. Push subscription registered on login. `pushSubscriptions` table stores user subscriptions. VAPID key served via `GET /api/push/vapid-key`. Notifications displayed with club favicon.
 - **Contract Bypass for Squad Selection**: Players without active contracts can be selected for match squads. `contractWarning: true` badge shown in UI instead of blocking selection.
 - **Coach's Corner Blog** (`/coach-blog`): Blog platform for coaches to share insights, strategies, and training tips with the team. Features: category filtering (General, Tactics, Training, Motivation, Analysis, Fitness, Mental Game), tags, pinned posts, comments with role badges, edit/delete own posts (admins can edit all). Tables: `coachBlogPosts`, `coachBlogComments`. All roles can read; ADMIN/MANAGER/COACH can write.
+- **Media Gallery** (`/media-gallery`): File-upload-based media gallery for all users. `POST /api/media/upload` (multipart/form-data, ADMIN/MANAGER only) saves files to `public/uploads/media/`. `GET /api/media` returns all approved media. Static serving via `/uploads/...`. Frontend: grid gallery with image/video preview, lightbox viewer, upload dialog. All roles can view; only ADMIN/MANAGER can upload.
 
 ## GitHub Repository
 - **Repo**: https://github.com/mosesmukisa1-a11y/afrocat-club-portal

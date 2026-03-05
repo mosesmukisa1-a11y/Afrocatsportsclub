@@ -10,6 +10,7 @@ import cron from "node-cron";
 import { eq, and, desc } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
+import multer from "multer";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { ALL_ENUMS, SKILL_TYPES, OUTCOME } from "./devstats/enums";
 import { generateDevelopmentReport } from "./devstats/report";
@@ -589,6 +590,53 @@ export async function registerRoutes(
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
     }
+  });
+
+  const mediaUpload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        const dir = path.join(process.cwd(), "public", "uploads", "media");
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (_req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, `${crypto.randomUUID()}${ext}`);
+      },
+    }),
+    limits: { fileSize: 50 * 1024 * 1024 },
+  });
+
+  app.post("/api/media/upload", requireAuth, requireRole(["ADMIN","MANAGER"]), mediaUpload.single("file"), async (req, res, next) => {
+    try {
+      if (!req.file) return res.status(400).json({ ok: false, message: "No file uploaded" });
+
+      const url = `/uploads/media/${req.file.filename}`;
+      const title = (req.body.title as string) || req.file.originalname;
+      const description = (req.body.description as string) || null;
+      const teamId = (req.body.teamId as string) || null;
+      const isPublic = req.body.isPublic !== "false";
+
+      const [item] = await db.insert(schema.mediaPosts).values({
+        title,
+        caption: description,
+        imageUrl: url,
+        visibility: isPublic ? "PUBLIC" : "TEAM_ONLY",
+        status: "APPROVED",
+        uploadedByUserId: req.user!.userId,
+      }).returning();
+
+      res.status(201).json({
+        ok: true,
+        item: {
+          ...item,
+          url: item.imageUrl,
+          mimeType: req.file.mimetype,
+          description: item.caption,
+          uploadedBy: req.user!.userId,
+        },
+      });
+    } catch (e) { next(e); }
   });
 
   app.post("/api/media/:id/approve", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {

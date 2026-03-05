@@ -217,6 +217,14 @@ export const api = {
   deleteShopItem: (id: string) => apiFetch<void>(`/shop/${id}`, { method: "DELETE" }),
 
   getMedia: (status?: string) => apiFetch<any[]>(`/media${status ? `?status=${status}` : ""}`),
+  uploadMedia: async (formData: FormData) => {
+    const token = localStorage.getItem("token");
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch("/api/media/upload", { method: "POST", headers, body: formData });
+    if (!res.ok) { const b = await res.json().catch(() => ({ message: "Upload failed" })); throw new Error(b.message || `HTTP ${res.status}`); }
+    return res.json();
+  },
   getPendingMedia: () => apiFetch<any[]>("/media/pending"),
   createMedia: (data: any) => apiFetch<any>("/media", { method: "POST", body: JSON.stringify(data) }),
   approveMedia: (id: string) => apiFetch<any>(`/media/${id}/approve`, { method: "POST" }),
