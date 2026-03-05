@@ -140,7 +140,9 @@ export default function TouchStats() {
     queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId],
     queryFn: () => api.getTouchStatsInit(selectedMatchId, selectedTeamId),
     enabled: !!selectedMatchId && !!selectedTeamId,
-    refetchInterval: 10000,
+    refetchInterval: 15000,
+    placeholderData: (prev: any) => prev,
+    refetchOnWindowFocus: false,
   });
 
   const { data: matchReport } = useQuery({
@@ -154,14 +156,23 @@ export default function TouchStats() {
   const isLocked = !!matchData?.isLocked;
   const teamName = touchInit?.teamName || "Afrocat";
   const scorerName = touchInit?.scorerName || "-";
-  const homePoints = matchData?.liveHomePoints || 0;
-  const awayPoints = matchData?.liveAwayPoints || 0;
+  const playerOfMatchPlayerId = matchData?.playerOfMatchPlayerId;
+  const scoringStarted = !!matchData?.scoringStartedAt;
+
+  const [optimisticHome, setOptimisticHome] = useState<number | null>(null);
+  const [optimisticAway, setOptimisticAway] = useState<number | null>(null);
+
+  useEffect(() => {
+    setOptimisticHome(null);
+    setOptimisticAway(null);
+  }, [matchData?.liveHomePoints, matchData?.liveAwayPoints]);
+
+  const homePoints = optimisticHome ?? (matchData?.liveHomePoints || 0);
+  const awayPoints = optimisticAway ?? (matchData?.liveAwayPoints || 0);
   const homeSets = matchData?.homeSetsWon || 0;
   const awaySets = matchData?.awaySetsWon || 0;
   const currentSet = matchData?.currentSetNumber || 1;
   const bestOf = matchData?.bestOf || 3;
-  const playerOfMatchPlayerId = matchData?.playerOfMatchPlayerId;
-  const scoringStarted = !!matchData?.scoringStartedAt;
 
   useEffect(() => {
     if (!matchData?.scoringStartedAt) { setElapsedTime(""); return; }
@@ -244,7 +255,11 @@ export default function TouchStats() {
   });
 
   const pointMut = useMutation({
-    mutationFn: ({ side }: { side: "AFROCAT" | "OPP" }) => api.scoreboardPoint(selectedMatchId, side),
+    mutationFn: ({ side }: { side: "AFROCAT" | "OPP" }) => {
+      if (side === "AFROCAT") setOptimisticHome(homePoints + 1);
+      else setOptimisticAway(awayPoints + 1);
+      return api.scoreboardPoint(selectedMatchId, side);
+    },
     onSuccess: (result: any) => {
       if (result.setResult?.setEnded) {
         toast({
@@ -255,11 +270,31 @@ export default function TouchStats() {
       queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
       queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
     },
+    onError: () => { setOptimisticHome(null); setOptimisticAway(null); },
+  });
+
+  const decrementMut = useMutation({
+    mutationFn: ({ side }: { side: "home" | "away" }) => {
+      if (side === "home") setOptimisticHome(Math.max(0, homePoints - 1));
+      else setOptimisticAway(Math.max(0, awayPoints - 1));
+      return api.scoreboardDecrement(selectedMatchId, side);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
+    },
+    onError: () => { setOptimisticHome(null); setOptimisticAway(null); },
   });
 
   const undoPointMut = useMutation({
-    mutationFn: () => api.scoreboardUndoLast(selectedMatchId),
+    mutationFn: () => {
+      if (homePoints > 0 || awayPoints > 0) {
+        setOptimisticHome(Math.max(0, homePoints - (homePoints >= awayPoints ? 1 : 0)));
+        setOptimisticAway(Math.max(0, awayPoints - (awayPoints > homePoints ? 1 : 0)));
+      }
+      return api.scoreboardUndoLast(selectedMatchId);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] }),
+    onError: () => { setOptimisticHome(null); setOptimisticAway(null); },
   });
 
   const formatMut = useMutation({
@@ -444,19 +479,23 @@ export default function TouchStats() {
           </div>
         </div>
 
-        {selectedMatchId && matchData && !scoringStarted && !isLocked && (
+        {selectedMatchId && matchData && !isLocked && (
           <div className="afrocat-card p-5" data-testid="format-selector">
-            <h3 className="text-sm font-bold text-afrocat-muted uppercase tracking-wider mb-3">Match Format</h3>
-            <p className="text-xs text-afrocat-muted mb-4">Select the match format before scoring begins. This determines FIVB set-end rules.</p>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-afrocat-muted uppercase tracking-wider">Match Format</h3>
+              {scoringStarted && (
+                <span className="text-[10px] text-afrocat-muted">Format locked after scoring starts</span>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => formatMut.mutate(3)}
-                disabled={formatMut.isPending}
+                disabled={formatMut.isPending || scoringStarted}
                 className={`p-4 rounded-xl border-2 font-bold text-center transition-all cursor-pointer ${
                   bestOf === 3
                     ? "border-afrocat-teal bg-afrocat-teal-soft text-afrocat-teal ring-1 ring-afrocat-teal"
                     : "border-afrocat-border bg-afrocat-white-3 text-afrocat-text hover:border-afrocat-teal/30"
-                }`}
+                } ${scoringStarted ? "opacity-60 cursor-not-allowed" : ""}`}
                 data-testid="button-format-bo3"
               >
                 <div className="text-lg">Best of 3</div>
@@ -464,12 +503,12 @@ export default function TouchStats() {
               </button>
               <button
                 onClick={() => formatMut.mutate(5)}
-                disabled={formatMut.isPending}
+                disabled={formatMut.isPending || scoringStarted}
                 className={`p-4 rounded-xl border-2 font-bold text-center transition-all cursor-pointer ${
                   bestOf === 5
                     ? "border-afrocat-gold bg-afrocat-gold-soft text-afrocat-gold ring-1 ring-afrocat-gold"
                     : "border-afrocat-border bg-afrocat-white-3 text-afrocat-text hover:border-afrocat-gold/30"
-                }`}
+                } ${scoringStarted ? "opacity-60 cursor-not-allowed" : ""}`}
                 data-testid="button-format-bo5"
               >
                 <div className="text-lg">Best of 5</div>
@@ -988,34 +1027,54 @@ export default function TouchStats() {
 
       {selectedMatchId && matchData && !isLocked && !matchComplete && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-afrocat-bg/95 backdrop-blur-md border-t-2 border-afrocat-teal/30 p-3 safe-area-bottom" data-testid="point-pad">
-          <div className="max-w-4xl mx-auto grid grid-cols-[1fr_1fr_auto] gap-2">
-            <button
-              onClick={() => pointMut.mutate({ side: "AFROCAT" })}
-              disabled={pointMut.isPending}
-              className="min-h-[70px] rounded-xl bg-afrocat-teal text-white font-black text-lg tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-transform cursor-pointer disabled:opacity-60 shadow-lg shadow-afrocat-teal/30"
-              data-testid="button-point-afrocat"
-            >
-              <Plus className="w-6 h-6" />
-              +1 {teamName.length > 12 ? "AFROCAT" : teamName.toUpperCase()}
-            </button>
-            <button
-              onClick={() => pointMut.mutate({ side: "OPP" })}
-              disabled={pointMut.isPending}
-              className="min-h-[70px] rounded-xl bg-afrocat-gold text-white font-black text-lg tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-transform cursor-pointer disabled:opacity-60 shadow-lg shadow-afrocat-gold/30"
-              data-testid="button-point-opp"
-            >
-              <Plus className="w-6 h-6" />
-              +1 OPP
-            </button>
-            <button
-              onClick={() => undoPointMut.mutate()}
-              disabled={undoPointMut.isPending || (homePoints + awayPoints <= 0)}
-              className="min-h-[70px] w-16 rounded-xl bg-afrocat-white-10 text-afrocat-muted font-bold text-xs flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform cursor-pointer disabled:opacity-30 border border-afrocat-border"
-              data-testid="button-undo-point"
-            >
-              <Undo2 className="w-5 h-5" />
-              UNDO
-            </button>
+          <div className="max-w-4xl mx-auto space-y-2">
+            <div className="grid grid-cols-[1fr_1fr_auto] gap-2">
+              <button
+                onClick={() => pointMut.mutate({ side: "AFROCAT" })}
+                className="min-h-[70px] rounded-xl bg-afrocat-teal text-white font-black text-lg tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-transform cursor-pointer shadow-lg shadow-afrocat-teal/30"
+                data-testid="button-point-afrocat"
+              >
+                <Plus className="w-6 h-6" />
+                +1 {teamName.length > 12 ? "AFROCAT" : teamName.toUpperCase()}
+              </button>
+              <button
+                onClick={() => pointMut.mutate({ side: "OPP" })}
+                className="min-h-[70px] rounded-xl bg-afrocat-gold text-white font-black text-lg tracking-wide flex items-center justify-center gap-2 active:scale-95 transition-transform cursor-pointer shadow-lg shadow-afrocat-gold/30"
+                data-testid="button-point-opp"
+              >
+                <Plus className="w-6 h-6" />
+                +1 OPP
+              </button>
+              <button
+                onClick={() => undoPointMut.mutate()}
+                disabled={homePoints + awayPoints <= 0}
+                className="min-h-[70px] w-16 rounded-xl bg-afrocat-white-10 text-afrocat-muted font-bold text-xs flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform cursor-pointer disabled:opacity-30 border border-afrocat-border"
+                data-testid="button-undo-point"
+              >
+                <Undo2 className="w-5 h-5" />
+                UNDO
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => decrementMut.mutate({ side: "home" })}
+                disabled={homePoints <= 0}
+                className="h-10 rounded-lg bg-afrocat-white-5 border border-afrocat-teal/30 text-afrocat-teal font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-transform cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                data-testid="button-decrement-home"
+              >
+                <Minus className="w-4 h-4" />
+                -1 {teamName.length > 12 ? "AFROCAT" : teamName.toUpperCase()}
+              </button>
+              <button
+                onClick={() => decrementMut.mutate({ side: "away" })}
+                disabled={awayPoints <= 0}
+                className="h-10 rounded-lg bg-afrocat-white-5 border border-afrocat-gold/30 text-afrocat-gold font-bold text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-transform cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                data-testid="button-decrement-away"
+              >
+                <Minus className="w-4 h-4" />
+                -1 OPP
+              </button>
+            </div>
           </div>
         </div>
       )}

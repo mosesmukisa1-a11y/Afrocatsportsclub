@@ -1,0 +1,267 @@
+REPLIT – COACH DASHBOARD + ATTENDANCE FIX + FINANCE MODULE (FEES/EXPENSES/APPROVALS/PLAYER VALUE)
+
+========================================================
+A) COACH DASHBOARD (MULTI-TEAM)
+========================================================
+
+1) COACH ACCESS
+Coach must see ONLY teams assigned to them (can be multiple):
+- CoachTeamAssignment: { coachUserId, teamId, role: HEAD|ASSIST }
+
+Coach Dashboard tabs:
+- Overview
+- Stats
+- Player Weakness
+- Notice Board
+- Training Schedule
+- Chat
+- Attendance (graphs)
+- Finance (reports + player balances)
+
+2) STATS VIEW (TEAM FILTER)
+Coach can select team from dropdown:
+- Shows team summary (serve, receive, attack, block, dig metrics)
+- Shows match list (upcoming + past)
+- Clicking a match shows full report (auto-generated dev report)
+
+3) PLAYER WEAKNESS (TAP TO VIEW)
+- List players (alphabetical)
+- For each player show alert badge (R/Y/G) + top 3 weakness metrics
+- Tap player => open details:
+  - Top errors (errorType frequency)
+  - Skill performance charts
+  - “Focus Areas Next Training” (rule-based)
+
+4) NOTICE BOARD (COACH CAN POST)
+Coach can post notices:
+- Audience: ALL (club) OR Team-only
+- If coach not allowed ALL, restrict to “his teams only” by role rules.
+
+Backend:
+POST /api/notice
+Body: { title, body, audience: "ALL"|"TEAM", teamId? }
+
+Rule:
+- Coach can post:
+  - TEAM notices only for assigned teams
+  - ALL notices only if SUPER_ADMIN or ADMIN (configurable)
+
+5) TRAINING / SESSION SCHEDULING
+Coach can schedule training sessions for assigned teams:
+TrainingSession:
+- id, teamId, dateTimeStart, dateTimeEnd, venue, notes
+- targetGender: FEMALE|MALE|ALL (auto rules below)
+- createdBy (coach)
+
+Auto reminders:
+- Notify team players 24h + 2h before training (in-app + push)
+
+6) CHAT
+Coach can chat with players in assigned team(s):
+- Team chat thread per team
+- Direct message optional
+- Notifications for new messages
+
+7) GRAPHS (PERFORMANCE + ATTENDANCE)
+Graphs required on coach dashboard:
+- Performance trend (last 5 matches) for key metrics:
+  - Serve error%
+  - Receive perfect%
+  - Attack efficiency
+  - Decision errors
+- Attendance trend:
+  - Attendance % per week/month
+  - Top attendees vs low attendance list
+
+========================================================
+B) ATTENDANCE FIX (TRAINING DAYS BY GENDER)
+========================================================
+
+Correct training day rules:
+- Monday: FEMALE training
+- Wednesday: FEMALE training
+- Tuesday: MALE training
+- Thursday: MALE training
+- Friday: ALL genders training
+- Weekends: matches/training optional by coach
+
+Implement “Default Training Rule” generator:
+When coach creates session:
+- If day is Monday/Wednesday => default targetGender=FEMALE
+- If day is Tuesday/Thursday => default targetGender=MALE
+- If day is Friday => default targetGender=ALL
+Coach can still override if needed.
+
+========================================================
+C) PLAYER EXCUSES / LATENESS REQUESTS
+========================================================
+
+Players dashboard:
+- Button: “Request Excuse / Late”
+Form:
+- sessionId OR date
+- type: EXCUSE | LATE
+- reason text
+- attachment optional (future)
+- createdAt
+
+Coach/Admin:
+- View pending requests
+- Approve/Reject with comment
+
+Attendance record:
+- if approved excuse => status=EXCUSED
+- if late approved => status=LATE_APPROVED
+
+========================================================
+D) FINANCE MODULE – TIMELY REPORTS + FEES + EXPENSES + APPROVAL
+========================================================
+
+1) MEMBER FEES CONFIG (PER PLAYER)
+Membership fees:
+- Non-working class: N$400
+- Working class: N$800
+
+Development fees (once off): N$2500
+Resource fees (annually): N$1500
+
+League affiliation fee:
+- store as config: leagueAffiliationFeePerPlayer (N$ value set by admin)
+- always included (even if exceeds NVF recommendation)
+
+Add to Player:
+- employmentClass: WORKING | NON_WORKING
+- joinedAt date
+
+2) PAYMENT FLOW (MUST REQUIRE FINANCE APPROVAL)
+Payment record:
+PlayerPayment:
+- id
+- playerId
+- feeType: MEMBERSHIP | DEVELOPMENT | RESOURCE | LEAGUE_AFFILIATION | OTHER
+- amount
+- paidBy: PLAYER | CLUB | SPONSOR | OTHER
+- paidByName (text)
+- reference (text)
+- paymentDate
+- status: PENDING_APPROVAL | APPROVED | REJECTED
+- approvedBy (finance userId)
+- approvedAt
+
+Rule:
+- When payment is created => status PENDING_APPROVAL
+- Only Finance/Admin/SuperAdmin can approve
+- Only after approval:
+  - update player finance ledger/balance
+  - update dashboard “Paid/Unpaid”
+  - stop reminders for that fee period
+
+3) EXPENSES ON PLAYERS
+PlayerExpense:
+- id
+- playerId
+- amount
+- paidBy: CLUB | COACH | ADMIN | SPONSOR | OTHER
+- paidByName
+- reason enum:
+  TRANSPORT | TRACK_SUIT | JERSEY | SHOES | TRIP | MEDICAL | OTHER
+- notes
+- date
+- status: PENDING_APPROVAL | APPROVED | REJECTED (optional, recommended)
+
+UI:
+Admin selects:
+- player receiving benefit
+- amount
+- paid by
+- reason
+
+4) REMINDERS IF NOT PAID
+System should compute “Outstanding Fees”:
+- Membership: based on employmentClass (annual or monthly? you didn’t say period)
+RECOMMENDATION (implement):
+- Membership is annual (or once per season). If you mean monthly, tell Replit to add monthly cycle.
+- Development: once off – due immediately after join
+- Resource: annual – due each year from joinedAt anniversary
+- League affiliation: due annually or per season (config)
+
+Reminders:
+- Show banners on player dashboard:
+  “Membership fee outstanding”
+- Send notifications weekly until paid (PENDING/UNPAID)
+
+5) PLAYER VALUE (ADMIN VIEW – ALWAYS UPDATED)
+Definition you want:
+- Player “value” includes REQUIRED fees + league affiliation + approved club expenses
+- BUT: “If player contributes the above him or herself don’t include the amount to his value.”
+
+Interpretation (implement exactly):
+PlayerValue = (Approved club-paid expenses for player) + (Club-paid portion of fees) + (League affiliation if paid by club)
+Exclude any amounts where paidBy = PLAYER.
+
+So:
+value = sum(approved PlayerExpense.amount where paidBy != PLAYER)
+      + sum(approved PlayerPayment.amount where paidBy != PLAYER)
+
+Admin dashboard shows:
+- Player Value (N$)
+- Player Paid (by player)
+- Club Contributed
+- Outstanding
+
+6) EXIT / LEAVING CLUB CALCULATION
+When player leaves club:
+- compute TotalFeesDue (membership + dev + resource + league affiliation)
+- compute TotalPaidByPlayer (approved payments paidBy=PLAYER)
+- compute ClubContribution (value)
+Show a final statement.
+
+========================================================
+E) FINANCIAL REPORTS (TIMELY)
+========================================================
+
+Finance dashboard:
+- Monthly summary:
+  - Total received (approved)
+  - Total outstanding
+  - Total expenses (approved)
+  - Net position
+- Per-team finance:
+  - total paid, outstanding, club contribution
+- Export to CSV/PDF
+
+Endpoints:
+GET /api/finance/summary?from=YYYY-MM-DD&to=YYYY-MM-DD
+GET /api/finance/player/:playerId
+POST /api/finance/payment (create pending)
+POST /api/finance/payment/:id/approve
+POST /api/finance/expense (create pending)
+POST /api/finance/expense/:id/approve
+
+========================================================
+F) WHAT REPLIT MUST CHANGE NOW
+========================================================
+
+1) Coach dashboard:
+- filter by assigned teams
+- allow coach notices to those teams
+- training schedule + chat integrated
+- graphs for performance + attendance
+
+2) Attendance:
+- fix gender day rules EXACTLY:
+  Monday+Wednesday female
+  Tuesday+Thursday male
+  Friday all
+
+3) Player excuse/late requests:
+- player submits, coach approves, attendance updated
+
+4) Finance:
+- implement fees, payments pending approval, reminders
+- expenses per player
+- player value rules excluding player-paid amounts
+
+========================================================
+END – IMPLEMENT EXACTLY
+========================================================
