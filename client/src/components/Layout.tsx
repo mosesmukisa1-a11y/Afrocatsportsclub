@@ -38,6 +38,7 @@ const allNavItems = [
   { icon: Megaphone, label: "Notice Board", href: "/notices", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
   { icon: MessageCircle, label: "Chat", href: "/chat", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","PLAYER"] },
   { icon: Mail, label: "Send Email", href: "/email-compose", roles: ["ADMIN","MANAGER"] },
+  { icon: ShieldAlert, label: "Officials", href: "/officials", roles: ["ADMIN","MANAGER"] },
   { icon: Gamepad2, label: "Simulation", href: "/match-simulation", roles: ["ADMIN","MANAGER","COACH"] },
   { icon: FileSpreadsheet, label: "Report Builder", href: "/report-templates", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE"] },
   { icon: UserCircle, label: "My Profile", href: "/profile-setup", roles: ["PLAYER"] },

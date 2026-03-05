@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { api } from "@/lib/api";
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   BookOpen, Plus, Pin, Tag, Calendar, User, MessageSquare,
-  Send, ArrowLeft, Trash2, Edit, X, Check
+  Send, ArrowLeft, Trash2, Edit, X, Check, Layout as LayoutIcon, Circle, Move, Save
 } from "lucide-react";
 
 const CATEGORIES = [
@@ -52,12 +52,215 @@ function timeAgo(dateStr: string) {
   return new Date(dateStr).toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+const COURT_W = 600;
+const COURT_H = 400;
+const PLAYER_R = 18;
+const DEFAULT_POSITIONS = [
+  { x: 100, y: 80, label: "S" }, { x: 300, y: 80, label: "MB" }, { x: 500, y: 80, label: "OH" },
+  { x: 100, y: 200, label: "L" }, { x: 300, y: 200, label: "OP" }, { x: 500, y: 200, label: "OH2" },
+];
+
+function TacticBoardSection() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const canEdit = user?.isSuperAdmin || ["ADMIN", "MANAGER", "COACH"].includes(user?.role || "");
+
+  const [activeBoard, setActiveBoard] = useState<any>(null);
+  const [positions, setPositions] = useState(DEFAULT_POSITIONS);
+  const [boardTitle, setBoardTitle] = useState("");
+  const [dragging, setDragging] = useState<number | null>(null);
+  const [annotations, setAnnotations] = useState<{x1:number;y1:number;x2:number;y2:number}[]>([]);
+  const [drawing, setDrawing] = useState(false);
+  const [drawStart, setDrawStart] = useState<{x:number;y:number}|null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const { data: teams = [] } = useQuery({ queryKey: ["/api/teams"], queryFn: api.getTeams });
+  const [teamId, setTeamId] = useState("");
+
+  const { data: fetchedBoards = [] } = useQuery({
+    queryKey: ["/api/tactic-boards", teamId],
+    queryFn: () => api.getTacticBoards(teamId || undefined),
+  });
+
+  const saveMut = useMutation({
+    mutationFn: () => {
+      const boardJson = { positions, annotations };
+      if (activeBoard?.id) {
+        return api.updateTacticBoard(activeBoard.id, { title: boardTitle, boardJson });
+      }
+      return api.createTacticBoard({ title: boardTitle || "Untitled", boardJson, teamId: teamId || undefined });
+    },
+    onSuccess: () => {
+      toast({ title: "Tactic board saved" });
+      qc.invalidateQueries({ queryKey: ["/api/tactic-boards", teamId] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.deleteTacticBoard(id),
+    onSuccess: () => {
+      toast({ title: "Board deleted" });
+      setActiveBoard(null);
+      resetBoard();
+      qc.invalidateQueries({ queryKey: ["/api/tactic-boards", teamId] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  function resetBoard() {
+    setPositions(DEFAULT_POSITIONS);
+    setAnnotations([]);
+    setBoardTitle("");
+    setActiveBoard(null);
+  }
+
+  function loadBoard(board: any) {
+    setActiveBoard(board);
+    setBoardTitle(board.title || "");
+    let json = board.boardJson || {};
+    if (typeof json === "string") {
+      try { json = JSON.parse(json); } catch { json = {}; }
+    }
+    setPositions(json.positions || DEFAULT_POSITIONS);
+    setAnnotations(json.annotations || []);
+  }
+
+  function getSvgCoords(e: React.MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * COURT_W,
+      y: ((e.clientY - rect.top) / rect.height) * COURT_H,
+    };
+  }
+
+  function handleMouseDown(e: React.MouseEvent<SVGSVGElement>) {
+    if (dragging !== null) return;
+    if (!drawing) return;
+    const coords = getSvgCoords(e);
+    setDrawStart(coords);
+  }
+
+  function handleMouseUp(e: React.MouseEvent<SVGSVGElement>) {
+    if (dragging !== null) { setDragging(null); return; }
+    if (drawing && drawStart) {
+      const coords = getSvgCoords(e);
+      const dx = coords.x - drawStart.x;
+      const dy = coords.y - drawStart.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 15) {
+        setAnnotations(prev => [...prev, { x1: drawStart.x, y1: drawStart.y, x2: coords.x, y2: coords.y }]);
+      }
+      setDrawStart(null);
+    }
+  }
+
+  function handleMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (dragging !== null) {
+      const coords = getSvgCoords(e);
+      setPositions(prev => prev.map((p, i) => i === dragging ? { ...p, x: Math.max(PLAYER_R, Math.min(COURT_W - PLAYER_R, coords.x)), y: Math.max(PLAYER_R, Math.min(COURT_H - PLAYER_R, coords.y)) } : p));
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <select value={teamId} onChange={e => setTeamId(e.target.value)}
+          className="px-3 py-1.5 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm" data-testid="select-tactic-team">
+          <option value="">All Teams</option>
+          {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        {canEdit && (
+          <>
+            <button onClick={resetBoard} className="px-3 py-1.5 rounded-lg bg-afrocat-teal text-white text-xs font-bold cursor-pointer" data-testid="button-new-board">
+              <Plus className="inline h-3 w-3 mr-1" /> New Board
+            </button>
+            <button onClick={() => setDrawing(!drawing)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${drawing ? "bg-afrocat-gold text-white" : "bg-afrocat-white-5 text-afrocat-muted border border-afrocat-border"}`}
+              data-testid="button-toggle-draw">
+              {drawing ? "Drawing ON" : "Draw Arrows"}
+            </button>
+          </>
+        )}
+      </div>
+
+      {fetchedBoards.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {fetchedBoards.map((b: any) => (
+            <button key={b.id} onClick={() => loadBoard(b)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap cursor-pointer transition-colors ${activeBoard?.id === b.id ? "bg-afrocat-teal text-white" : "bg-afrocat-white-5 text-afrocat-muted border border-afrocat-border"}`}
+              data-testid={`board-tab-${b.id}`}>
+              {b.title || "Untitled"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="afrocat-card p-4 space-y-3">
+        {canEdit && (
+          <div className="flex gap-2">
+            <input value={boardTitle} onChange={e => setBoardTitle(e.target.value)} placeholder="Board title..."
+              className="flex-1 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm" data-testid="input-board-title" />
+            <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}
+              className="px-4 py-2 rounded-lg bg-afrocat-teal text-white text-sm font-bold cursor-pointer disabled:opacity-50 flex items-center gap-1" data-testid="button-save-board">
+              <Save className="h-4 w-4" /> Save
+            </button>
+            {activeBoard?.id && (
+              <button onClick={() => { if (confirm("Delete this board?")) deleteMut.mutate(activeBoard.id); }}
+                className="px-3 py-2 rounded-lg bg-afrocat-red-soft text-afrocat-red text-sm font-bold cursor-pointer" data-testid="button-delete-board">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="border border-afrocat-border rounded-xl overflow-hidden bg-green-900/30">
+          <svg ref={svgRef} viewBox={`0 0 ${COURT_W} ${COURT_H}`} className="w-full"
+            onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} onMouseMove={handleMouseMove}
+            style={{ touchAction: "none" }}>
+            <rect x={0} y={0} width={COURT_W} height={COURT_H} fill="#1a3a2a" />
+            <line x1={COURT_W / 2} y1={0} x2={COURT_W / 2} y2={COURT_H} stroke="#4ade80" strokeWidth={2} opacity={0.4} />
+            <rect x={10} y={10} width={COURT_W / 2 - 15} height={COURT_H - 20} fill="none" stroke="#4ade80" strokeWidth={1.5} opacity={0.5} rx={4} />
+            <rect x={COURT_W / 2 + 5} y={10} width={COURT_W / 2 - 15} height={COURT_H - 20} fill="none" stroke="#4ade80" strokeWidth={1.5} opacity={0.5} rx={4} />
+            <line x1={10} y1={COURT_H * 0.25} x2={COURT_W / 2 - 5} y2={COURT_H * 0.25} stroke="#4ade80" strokeWidth={1} opacity={0.3} strokeDasharray="6,4" />
+            <line x1={COURT_W / 2 + 5} y1={COURT_H * 0.25} x2={COURT_W - 10} y2={COURT_H * 0.25} stroke="#4ade80" strokeWidth={1} opacity={0.3} strokeDasharray="6,4" />
+
+            {annotations.map((a, i) => (
+              <g key={`ann-${i}`}>
+                <defs><marker id={`arrowhead-${i}`} markerWidth={8} markerHeight={6} refX={8} refY={3} orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#facc15" /></marker></defs>
+                <line x1={a.x1} y1={a.y1} x2={a.x2} y2={a.y2} stroke="#facc15" strokeWidth={2} markerEnd={`url(#arrowhead-${i})`} />
+              </g>
+            ))}
+
+            {positions.map((p, i) => (
+              <g key={i} style={{ cursor: canEdit ? "grab" : "default" }}
+                onMouseDown={(e) => { if (canEdit) { e.stopPropagation(); setDragging(i); } }}>
+                <circle cx={p.x} cy={p.y} r={PLAYER_R} fill="#14b8a6" stroke="#fff" strokeWidth={2} opacity={0.9} />
+                <text x={p.x} y={p.y + 5} textAnchor="middle" fill="white" fontSize={11} fontWeight="bold">{p.label}</text>
+              </g>
+            ))}
+          </svg>
+        </div>
+
+        {annotations.length > 0 && canEdit && (
+          <button onClick={() => setAnnotations([])} className="text-xs text-afrocat-muted hover:text-afrocat-red cursor-pointer" data-testid="button-clear-arrows">
+            Clear all arrows
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function CoachBlog() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
   const canWrite = user?.isSuperAdmin || ["ADMIN", "MANAGER", "COACH"].includes(user?.role || "");
 
+  const [topTab, setTopTab] = useState<"posts" | "tactics">("posts");
   const [view, setView] = useState<"list" | "detail" | "compose">("list");
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
@@ -396,17 +599,36 @@ export default function CoachBlog() {
               <p className="text-xs text-afrocat-muted">Insights, strategies, and tips from your coaching staff</p>
             </div>
           </div>
-          {canWrite && (
-            <Button
-              onClick={() => { resetForm(); setView("compose"); }}
-              data-testid="button-new-blog-post"
-              className="bg-afrocat-teal hover:bg-afrocat-teal/90 text-white"
-            >
-              <Plus className="h-4 w-4 mr-2" /> Write Post
-            </Button>
-          )}
+          <div className="flex gap-2">
+            {canWrite && topTab === "posts" && (
+              <Button
+                onClick={() => { resetForm(); setView("compose"); }}
+                data-testid="button-new-blog-post"
+                className="bg-afrocat-teal hover:bg-afrocat-teal/90 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" /> Write Post
+              </Button>
+            )}
+          </div>
         </div>
 
+        <div className="flex gap-2 border-b border-afrocat-border pb-2">
+          <button onClick={() => setTopTab("posts")}
+            className={`px-4 py-2 rounded-t-lg text-sm font-bold cursor-pointer transition-colors ${topTab === "posts" ? "bg-afrocat-teal text-white" : "text-afrocat-muted hover:text-afrocat-text"}`}
+            data-testid="tab-posts">
+            <BookOpen className="inline h-4 w-4 mr-1" /> Blog Posts
+          </button>
+          <button onClick={() => setTopTab("tactics")}
+            className={`px-4 py-2 rounded-t-lg text-sm font-bold cursor-pointer transition-colors ${topTab === "tactics" ? "bg-afrocat-teal text-white" : "text-afrocat-muted hover:text-afrocat-text"}`}
+            data-testid="tab-tactics">
+            <LayoutIcon className="inline h-4 w-4 mr-1" /> Tactic Board
+          </button>
+        </div>
+
+        {topTab === "tactics" ? (
+          <TacticBoardSection />
+        ) : (
+        <div className="space-y-4">
         <div className="flex items-center gap-2 overflow-x-auto pb-1" data-testid="blog-category-filter">
           <button
             onClick={() => setFilterCategory("ALL")}
@@ -483,6 +705,8 @@ export default function CoachBlog() {
               </div>
             ))}
           </div>
+        )}
+        </div>
         )}
       </div>
     </Layout>

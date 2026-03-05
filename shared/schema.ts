@@ -897,3 +897,27 @@ export const feeConfig = pgTable("fee_config", {
 export const insertFeeConfigSchema = createInsertSchema(feeConfig).omit({ id: true, updatedAt: true });
 export type InsertFeeConfig = z.infer<typeof insertFeeConfigSchema>;
 export type FeeConfig = typeof feeConfig.$inferSelect;
+
+export const officialTeamAssignments = pgTable("official_team_assignments", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  officialUserId: varchar("official_user_id", { length: 36 }).notNull(),
+  teamId: varchar("team_id", { length: 36 }).notNull(),
+  officialRole: text("official_role").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertOfficialTeamAssignmentSchema = createInsertSchema(officialTeamAssignments).omit({ id: true, createdAt: true });
+export type InsertOfficialTeamAssignment = z.infer<typeof insertOfficialTeamAssignmentSchema>;
+export type OfficialTeamAssignment = typeof officialTeamAssignments.$inferSelect;
+
+export const coachTacticBoards = pgTable("coach_tactic_boards", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  coachUserId: varchar("coach_user_id", { length: 36 }).notNull(),
+  teamId: varchar("team_id", { length: 36 }),
+  title: text("title").notNull(),
+  boardJson: text("board_json").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+export const insertCoachTacticBoardSchema = createInsertSchema(coachTacticBoards).omit({ id: true, createdAt: true });
+export type InsertCoachTacticBoard = z.infer<typeof insertCoachTacticBoardSchema>;
+export type CoachTacticBoard = typeof coachTacticBoards.$inferSelect;

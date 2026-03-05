@@ -607,35 +607,43 @@ export async function registerRoutes(
     limits: { fileSize: 50 * 1024 * 1024 },
   });
 
-  app.post("/api/media/upload", requireAuth, requireRole(["ADMIN","MANAGER"]), mediaUpload.single("file"), async (req, res, next) => {
+  app.post("/api/media/upload", requireAuth, requireRole(["ADMIN","MANAGER"]), mediaUpload.array("files", 10), async (req, res, next) => {
     try {
-      if (!req.file) return res.status(400).json({ ok: false, message: "No file uploaded" });
+      const files = req.files as Express.Multer.File[];
+      if (!files || files.length === 0) {
+        if ((req as any).file) {
+          const singleFile = (req as any).file as Express.Multer.File;
+          const url = `/uploads/media/${singleFile.filename}`;
+          const title = (req.body.title as string) || singleFile.originalname;
+          const description = (req.body.description as string) || null;
+          const isPublic = req.body.isPublic !== "false";
+          const [item] = await db.insert(schema.mediaPosts).values({
+            title, caption: description, imageUrl: url,
+            visibility: isPublic ? "PUBLIC" : "TEAM_ONLY", status: "APPROVED",
+            uploadedByUserId: req.user!.userId,
+          }).returning();
+          return res.status(201).json({ ok: true, item: { ...item, url: item.imageUrl, mimeType: singleFile.mimetype, description: item.caption, uploadedBy: req.user!.userId } });
+        }
+        return res.status(400).json({ ok: false, message: "No files uploaded" });
+      }
 
-      const url = `/uploads/media/${req.file.filename}`;
-      const title = (req.body.title as string) || req.file.originalname;
+      const titlePrefix = (req.body.title as string) || "";
       const description = (req.body.description as string) || null;
-      const teamId = (req.body.teamId as string) || null;
       const isPublic = req.body.isPublic !== "false";
 
-      const [item] = await db.insert(schema.mediaPosts).values({
-        title,
-        caption: description,
-        imageUrl: url,
-        visibility: isPublic ? "PUBLIC" : "TEAM_ONLY",
-        status: "APPROVED",
-        uploadedByUserId: req.user!.userId,
-      }).returning();
+      const items = [];
+      for (const file of files) {
+        const url = `/uploads/media/${file.filename}`;
+        const fileTitle = titlePrefix ? `${titlePrefix} - ${file.originalname}` : file.originalname;
+        const [item] = await db.insert(schema.mediaPosts).values({
+          title: fileTitle, caption: description, imageUrl: url,
+          visibility: isPublic ? "PUBLIC" : "TEAM_ONLY", status: "APPROVED",
+          uploadedByUserId: req.user!.userId,
+        }).returning();
+        items.push({ ...item, url: item.imageUrl, mimeType: file.mimetype, description: item.caption, uploadedBy: req.user!.userId });
+      }
 
-      res.status(201).json({
-        ok: true,
-        item: {
-          ...item,
-          url: item.imageUrl,
-          mimeType: req.file.mimetype,
-          description: item.caption,
-          uploadedBy: req.user!.userId,
-        },
-      });
+      res.status(201).json({ ok: true, items, item: items[0] });
     } catch (e) { next(e); }
   });
 
@@ -4817,6 +4825,22 @@ th{background:#0d7377;color:white}
         message: body.message,
       }).returning();
 
+      if (body.roomId.startsWith("dm:")) {
+        const parts = body.roomId.split(":");
+        const recipientId = parts.find(p => p !== "dm" && p !== req.user!.userId);
+        if (recipientId) {
+          try {
+            await db.insert(schema.notifications).values({
+              userId: recipientId,
+              type: "CHAT_MESSAGE",
+              title: `New message from ${req.user!.fullName}`,
+              body: body.message.substring(0, 100),
+              linkUrl: `/chat?dm=${body.roomId}`,
+            });
+          } catch {}
+        }
+      }
+
       res.status(201).json(msg);
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error" });
@@ -6735,6 +6759,97 @@ th{background:#0d7377;color:white}
       const interview = await storage.getPlayerInterview(req.params.id);
       if (!interview) return res.status(404).json({ error: "Interview not found" });
       await storage.deletePlayerInterview(req.params.id);
+      res.status(204).send();
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/members/search", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const q = ((req.query.q as string) || "").toLowerCase();
+      const roleFilter = req.query.role as string;
+      const teamFilter = req.query.teamId as string;
+      const allUsers = await db.select().from(schema.users);
+      const allPlayers = await db.select().from(schema.players);
+      const allTeams = await db.select().from(schema.teams);
+      const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t.name]));
+      const playerByUser = Object.fromEntries(allPlayers.map(p => [p.userId, p]));
+      let results = allUsers.map(u => {
+        const p = playerByUser[u.id];
+        return {
+          id: u.id, userId: u.id, fullName: u.fullName, email: u.email, role: u.role,
+          teamName: p ? teamMap[p.teamId || ""] || "" : "",
+          teamId: p?.teamId || "",
+        };
+      });
+      if (q) results = results.filter(r => r.fullName.toLowerCase().includes(q) || r.email.toLowerCase().includes(q) || r.teamName.toLowerCase().includes(q));
+      if (roleFilter) results = results.filter(r => r.role === roleFilter);
+      if (teamFilter) results = results.filter(r => r.teamId === teamFilter);
+      res.json(results);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/officials", requireAuth, requireRole(["ADMIN","MANAGER"]), async (_req, res, next) => {
+    try {
+      const users = await db.select().from(schema.users);
+      const assignments = await storage.getOfficialTeamAssignments();
+      const teams = await db.select().from(schema.teams);
+      const teamMap = Object.fromEntries(teams.map(t => [t.id, t.name]));
+      const officialUserIds = [...new Set(assignments.map(a => a.officialUserId))];
+      const officials = users.filter(u => ["OFFICIAL","ADMIN","MANAGER","COACH","MEDICAL"].includes(u.role || "") || officialUserIds.includes(u.id));
+      const result = officials.map(o => ({
+        ...o, password: undefined,
+        assignments: assignments.filter(a => a.officialUserId === o.id).map(a => ({
+          ...a, teamName: teamMap[a.teamId] || "",
+        })),
+      }));
+      res.json(result);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/officials/assign", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const { officialUserId, teamId, officialRole } = req.body;
+      if (!officialUserId || !teamId || !officialRole) return res.status(400).json({ error: "officialUserId, teamId, officialRole required" });
+      const created = await storage.createOfficialTeamAssignment({ officialUserId, teamId, officialRole, active: true });
+      res.status(201).json(created);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/officials/assign/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      await storage.deleteOfficialTeamAssignment(req.params.id);
+      res.status(204).send();
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/tactic-boards", requireAuth, async (req, res, next) => {
+    try {
+      const teamId = req.query.teamId as string;
+      const boards = await storage.getCoachTacticBoards(req.user!.userId, teamId || undefined);
+      res.json(boards);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/tactic-boards", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { title, boardJson, teamId } = req.body;
+      if (!title || !boardJson) return res.status(400).json({ error: "title and boardJson required" });
+      const created = await storage.createCoachTacticBoard({ coachUserId: req.user!.userId, title, boardJson: typeof boardJson === "string" ? boardJson : JSON.stringify(boardJson), teamId: teamId || null });
+      res.json(created);
+    } catch (e) { next(e); }
+  });
+
+  app.patch("/api/tactic-boards/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { title, boardJson } = req.body;
+      const updated = await storage.updateCoachTacticBoard(req.params.id, { title, boardJson: typeof boardJson === "string" ? boardJson : JSON.stringify(boardJson) });
+      res.json(updated);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/tactic-boards/:id", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      await storage.deleteCoachTacticBoard(req.params.id);
       res.status(204).send();
     } catch (e) { next(e); }
   });

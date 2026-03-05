@@ -1092,6 +1092,36 @@ export class DatabaseStorage implements IStorage {
     const [created] = await db.insert(schema.feeConfig).values({ key, value, updatedBy }).returning();
     return created;
   }
+  async getOfficialTeamAssignments(officialUserId?: string, teamId?: string) {
+    let q = db.select().from(schema.officialTeamAssignments);
+    if (officialUserId) q = q.where(eq(schema.officialTeamAssignments.officialUserId, officialUserId)) as any;
+    if (teamId) q = q.where(eq(schema.officialTeamAssignments.teamId, teamId)) as any;
+    return q;
+  }
+  async createOfficialTeamAssignment(data: schema.InsertOfficialTeamAssignment) {
+    const [created] = await db.insert(schema.officialTeamAssignments).values(data).returning();
+    return created;
+  }
+  async deleteOfficialTeamAssignment(id: string) {
+    await db.delete(schema.officialTeamAssignments).where(eq(schema.officialTeamAssignments.id, id));
+  }
+  async getCoachTacticBoards(coachUserId?: string, teamId?: string) {
+    let q = db.select().from(schema.coachTacticBoards);
+    if (coachUserId) q = q.where(eq(schema.coachTacticBoards.coachUserId, coachUserId)) as any;
+    if (teamId) q = q.where(eq(schema.coachTacticBoards.teamId, teamId)) as any;
+    return q;
+  }
+  async createCoachTacticBoard(data: schema.InsertCoachTacticBoard) {
+    const [created] = await db.insert(schema.coachTacticBoards).values(data).returning();
+    return created;
+  }
+  async updateCoachTacticBoard(id: string, data: Partial<schema.InsertCoachTacticBoard>) {
+    const [updated] = await db.update(schema.coachTacticBoards).set(data).where(eq(schema.coachTacticBoards.id, id)).returning();
+    return updated;
+  }
+  async deleteCoachTacticBoard(id: string) {
+    await db.delete(schema.coachTacticBoards).where(eq(schema.coachTacticBoards.id, id));
+  }
 }
 
 export const storage = new DatabaseStorage();

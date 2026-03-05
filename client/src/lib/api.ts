@@ -221,6 +221,11 @@ export const api = {
     const token = localStorage.getItem("token");
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
+    const fileEntry = formData.get("file");
+    if (fileEntry) {
+      formData.delete("file");
+      formData.append("files", fileEntry);
+    }
     const res = await fetch("/api/media/upload", { method: "POST", headers, body: formData });
     if (!res.ok) { const b = await res.json().catch(() => ({ message: "Upload failed" })); throw new Error(b.message || `HTTP ${res.status}`); }
     return res.json();
@@ -429,6 +434,37 @@ export const api = {
     apiFetch<any>(`/interviews/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteInterview: (id: string) =>
     apiFetch<void>(`/interviews/${id}`, { method: "DELETE" }),
+
+  searchMembers: (q?: string, role?: string, teamId?: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (role) params.set("role", role);
+    if (teamId) params.set("teamId", teamId);
+    return apiFetch<any[]>(`/members/search?${params.toString()}`);
+  },
+
+  getOfficials: () => apiFetch<any[]>("/officials"),
+  assignOfficial: (data: { officialUserId: string; teamId: string; officialRole: string }) =>
+    apiFetch<any>("/officials/assign", { method: "POST", body: JSON.stringify(data) }),
+  removeOfficialAssignment: (id: string) =>
+    apiFetch<void>(`/officials/assign/${id}`, { method: "DELETE" }),
+
+  getTacticBoards: (teamId?: string) => apiFetch<any[]>(`/tactic-boards${teamId ? `?teamId=${teamId}` : ""}`),
+  createTacticBoard: (data: { title: string; boardJson: any; teamId?: string }) =>
+    apiFetch<any>("/tactic-boards", { method: "POST", body: JSON.stringify(data) }),
+  updateTacticBoard: (id: string, data: { title?: string; boardJson?: any }) =>
+    apiFetch<any>(`/tactic-boards/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteTacticBoard: (id: string) =>
+    apiFetch<void>(`/tactic-boards/${id}`, { method: "DELETE" }),
+
+  uploadMediaMulti: async (formData: FormData) => {
+    const token = localStorage.getItem("token");
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch("/api/media/upload", { method: "POST", headers, body: formData });
+    if (!res.ok) { const b = await res.json().catch(() => ({ message: "Upload failed" })); throw new Error(b.message || `HTTP ${res.status}`); }
+    return res.json();
+  },
 };
 
 export async function registerPushNotifications() {
