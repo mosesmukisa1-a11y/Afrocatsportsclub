@@ -124,8 +124,8 @@ export function SquadSelector({ matchId, teamId, onClose }: SquadSelectorProps) 
     setPreviewOpen(true);
   };
 
-  const eligible = eligiblePlayers.filter((p: any) => p.eligible);
-  const ineligible = eligiblePlayers.filter((p: any) => !p.eligible);
+  const eligible = eligiblePlayers.filter((p: any) => p.eligible).sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase()));
+  const ineligible = eligiblePlayers.filter((p: any) => !p.eligible).sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase()));
   const liberoCount = selectedIds.filter(id => getDetail(id).isLibero).length;
   const captainId = selectedIds.find(id => getDetail(id).isCaptain);
   const playersWithMissing = selectedIds.filter(id => {

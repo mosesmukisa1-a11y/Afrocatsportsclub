@@ -10,6 +10,10 @@ import {
   TrendingDown, Brain, Activity, BarChart3, CalendarCheck, DollarSign,
   Plus, Trash2, ChevronDown, ChevronUp, Users, Calendar, MapPin, Clock
 } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  BarChart, Bar, Cell
+} from "recharts";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
 type Tab = "overview" | "stats" | "weakness" | "training" | "attendance" | "finance";
@@ -187,23 +191,20 @@ export default function CoachDashboard() {
                 </div>
 
                 {performanceTrends.length > 0 && (
-                  <div className="afrocat-card p-5">
+                  <div className="afrocat-card p-5" data-testid="chart-performance-trends">
                     <h3 className="font-display font-bold text-sm text-afrocat-text mb-3">Performance Trends (Last 5 Matches)</h3>
-                    <div className="space-y-3">
-                      {performanceTrends.map((t: any) => (
-                        <div key={t.matchId} className="flex items-center gap-3 p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs font-bold text-afrocat-text truncate">vs {t.opponent}</div>
-                            <div className="text-[10px] text-afrocat-muted">{t.date}</div>
-                          </div>
-                          <div className="flex gap-3 text-center">
-                            <div><div className="text-xs font-bold text-red-400">{t.serveErrorPct}%</div><div className="text-[9px] text-afrocat-muted">Srv Err</div></div>
-                            <div><div className="text-xs font-bold text-green-400">{t.receivePerfectPct}%</div><div className="text-[9px] text-afrocat-muted">Recv+</div></div>
-                            <div><div className="text-xs font-bold text-afrocat-teal">{t.attackEfficiency}%</div><div className="text-[9px] text-afrocat-muted">Atk Eff</div></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <ResponsiveContainer width="100%" height={260}>
+                      <LineChart data={performanceTrends.map((t: any) => ({ name: `vs ${t.opponent}`, serveErr: Number(t.serveErrorPct) || 0, recvPerfect: Number(t.receivePerfectPct) || 0, atkEff: Number(t.attackEfficiency) || 0 }))}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                        <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} />
+                        <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} unit="%" />
+                        <Tooltip contentStyle={{ backgroundColor: '#1a1f2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#e2e8f0', fontSize: 12 }} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Line type="monotone" dataKey="serveErr" name="Serve Err %" stroke="#f87171" strokeWidth={2} dot={{ r: 4, fill: '#f87171' }} />
+                        <Line type="monotone" dataKey="recvPerfect" name="Recv Perfect %" stroke="#4ade80" strokeWidth={2} dot={{ r: 4, fill: '#4ade80' }} />
+                        <Line type="monotone" dataKey="atkEff" name="Atk Efficiency %" stroke="#2dd4bf" strokeWidth={2} dot={{ r: 4, fill: '#2dd4bf' }} />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
                 )}
               </div>
@@ -478,19 +479,21 @@ export default function CoachDashboard() {
               <div className="space-y-4">
                 {(attendanceTrends?.monthlyTrends || []).length > 0 ? (
                   <>
-                    <div className="afrocat-card p-5">
+                    <div className="afrocat-card p-5" data-testid="chart-attendance-trends">
                       <h3 className="font-display font-bold text-sm text-afrocat-text mb-3">Monthly Attendance %</h3>
-                      <div className="space-y-2">
-                        {(attendanceTrends?.monthlyTrends || []).map((t: any) => (
-                          <div key={t.month} className="flex items-center gap-3">
-                            <div className="w-16 text-xs text-afrocat-muted font-bold">{t.month}</div>
-                            <div className="flex-1 h-6 bg-afrocat-white-5 rounded-full overflow-hidden">
-                              <div className="h-full bg-afrocat-teal rounded-full transition-all" style={{ width: `${t.percentage}%` }} />
-                            </div>
-                            <div className="w-10 text-right text-xs font-bold text-afrocat-text">{t.percentage}%</div>
-                          </div>
-                        ))}
-                      </div>
+                      <ResponsiveContainer width="100%" height={260}>
+                        <BarChart data={(attendanceTrends?.monthlyTrends || []).map((t: any) => ({ month: t.month, percentage: Number(t.percentage) || 0 }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                          <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} />
+                          <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} unit="%" domain={[0, 100]} />
+                          <Tooltip contentStyle={{ backgroundColor: '#1a1f2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#e2e8f0', fontSize: 12 }} formatter={(value: number) => [`${value}%`, 'Attendance']} />
+                          <Bar dataKey="percentage" name="Attendance %" radius={[6, 6, 0, 0]}>
+                            {(attendanceTrends?.monthlyTrends || []).map((_: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#2dd4bf' : '#d4a843'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

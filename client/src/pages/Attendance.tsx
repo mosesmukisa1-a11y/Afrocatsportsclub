@@ -120,9 +120,10 @@ export default function Attendance() {
     }));
   };
 
-  const filteredPlayers = scheduleForm.teamId
+  const filteredPlayers = (scheduleForm.teamId
     ? (allPlayers || []).filter((p: any) => p.teamId === scheduleForm.teamId)
-    : (allPlayers || []);
+    : (allPlayers || [])
+  ).sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase()));
 
   return (
     <Layout>
@@ -296,7 +297,7 @@ export default function Attendance() {
               ) : (
                 <>
                   <div className="space-y-3">
-                    {sessionPlayers.map((p: any) => (
+                    {[...sessionPlayers].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => (
                       <div key={p.id} className="flex items-center justify-between border-b border-afrocat-border pb-2 last:border-0" data-testid={`row-player-attendance-${p.id}`}>
                         <span className="font-medium text-afrocat-text">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
                         <Select
@@ -354,7 +355,7 @@ export default function Attendance() {
               </div>
               <div className="p-3 rounded-xl bg-afrocat-gold-soft border border-afrocat-gold/20">
                 <h4 className="font-bold text-sm text-afrocat-gold mb-1">Women's Teams</h4>
-                <p className="text-xs text-afrocat-muted">Monday & Thursday</p>
+                <p className="text-xs text-afrocat-muted">Monday & Wednesday</p>
               </div>
               <div className="p-3 rounded-xl bg-afrocat-green-soft border border-afrocat-green/20">
                 <h4 className="font-bold text-sm text-afrocat-green mb-1">All Teams</h4>

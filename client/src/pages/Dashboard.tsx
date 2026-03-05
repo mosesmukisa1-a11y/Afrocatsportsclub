@@ -2,17 +2,24 @@ import { Layout } from "@/components/Layout";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselPrevious,
+  CarouselNext,
+} from "@/components/ui/carousel";
+import {
   Users, Trophy, DollarSign, Activity, ArrowUpRight, ArrowDownRight,
   Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
   User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
   FileText, Bell, ChevronRight, MessageCircle, Cake, PartyPopper, Gift, Scale,
-  Star, Crosshair, Sparkles, Megaphone
+  Star, Crosshair, Sparkles, Megaphone, Image
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 
 export default function Dashboard() {
@@ -90,11 +97,41 @@ export default function Dashboard() {
     enabled: isPlayerView && !!user,
   });
 
+  const { data: outstandingFees } = useQuery({
+    queryKey: ["/api/finance/my-outstanding"],
+    queryFn: api.getMyOutstandingFees,
+    enabled: isPlayerView && !!user,
+  });
+
   const { data: spotlight } = useQuery({
     queryKey: ["/api/player-spotlight"],
     queryFn: api.getPlayerSpotlight,
     enabled: !!user,
   });
+
+  const { data: approvedMedia = [] } = useQuery({
+    queryKey: ["/api/media", "APPROVED"],
+    queryFn: () => api.getMedia("APPROVED"),
+    enabled: !!user,
+  });
+
+  const recentMedia = (approvedMedia || [])
+    .filter((m: any) => m.fileUrl)
+    .slice(0, 10);
+
+  const [mediaApi, setMediaApi] = useState<any>(null);
+
+  useEffect(() => {
+    if (!mediaApi || recentMedia.length < 2) return;
+    const interval = setInterval(() => {
+      if (mediaApi.canScrollNext()) {
+        mediaApi.scrollNext();
+      } else {
+        mediaApi.scrollTo(0);
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [mediaApi, recentMedia.length]);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -187,6 +224,28 @@ export default function Dashboard() {
               <Link href="/profile-setup">
                 <span className="px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-sm hover:bg-afrocat-teal/80 transition-colors cursor-pointer" data-testid="link-update-weight">
                   Update Weight
+                </span>
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {isPlayerView && outstandingFees && outstandingFees.totalDue > 0 && (
+          <div className="afrocat-card border border-afrocat-red/30 overflow-hidden" data-testid="card-outstanding-fees">
+            <div className="bg-afrocat-red-soft px-5 py-4 flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3">
+                <DollarSign className="h-5 w-5 text-afrocat-red shrink-0" />
+                <div>
+                  <p className="font-bold text-sm text-afrocat-text" data-testid="text-outstanding-fees-title">Outstanding Fees</p>
+                  <p className="text-xs text-afrocat-muted" data-testid="text-outstanding-fees-amount">
+                    You have N${(outstandingFees.totalDue || 0).toLocaleString()} outstanding fees
+                    ({(outstandingFees.outstanding || []).filter((o: any) => o.remaining > 0).map((o: any) => o.feeType.replace(/_/g, " ")).join(", ")})
+                  </p>
+                </div>
+              </div>
+              <Link href="/finance">
+                <span className="px-4 py-2 rounded-lg bg-afrocat-red text-white font-bold text-sm hover:bg-afrocat-red/80 transition-colors cursor-pointer" data-testid="link-view-fees">
+                  View Fees
                 </span>
               </Link>
             </div>
@@ -319,6 +378,55 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {recentMedia.length > 0 && (
+          <div className="afrocat-card overflow-hidden" data-testid="card-media-slideshow">
+            <div className="bg-gradient-to-r from-afrocat-teal-soft via-afrocat-gold-soft to-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px]">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-teal" data-testid="text-media-slideshow-title">
+                  <Image className="h-5 w-5" /> Club Gallery
+                </h3>
+                <Link href="/media" className="text-xs text-afrocat-teal hover:underline flex items-center gap-1" data-testid="link-view-all-media">
+                  View All <ChevronRight className="h-3 w-3" />
+                </Link>
+              </div>
+            </div>
+            <div className="p-5">
+              <Carousel opts={{ loop: true }} setApi={setMediaApi} className="w-full">
+                <CarouselContent>
+                  {recentMedia.map((media: any) => (
+                    <CarouselItem key={media.id} className="basis-full md:basis-1/2 lg:basis-1/3">
+                      <div className="relative aspect-video rounded-xl overflow-hidden bg-afrocat-white-5 border border-afrocat-border" data-testid={`media-slide-${media.id}`}>
+                        {(media.mediaType || "IMAGE") === "VIDEO" ? (
+                          <video
+                            src={media.fileUrl}
+                            className="w-full h-full object-cover"
+                            muted
+                            playsInline
+                          />
+                        ) : (
+                          <img
+                            src={media.fileUrl}
+                            alt={media.title || "Club media"}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        )}
+                        {media.title && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-2">
+                            <p className="text-white text-xs font-medium truncate" data-testid={`text-media-title-${media.id}`}>{media.title}</p>
+                          </div>
+                        )}
+                      </div>
+                    </CarouselItem>
+                  ))}
+                </CarouselContent>
+                <CarouselPrevious className="left-2 bg-afrocat-card/80 border-afrocat-border text-afrocat-text hover:bg-afrocat-card" data-testid="button-media-prev" />
+                <CarouselNext className="right-2 bg-afrocat-card/80 border-afrocat-border text-afrocat-text hover:bg-afrocat-card" data-testid="button-media-next" />
+              </Carousel>
+            </div>
+          </div>
+        )}
 
         {spotlight && (
           <div className="afrocat-card overflow-hidden" data-testid="card-player-spotlight">

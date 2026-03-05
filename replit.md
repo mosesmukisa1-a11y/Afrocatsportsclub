@@ -154,6 +154,15 @@ Users, Teams, Players (with full biodata + heightCm, weightKg, lastWeightUpdated
 - **System Check Admin Page** (`/admin/system-check`): Admin-only page that runs sequential health checks against 8 API endpoints (teams, players, matches, media, finance, notifications, chat, notices) and shows PASS/FAIL status. Also calls `GET /api/admin/env-check` to display which environment variables (GMAIL_USER, GMAIL_APP_PASSWORD, EMAIL_AUTO_CC, DATABASE_URL) are configured without revealing values.
 - **Null-Safety Hardening**: All `.map()`, `.filter()`, `.find()`, `.reduce()`, `.some()`, `.length` calls across Dashboard, CoachDashboard, Finance, Attendance, Players, and Matches pages are guarded with `(arr || [])` patterns. Optional chaining and `?? 0` / `?? "—"` fallbacks added for nested property access.
 
+- **Alphabetical Player Sorting**: All player listings (Players, Attendance, SquadSelector, Finance, EmailCompose, Officials) sort by `lastName firstName` alphabetically.
+- **Best of 5 Default**: New matches default to Best of 5 format (server + client). FIVB rules apply (sets to 25, deciding set to 15, win by 2).
+- **Ace Celebration Effects**: When ACE is recorded in TouchStats, triggers device vibration, gold flash animation on scoreboard, fireworks toast, and server-side MATCH_STAT notification to the player.
+- **Unpaid Fee Reminders**: Player dashboard shows outstanding fees warning card with breakdown by fee type. Weekly Monday cron job creates FINANCE_REMINDER notifications for players with balances.
+- **Coach Dashboard Recharts**: Performance trends use Recharts LineChart (serve error/receive perfect/attack efficiency). Attendance trends use Recharts BarChart with dark theme styling.
+- **Interview Video Recording**: `VideoRecorder` component (`client/src/components/VideoRecorder.tsx`) uses MediaRecorder API for in-browser video capture from device camera. Integrated into PlayerInterviews — users can record video OR paste embed URL for VIDEO format interviews.
+- **Dashboard Media Slideshow**: Carousel of recent approved media on Dashboard using Embla carousel with auto-rotation (4s). Shows images and videos responsively.
+- **Player Search Enhancements**: EmailCompose and Officials pages have gender filter dropdowns and alphabetical sorting. Scrollable result containers.
+
 ## GitHub Repository
 - **Repo**: https://github.com/mosesmukisa1-a11y/afrocat-club-portal
 - **Branch**: main

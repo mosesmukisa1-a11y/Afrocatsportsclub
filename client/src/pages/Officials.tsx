@@ -28,6 +28,7 @@ export default function Officials() {
 
   const [showAssign, setShowAssign] = useState(false);
   const [searchQ, setSearchQ] = useState("");
+  const [searchGender, setSearchGender] = useState("");
   const [assignForm, setAssignForm] = useState({ officialUserId: "", teamId: "", officialRole: "REFEREE" });
 
   const { data: officials = [], isLoading } = useQuery({
@@ -158,8 +159,14 @@ export default function Officials() {
                 <input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder="Search by name..."
                   className="w-full pl-9 pr-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm" data-testid="input-official-search" />
               </div>
-              <div className="max-h-32 overflow-y-auto mt-2 space-y-1">
-                {members.map((m: any) => (
+              <select value={searchGender} onChange={e => setSearchGender(e.target.value)}
+                className="w-full mt-2 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm" data-testid="select-official-gender-filter">
+                <option value="">All Genders</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+              <div className="max-h-40 overflow-y-auto mt-2 space-y-1">
+                {[...members].filter((m: any) => !searchGender || (m.gender || "").toLowerCase() === searchGender.toLowerCase()).sort((a: any, b: any) => (a.fullName || "").localeCompare(b.fullName || "")).map((m: any) => (
                   <button key={m.id} onClick={() => setAssignForm(f => ({ ...f, officialUserId: m.id }))}
                     className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${assignForm.officialUserId === m.id ? "bg-afrocat-teal/15 text-afrocat-teal" : "hover:bg-afrocat-white-5 text-afrocat-text"}`}
                     data-testid={`pick-official-${m.id}`}>

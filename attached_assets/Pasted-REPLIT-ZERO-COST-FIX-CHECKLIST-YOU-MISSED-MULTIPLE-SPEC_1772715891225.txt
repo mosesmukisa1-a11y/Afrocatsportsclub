@@ -1,0 +1,187 @@
+REPLIT – ZERO-COST FIX CHECKLIST (YOU MISSED MULTIPLE SPECIFIED CHANGES)
+
+This is a consolidated checklist of EVERYTHING we instructed to be implemented. Many items are still missing (e.g., ladies training days incorrect, interview video not added, media uploads not applied). These are not new requests—these are YOUR missed implementations and must be corrected at no extra cost.
+
+========================================================
+A) REGISTRATION + PLAYER DATA RULES (MUST BE DONE)
+========================================================
+[ ] Gender ↔ Team linking:
+    - If user selects GENDER first → show only teams for that gender
+    - If user selects TEAM first → auto-set gender based on team gender rule
+    - Enforce server-side validation to prevent mismatch
+[ ] Add height + weight at registration
+[ ] Auto-calculate age from DOB and show on profile
+[ ] Weight update reminder quarterly
+[ ] After admin approves registration: any further updates require admin approval
+[ ] Players arranged alphabetically everywhere (lastName, firstName)
+
+========================================================
+B) MATCHES (STATUS + SCHEDULING + NOTIFICATIONS) – MUST BE DONE
+========================================================
+[ ] Upcoming vs Past vs Live vs Played status must be computed ONLY from startTime/endTime
+[ ] Future dates must show as UPCOMING with countdown (days/hours/minutes left)
+[ ] Scheduling must NOT request scores
+[ ] Block scheduling matches in the past (date < now)
+[ ] After match ends and no stats/scores → admins can enter final score (only if stats not entered)
+[ ] If stats were entered → score locked, no manual edits
+[ ] Upcoming matches must not be labelled “Recent”
+[ ] Past matches must not be labelled “Scheduled”
+[ ] Players/coaches/admins must receive upcoming match reminders
+[ ] Players dashboard must show upcoming match for their team + score when available
+[ ] Allow admins to edit scheduled matches
+[ ] Notify players when selected for a match squad
+
+========================================================
+C) O2BIS + TEAM LIST DOCUMENTS (TEMPLATE + STAFF PULL + LIBEROS + CAPTAIN + PREVIEW) – MUST BE DONE
+========================================================
+[ ] Match-section O2BIS must use EXACT SAME generator/template as Document Centre (no visual changes)
+[ ] O2BIS must pull assigned staff automatically (Head Coach, Assistant, Medic, etc.)
+[ ] Squad limits: allow up to 14 players; enforce 2 liberos when 14 are selected
+[ ] If <=12 selected: just fill (no libero enforcement)
+[ ] Coach can set match positions for that match only; O2BIS must use match positions
+[ ] After match, revert to registered positions (do NOT overwrite registration)
+[ ] Captain must be bold and marked “C” on printouts
+[ ] Required player fields for O2BIS selection must be enforced (name, DOB/age, nationality, jersey, etc.)
+[ ] O2BIS must be previewed before Save/Print
+[ ] PDF print layout must not cut off content (margins, wrapping, no hidden/cut fields)
+[ ] Team list doc: O2BIS-style roster without match details on letterhead
+
+========================================================
+D) ENTER STATS (TOUCH UI + AUTO SAVE + FULLSCREEN + BEST OF 5 DEFAULT + FIVB SET LOGIC + REPORTS) – MUST BE DONE
+========================================================
+[ ] Stats must auto-save per touch (no manual submit)
+[ ] Match “stats start” happens on first saved stat; “end” on Finish Stats
+[ ] Fullscreen option must exist
+[ ] Action tiles must “flip” to show detailed options (e.g., serve success -> ACE / pressure etc.)
+[ ] Add effects: fireworks + vibration for ACE
+[ ] Notify player: “You served an ace at TIME in this match”
+[ ] Add scoreboard: points + sets + scorer name
+[ ] Remove “end set buttons” (auto sets)
+[ ] Add match format selector: Best of 3 or Best of 5, with Best of 5 as DEFAULT
+[ ] Apply FIVB set rule:
+    - sets to 25 (and win by 2, deuce continues)
+    - deciding set to 15 if Best of 5
+[ ] Remove “switch team” button (stats only for Afrocat)
+[ ] Increase size and move +1 controls (big touch point pad) + Undo
+[ ] Speed up point awarding (optimistic UI, fewer steps)
+[ ] Add new stat options:
+    - net touch error
+    - overreach
+    - block out
+    - setter: set out of system, set out, net touch
+    - success: combinations (one, zero, fast ball)
+[ ] After match end:
+    - auto identify Player of the Match
+    - auto send each player their stats + improvement areas
+    - auto send match report + coach improvement advice to coach dashboard
+
+KNOWN MISSED BUGS TO FIX:
+[ ] Selected match “blinking” issue in Enter Stats (remove animation)
+[ ] Best of five not selecting in some matches (server default bestOf=5 + controlled UI)
+
+========================================================
+E) MEDIA (UPLOAD NOT APPLIED) – MUST BE DONE
+========================================================
+[ ] Admin + Super Admin can upload media (server + UI enforcement)
+[ ] Everyone can view media on dashboard
+[ ] Multi-select upload (multiple files at once)
+[ ] Faster upload (batch/parallel + progress)
+[ ] Allow users to download media
+[ ] Add slideshow view on dashboards (player media slideview)
+
+(You previously failed to apply this. It must be fixed.)
+
+========================================================
+F) CHAT + NOTICE BOARD + NOTIFICATIONS – MUST BE DONE
+========================================================
+[ ] Chat must be mobile friendly (WhatsApp style)
+[ ] Recipients must be notified of new threads/messages (in-app + push)
+[ ] Show participant identities using registration names + login
+[ ] Notice board:
+    - coach can post to selected team members
+    - admin can post to ALL
+[ ] Background notifications (service worker push) must work if enabled
+[ ] Birthday notifications to all dashboards (players + users)
+
+========================================================
+G) COACH DASHBOARD – MUST BE DONE
+========================================================
+[ ] Coach sees stats only for assigned team(s)
+[ ] Coach can post notices (team/all depending on permission)
+[ ] Coach can view player weaknesses from stats
+[ ] Coach can schedule training sessions
+[ ] Coach can chat with players
+[ ] Add graphs: performance trends + attendance trends
+[ ] Add Coach Corner: interactive court with movable buttons (tactics board)
+
+========================================================
+H) ATTENDANCE (TRAINING DAYS WRONG) – MUST BE FIXED EXACTLY
+========================================================
+Correct training day rules (YOU STILL HAVE THIS WRONG):
+[ ] Women training: Monday AND Wednesday (NOT Thursday)
+[ ] Men training: Tuesday AND Thursday
+[ ] Friday: Combined (ALL genders)
+[ ] Players can request excuse/late from dashboard
+[ ] Coach/admin can approve and attendance updates accordingly
+[ ] Once attendance saved: locked; only Super Admin can edit
+
+========================================================
+I) FINANCE – MUST BE DONE
+========================================================
+[ ] Fees:
+    - Membership: N$400 non-working, N$800 working
+    - Development once-off: N$2500
+    - Resource fee annually: N$1500
+    - League affiliation fee per player (admin config; include even if above NVF recommendation)
+[ ] Payments require finance approval before reflecting as paid
+[ ] Expenses per player:
+    - select player, amount, paid by, reason (transport/tracksuit/jersey/shoes/trip etc.)
+[ ] Reminders if unpaid appear on player dashboard + notifications
+[ ] Player value visible to admins:
+    - include club-paid contributions only
+    - EXCLUDE amounts paid by the player themselves
+[ ] Leaving club fee statement includes these calculations
+
+========================================================
+J) EMAIL BUTTON – MUST BE DONE
+========================================================
+[ ] Email sending enabled and working
+[ ] Sender: afrocatvolleyballclub@gmail.com
+[ ] Auto-CC: afrocatladiesvc@gmail.com
+[ ] Add searchable member picker (list + search + filters) to choose recipients and auto-fill saved emails
+
+========================================================
+K) OFFICIALS TAB + TEAM ALLOCATION – MUST BE DONE
+========================================================
+[ ] Create Officials tab for admins
+[ ] Search officials quickly
+[ ] Allocate officials to teams (and pull into match official selection)
+
+========================================================
+L) ROLE SWITCH PERSIST AFTER REFRESH (STILL BROKEN) – MUST BE FIXED
+========================================================
+[ ] Multi-role users must retain selected role after refresh
+[ ] Role switcher must remain visible at all times
+[ ] Persist in localStorage (and optionally DB)
+
+========================================================
+M) GLOBAL SEARCH PLAYER COMPONENT (EVERYWHERE) – MUST BE DONE
+========================================================
+[ ] Wherever players are searchable:
+    - must support scrolling results
+    - search by team
+    - search by gender
+    - alphabetical ordering
+
+========================================================
+N) INTERVIEW VIDEO RECORDING (NOT APPLIED) – MUST BE DONE
+========================================================
+[ ] Add device camera video recording to Interview section
+[ ] Save/upload video and store URL on interview record
+
+========================================================
+FINAL NOTE (REPLIT)
+========================================================
+These items were already requested and agreed as part of the planned build. The fact that they remain missing or incorrectly implemented (e.g., ladies training days still wrong; interview video absent; media uploads not applied; role switching not persistent) is an implementation failure on your side. Please correct ALL checklist items above at no extra cost and confirm each item once completed.
+
+END

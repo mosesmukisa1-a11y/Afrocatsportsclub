@@ -11,6 +11,7 @@ export default function EmailCompose() {
   const [searchQ, setSearchQ] = useState("");
   const [searchRole, setSearchRole] = useState("");
   const [searchTeamId, setSearchTeamId] = useState("");
+  const [searchGender, setSearchGender] = useState("");
   const [showPicker, setShowPicker] = useState(false);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
 
@@ -119,6 +120,12 @@ export default function EmailCompose() {
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
                 </select>
+                <select value={searchGender} onChange={e => setSearchGender(e.target.value)}
+                  className="px-2 py-1.5 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-xs" data-testid="select-member-gender-filter">
+                  <option value="">All Genders</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
               </div>
 
               {members.length > 0 && (
@@ -131,7 +138,7 @@ export default function EmailCompose() {
               )}
 
               <div className="max-h-48 overflow-y-auto space-y-1">
-                {members.map((m: any) => {
+                {[...members].filter((m: any) => !searchGender || (m.gender || "").toLowerCase() === searchGender.toLowerCase()).sort((a: any, b: any) => (a.fullName || "").localeCompare(b.fullName || "")).map((m: any) => {
                   const added = selectedEmails.includes(m.email);
                   return (
                     <button key={m.id} onClick={() => added ? removeEmail(m.email) : addEmail(m.email)}

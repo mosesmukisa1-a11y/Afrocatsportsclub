@@ -100,6 +100,10 @@ export default function Players() {
       const matchesTeam = filterTeam === "ALL" || p.teamId === filterTeam;
       const matchesGender = filterGender === "ALL" || (p.gender || "").toLowerCase() === filterGender.toLowerCase();
       return matchesSearch && matchesTeam && matchesGender;
+    }).sort((a: any, b: any) => {
+      const nameA = `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase();
+      const nameB = `${b.lastName || ""} ${b.firstName || ""}`.toLowerCase();
+      return nameA.localeCompare(nameB);
     });
   }, [players, searchTerm, filterTeam, filterGender]);
 

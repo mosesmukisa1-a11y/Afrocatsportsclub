@@ -172,7 +172,7 @@ export default function TouchStats() {
   const homeSets = matchData?.homeSetsWon || 0;
   const awaySets = matchData?.awaySetsWon || 0;
   const currentSet = matchData?.currentSetNumber || 1;
-  const bestOf = matchData?.bestOf || 3;
+  const bestOf = matchData?.bestOf || 5;
 
   useEffect(() => {
     if (!matchData?.scoringStartedAt) { setElapsedTime(""); return; }
@@ -351,6 +351,20 @@ export default function TouchStats() {
     };
 
     setRecentEvents((prev) => [newEvent, ...prev].slice(0, 30));
+
+    if (selectedAction === "SERVE" && detail.value === "ACE") {
+      try { navigator.vibrate?.([100, 50, 100, 50, 200]); } catch (_) {}
+      toast({
+        title: "🎆 ACE! 🎆",
+        description: `${selectedPlayer?.firstName || ""} ${selectedPlayer?.lastName || ""} served an ace!`,
+      });
+      const scoreboard = document.querySelector('[data-testid="scoreboard-area"]');
+      if (scoreboard) {
+        scoreboard.classList.add("ace-flash");
+        setTimeout(() => scoreboard.classList.remove("ace-flash"), 1200);
+      }
+    }
+
     eventMut.mutate({
       playerId: selectedPlayerId,
       action: selectedAction,
@@ -519,7 +533,7 @@ export default function TouchStats() {
         )}
 
         {selectedMatchId && matchData && (
-          <div className="afrocat-card overflow-hidden" data-testid="scoreboard">
+          <div className="afrocat-card overflow-hidden" data-testid="scoreboard-area">
             <div className="bg-gradient-to-r from-afrocat-bg via-afrocat-card to-afrocat-bg p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-gold">Live Scoreboard</span>

@@ -1314,6 +1314,7 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         scoreSource: "NONE",
         scoreLocked: false,
         statsEntered: false,
+        bestOf: 5,
       };
 
       const match = await storage.createMatch(matchData);
@@ -5050,6 +5051,67 @@ th{background:#0d7377;color:white}
     }
   });
 
+  // ─── FINANCE REMINDER CRON (weekly, Monday 9 AM) ────────────────────
+  cron.schedule("0 9 * * 1", async () => {
+    try {
+      console.log("[CRON] Running weekly finance reminder check...");
+      const allPlayers = await storage.getPlayers();
+      const configs = await storage.getFeeConfigs();
+      const feeMap: Record<string, number> = {};
+      configs.forEach((c: any) => { feeMap[c.key] = parseInt(c.value) || 0; });
+
+      for (const player of allPlayers) {
+        if (player.status !== "ACTIVE") continue;
+        const user = await storage.getUserByPlayerId(player.id);
+        if (!user) continue;
+
+        const payments = await storage.getPlayerPayments(player.id);
+        const membershipFee = (player as any).employmentClass === "WORKING" ? (feeMap.membershipFeeWorking || 800) : (feeMap.membershipFeeNonWorking || 400);
+        const developmentFee = feeMap.developmentFee || 2500;
+        const resourceFee = feeMap.resourceFee || 1500;
+        const leagueFee = feeMap.leagueAffiliationFeePerPlayer || 0;
+
+        const approved = payments.filter((p: any) => p.status === "APPROVED");
+        const paidByType: Record<string, number> = {};
+        approved.forEach((p: any) => { paidByType[p.feeType] = (paidByType[p.feeType] || 0) + p.amount; });
+
+        let totalOutstanding = 0;
+        const feeTypes = [
+          { type: "MEMBERSHIP", due: membershipFee },
+          { type: "DEVELOPMENT", due: developmentFee },
+          { type: "RESOURCE", due: resourceFee },
+          { type: "LEAGUE_AFFILIATION", due: leagueFee },
+        ];
+        for (const ft of feeTypes) {
+          const paid = paidByType[ft.type] || 0;
+          if (paid < ft.due) totalOutstanding += ft.due - paid;
+        }
+
+        if (totalOutstanding <= 0) continue;
+
+        const weekKey = new Date().toISOString().split("T")[0];
+        const existingNotifs = await storage.getNotifications(user.id);
+        const isDuplicate = existingNotifs.some((n: any) => {
+          const meta = n.metadata as any;
+          return n.type === "FINANCE_REMINDER" && meta?.weekKey === weekKey;
+        });
+        if (isDuplicate) continue;
+
+        await storage.createNotification({
+          userId: user.id,
+          playerId: player.id,
+          type: "FINANCE_REMINDER",
+          title: "Outstanding Fees Reminder",
+          message: `You have N$${totalOutstanding.toLocaleString()} in outstanding fees. Please make your payments to stay in good standing.`,
+          metadata: { weekKey, totalOutstanding },
+        });
+        console.log(`[CRON] Finance reminder sent to ${user.email}: N$${totalOutstanding}`);
+      }
+    } catch (err) {
+      console.error("[CRON] Finance reminder error:", err);
+    }
+  });
+
   // ─── MATCH REMINDER CRON (every 15 minutes) ────────────────────
   cron.schedule("*/15 * * * *", async () => {
     try {
@@ -5300,7 +5362,7 @@ th{background:#0d7377;color:white}
           homeSetsWon: (match as any).homeSetsWon || 0,
           awaySetsWon: (match as any).awaySetsWon || 0,
           currentSetNumber: (match as any).currentSetNumber || 1,
-          bestOf: (match as any).bestOf || 3,
+          bestOf: (match as any).bestOf || 5,
           playerOfMatchPlayerId: (match as any).playerOfMatchPlayerId || null,
         },
         teamName: team?.name || "Home",
@@ -5384,6 +5446,21 @@ th{background:#0d7377;color:white}
         createdBy: req.user?.userId || null,
       });
 
+      if (action === "SERVE" && outcomeDetail === "ACE") {
+        try {
+          const acePlayer = await storage.getPlayer(playerId);
+          if (acePlayer?.userId) {
+            await storage.createNotification({
+              userId: acePlayer.userId,
+              type: "MATCH_STAT",
+              title: "🎆 You served an ACE!",
+              message: `Great serve in ${match.opponent ? "vs " + match.opponent : "your match"}! Keep it up!`,
+              metadata: { matchId },
+            });
+          }
+        } catch (_) {}
+      }
+
       let setResult = null;
       if (resolvedPointSide) {
         const isHome = resolvedPointSide === "home";
@@ -5415,7 +5492,7 @@ th{background:#0d7377;color:white}
   async function checkSetEndFIVB(matchId: string) {
     const match = await storage.getMatch(matchId);
     if (!match) return null;
-    const bestOf = (match as any).bestOf || 3;
+    const bestOf = (match as any).bestOf || 5;
     const currentSet = (match as any).currentSetNumber || 1;
     const hp = (match as any).liveHomePoints || 0;
     const ap = (match as any).liveAwayPoints || 0;

@@ -6,8 +6,9 @@ import { useAuth } from "@/lib/auth";
 import { useState, useMemo } from "react";
 import {
   Mic, Plus, Star, Trash2, Edit3, Play, X,
-  User, Tag, ChevronDown, ChevronUp, Search, Video
+  User, Tag, ChevronDown, ChevronUp, Search, Video, Camera
 } from "lucide-react";
+import { VideoRecorder } from "@/components/VideoRecorder";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import logo from "@assets/afrocate_logo_1772226294597.png";
@@ -42,11 +43,34 @@ export default function PlayerInterviews() {
   const [formFeatured, setFormFeatured] = useState(false);
   const [formTags, setFormTags] = useState<string[]>([]);
   const [formQAs, setFormQAs] = useState<{ q: string; a: string }[]>([{ q: "", a: "" }]);
+  const [showRecorder, setShowRecorder] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   const resetForm = () => {
     setFormTitle(""); setFormPlayerId(""); setFormFormat("TEXT");
     setFormVideoUrl(""); setFormFeatured(false); setFormTags([]);
     setFormQAs([{ q: "", a: "" }]); setEditingId(null);
+    setShowRecorder(false); setIsUploading(false);
+  };
+
+  const handleRecordedVideo = async (file: File) => {
+    setShowRecorder(false);
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("files", file);
+      formData.append("category", "interview");
+      const result = await api.uploadMedia(formData);
+      const mediaUrl = result?.item?.url || result?.items?.[0]?.url || (Array.isArray(result) ? result[0]?.url : null);
+      if (mediaUrl) {
+        setFormVideoUrl(mediaUrl);
+        toast({ title: "Video Uploaded", description: "Your recorded video has been uploaded successfully." });
+      }
+    } catch (err: any) {
+      toast({ title: "Upload Failed", description: err.message || "Could not upload recorded video.", variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const openCreate = () => { resetForm(); setShowCreate(true); };
@@ -200,7 +224,11 @@ export default function PlayerInterviews() {
                       <div className="mt-5 space-y-4 border-t border-afrocat-border pt-4">
                         {i.format === "VIDEO" && i.videoUrl && (
                           <div className="rounded-xl overflow-hidden bg-black aspect-video">
-                            <iframe src={i.videoUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                            {i.videoUrl.startsWith("/uploads/") || i.videoUrl.endsWith(".webm") || i.videoUrl.endsWith(".mp4") ? (
+                              <video src={i.videoUrl} controls playsInline className="w-full h-full object-contain" data-testid={`video-playback-${i.id}`} />
+                            ) : (
+                              <iframe src={i.videoUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                            )}
                           </div>
                         )}
                         {i.questions?.map((q: string, idx: number) => (
@@ -353,7 +381,11 @@ export default function PlayerInterviews() {
                   <div className="border-t border-afrocat-border p-5 space-y-5 bg-afrocat-white-3">
                     {i.format === "VIDEO" && i.videoUrl && (
                       <div className="rounded-xl overflow-hidden bg-black aspect-video">
-                        <iframe src={i.videoUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                        {i.videoUrl.startsWith("/uploads/") || i.videoUrl.endsWith(".webm") || i.videoUrl.endsWith(".mp4") ? (
+                          <video src={i.videoUrl} controls playsInline className="w-full h-full object-contain" data-testid={`video-list-playback-${i.id}`} />
+                        ) : (
+                          <iframe src={i.videoUrl} className="w-full h-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                        )}
                       </div>
                     )}
 
@@ -453,16 +485,70 @@ export default function PlayerInterviews() {
                 </div>
 
                 {formFormat === "VIDEO" && (
-                  <div>
-                    <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Video URL (YouTube/Vimeo embed link)</label>
-                    <input
-                      type="url"
-                      value={formVideoUrl}
-                      onChange={(e) => setFormVideoUrl(e.target.value)}
-                      placeholder="https://www.youtube.com/embed/..."
-                      className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text placeholder:text-afrocat-muted focus:outline-none focus:ring-1 focus:ring-afrocat-teal"
-                      data-testid="input-interview-video"
-                    />
+                  <div className="space-y-3">
+                    <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Video Source</label>
+
+                    {!showRecorder && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-[10px] font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Paste Video URL (YouTube/Vimeo embed link)</label>
+                          <input
+                            type="url"
+                            value={formVideoUrl}
+                            onChange={(e) => setFormVideoUrl(e.target.value)}
+                            placeholder="https://www.youtube.com/embed/..."
+                            className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text placeholder:text-afrocat-muted focus:outline-none focus:ring-1 focus:ring-afrocat-teal"
+                            data-testid="input-interview-video"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 h-px bg-afrocat-border" />
+                          <span className="text-[10px] font-bold text-afrocat-muted uppercase">or</span>
+                          <div className="flex-1 h-px bg-afrocat-border" />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowRecorder(true)}
+                          disabled={isUploading}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-afrocat-teal/30 bg-afrocat-teal-soft/30 text-afrocat-teal font-bold text-sm hover:bg-afrocat-teal-soft/50 hover:border-afrocat-teal/50 transition-all cursor-pointer disabled:opacity-50"
+                          data-testid="button-open-video-recorder"
+                        >
+                          <Camera className="w-4 h-4" />
+                          {isUploading ? "Uploading video..." : "Record from Camera"}
+                        </button>
+
+                        {isUploading && (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-afrocat-teal-soft/20 text-afrocat-teal text-xs font-bold">
+                            <div className="w-3 h-3 border-2 border-afrocat-teal border-t-transparent rounded-full animate-spin" />
+                            Uploading recorded video...
+                          </div>
+                        )}
+
+                        {formVideoUrl && (
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border">
+                            <Video className="w-4 h-4 text-afrocat-teal shrink-0" />
+                            <span className="text-xs text-afrocat-text truncate flex-1">{formVideoUrl}</span>
+                            <button
+                              type="button"
+                              onClick={() => setFormVideoUrl("")}
+                              className="p-1 rounded hover:bg-afrocat-white-10 text-afrocat-muted cursor-pointer"
+                              data-testid="button-clear-video-url"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {showRecorder && (
+                      <VideoRecorder
+                        onVideoReady={handleRecordedVideo}
+                        onClose={() => setShowRecorder(false)}
+                      />
+                    )}
                   </div>
                 )}
 

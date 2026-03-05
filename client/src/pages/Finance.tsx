@@ -229,7 +229,7 @@ export default function Finance() {
                   <h3 className="font-display font-bold text-lg text-afrocat-text">Record Payment</h3>
                   <Select value={payForm.playerId} onValueChange={(v) => setPayForm({ ...payForm, playerId: v })}>
                     <SelectTrigger data-testid="select-payment-player"><SelectValue placeholder="Select Player" /></SelectTrigger>
-                    <SelectContent>{players.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}</SelectContent>
+                    <SelectContent>{[...players].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}</SelectContent>
                   </Select>
                   <Select value={payForm.feeType} onValueChange={(v) => setPayForm({ ...payForm, feeType: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -302,7 +302,7 @@ export default function Finance() {
                   <h3 className="font-display font-bold text-lg text-afrocat-text">Log Player Expense</h3>
                   <Select value={expForm.playerId} onValueChange={(v) => setExpForm({ ...expForm, playerId: v })}>
                     <SelectTrigger data-testid="select-expense-player"><SelectValue placeholder="Select Player" /></SelectTrigger>
-                    <SelectContent>{players.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}</SelectContent>
+                    <SelectContent>{[...players].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}</SelectContent>
                   </Select>
                   <Select value={expForm.reason} onValueChange={(v) => setExpForm({ ...expForm, reason: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
@@ -336,7 +336,7 @@ export default function Finance() {
             <div className="afrocat-card p-4">
               <Select value={selectedPlayerId} onValueChange={setSelectedPlayerId}>
                 <SelectTrigger data-testid="select-player-finance"><SelectValue placeholder="Select a player to view finances" /></SelectTrigger>
-                <SelectContent>{players.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName} (#{p.jerseyNo})</SelectItem>)}</SelectContent>
+                <SelectContent>{[...players].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName} (#{p.jerseyNo})</SelectItem>)}</SelectContent>
               </Select>
             </div>
 
