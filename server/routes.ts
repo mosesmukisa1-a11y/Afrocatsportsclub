@@ -979,14 +979,103 @@ export async function registerRoutes(
     try { res.json(await storage.getTeams()); } catch (e) { next(e); }
   });
 
-  app.post("/api/teams", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+  app.post("/api/teams", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
     try {
-      const body = z.object({ name: z.string().min(1), category: z.enum(["MEN","WOMEN","VETERANS","JUNIORS"]), season: z.string() }).parse(req.body);
+      const body = z.object({
+        name: z.string().min(1),
+        category: z.enum(["MEN","WOMEN","VETERANS","JUNIORS"]),
+        season: z.string(),
+        isTournament: z.boolean().optional().default(false),
+        tournamentName: z.string().optional(),
+      }).parse(req.body);
       res.status(201).json(await storage.createTeam(body));
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
     }
+  });
+
+  // ── Tournament Roster ────────────────────────────────────────────────────
+  app.get("/api/tournament-teams/:id/roster", requireAuth, async (req, res, next) => {
+    try {
+      const team = await db.select().from(schema.teams).where(eq(schema.teams.id, req.params.id)).then(r => r[0]);
+      if (!team || !team.isTournament) return res.status(404).json({ message: "Not a tournament team" });
+      const rosters = await db.select().from(schema.tournamentRosters)
+        .where(eq(schema.tournamentRosters.tournamentTeamId, req.params.id));
+      const allPlayers = await db.select().from(schema.players);
+      const allTeams = await db.select().from(schema.teams);
+      const playerMap = Object.fromEntries(allPlayers.map(p => [p.id, p]));
+      const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t.name]));
+      const result = rosters.map(r => {
+        const p = playerMap[r.playerId];
+        return {
+          ...r,
+          player: p ? {
+            id: p.id, firstName: p.firstName, lastName: p.lastName,
+            fullName: `${p.firstName} ${p.lastName}`,
+            position: r.position || p.position,
+            jerseyNo: r.jerseyNo ?? p.jerseyNo,
+            photoUrl: p.photoUrl, gender: p.gender,
+            originalTeamId: p.teamId,
+            originalTeamName: teamMap[p.teamId || ""] || "",
+          } : null,
+          originalTeamName: teamMap[r.originalTeamId || ""] || "",
+        };
+      }).filter(r => r.player).sort((a, b) =>
+        (a.player?.fullName || "").localeCompare(b.player?.fullName || "")
+      );
+      res.json(result);
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/tournament-teams/:id/roster", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const team = await db.select().from(schema.teams).where(eq(schema.teams.id, req.params.id)).then(r => r[0]);
+      if (!team || !team.isTournament) return res.status(404).json({ message: "Not a tournament team" });
+      const { playerId, position, jerseyNo } = req.body;
+      if (!playerId) return res.status(400).json({ message: "playerId required" });
+      // Check for duplicate
+      const existing = await db.select().from(schema.tournamentRosters)
+        .where(and(
+          eq(schema.tournamentRosters.tournamentTeamId, req.params.id),
+          eq(schema.tournamentRosters.playerId, playerId)
+        )).then(r => r[0]);
+      if (existing) return res.status(409).json({ message: "Player already in this tournament team" });
+      const player = await db.select().from(schema.players).where(eq(schema.players.id, playerId)).then(r => r[0]);
+      const [row] = await db.insert(schema.tournamentRosters).values({
+        id: crypto.randomUUID(),
+        tournamentTeamId: req.params.id,
+        playerId,
+        originalTeamId: player?.teamId || null,
+        position: position || player?.position || null,
+        jerseyNo: jerseyNo ?? player?.jerseyNo ?? null,
+      }).returning();
+      res.status(201).json(row);
+    } catch (e) { next(e); }
+  });
+
+  app.delete("/api/tournament-teams/:id/roster/:playerId", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      await db.delete(schema.tournamentRosters).where(and(
+        eq(schema.tournamentRosters.tournamentTeamId, req.params.id),
+        eq(schema.tournamentRosters.playerId, req.params.playerId)
+      ));
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  });
+
+  app.patch("/api/tournament-teams/:id/roster/:playerId", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { position, jerseyNo } = req.body;
+      const updates: any = {};
+      if (position !== undefined) updates.position = position;
+      if (jerseyNo !== undefined) updates.jerseyNo = jerseyNo;
+      await db.update(schema.tournamentRosters).set(updates).where(and(
+        eq(schema.tournamentRosters.tournamentTeamId, req.params.id),
+        eq(schema.tournamentRosters.playerId, req.params.playerId)
+      ));
+      res.json({ ok: true });
+    } catch (e) { next(e); }
   });
 
   app.put("/api/teams/:id", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
@@ -1007,7 +1096,35 @@ export async function registerRoutes(
   });
 
   app.get("/api/players/team/:teamId", requireAuth, async (req, res, next) => {
-    try { res.json(await storage.getPlayersByTeam(req.params.teamId)); } catch (e) { next(e); }
+    try {
+      const team = await db.select().from(schema.teams).where(eq(schema.teams.id, req.params.teamId)).then(r => r[0]);
+      // For tournament teams, return players from the tournamentRosters table
+      if (team?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters)
+          .where(eq(schema.tournamentRosters.tournamentTeamId, req.params.teamId));
+        const allPlayers = await db.select().from(schema.players);
+        const allTeams = await db.select().from(schema.teams);
+        const playerMap = Object.fromEntries(allPlayers.map(p => [p.id, p]));
+        const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t.name]));
+        const result = rosters.map(r => {
+          const p = playerMap[r.playerId];
+          if (!p) return null;
+          return {
+            ...p,
+            // Override position/jersey with tournament-specific values if set
+            position: r.position || p.position,
+            jerseyNo: r.jerseyNo ?? p.jerseyNo,
+            teamId: req.params.teamId,  // so stats link correctly to tournament team
+            originalTeamId: p.teamId,
+            originalTeamName: teamMap[p.teamId || ""] || "",
+          };
+        }).filter(Boolean).sort((a: any, b: any) =>
+          (`${a.firstName} ${a.lastName}`).localeCompare(`${b.firstName} ${b.lastName}`)
+        );
+        return res.json(result);
+      }
+      res.json(await storage.getPlayersByTeam(req.params.teamId));
+    } catch (e) { next(e); }
   });
 
   app.get("/api/players/me", requireAuth, async (req, res, next) => {

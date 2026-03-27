@@ -62,6 +62,18 @@ export const teams = pgTable("teams", {
   name: text("name").notNull(),
   category: teamCategoryEnum("category").notNull(),
   season: text("season").notNull(),
+  isTournament: boolean("is_tournament").notNull().default(false),
+  tournamentName: text("tournament_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const tournamentRosters = pgTable("tournament_rosters", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  tournamentTeamId: varchar("tournament_team_id", { length: 36 }).notNull(),
+  playerId: varchar("player_id", { length: 36 }).notNull(),
+  originalTeamId: varchar("original_team_id", { length: 36 }),
+  position: text("position"),
+  jerseyNo: integer("jersey_no"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

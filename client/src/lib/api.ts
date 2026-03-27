@@ -443,6 +443,14 @@ export const api = {
     return apiFetch<any[]>(`/members/search?${params.toString()}`);
   },
 
+  getTournamentRoster: (teamId: string) => apiFetch<any[]>(`/tournament-teams/${teamId}/roster`),
+  addToTournamentRoster: (teamId: string, data: { playerId: string; position?: string; jerseyNo?: number }) =>
+    apiFetch<any>(`/tournament-teams/${teamId}/roster`, { method: "POST", body: JSON.stringify(data) }),
+  removeFromTournamentRoster: (teamId: string, playerId: string) =>
+    apiFetch<void>(`/tournament-teams/${teamId}/roster/${playerId}`, { method: "DELETE" }),
+  updateTournamentRosterEntry: (teamId: string, playerId: string, data: { position?: string; jerseyNo?: number }) =>
+    apiFetch<any>(`/tournament-teams/${teamId}/roster/${playerId}`, { method: "PATCH", body: JSON.stringify(data) }),
+
   getMemberExtract: (filters: { q?: string; role?: string; teamId?: string; gender?: string; status?: string }) => {
     const params = new URLSearchParams();
     if (filters.q) params.set("q", filters.q);
