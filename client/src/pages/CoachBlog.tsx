@@ -9,7 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   BookOpen, Plus, Pin, Tag, Calendar, User, MessageSquare,
   Send, ArrowLeft, Trash2, Edit, X, Check, Layout as LayoutIcon, Circle, Move, Save,
-  RotateCcw, ChevronRight, Info, Layers, Zap, Shield, Hand, Target, RefreshCw
+  RotateCcw, ChevronRight, Info, Layers, Zap, Shield, Hand, Target, RefreshCw,
+  Maximize2, Minimize2
 } from "lucide-react";
 
 const CATEGORIES = [
@@ -80,87 +81,141 @@ const TACTIC_CATS: TacticCat[] = [
     color:"text-purple-400", accentBg:"bg-purple-500/20 border-purple-400/40",
     tactics:[
       {
-        id:"r1", name:"Rotation 1", badge:"R1",
-        description:"Setter in Zone 1 (back right). Runs to setting zone after the serve.",
-        keyPoints:["S runs from Z1 to setting zone (Z2-3)","OP in front at Z4, ready to terminate","Both MBs can quick-attack at the net","Libero covers Zone 6 in back row"],
+        id:"r1", name:"Rotation 1 — S Serves", badge:"R1",
+        description:"Setter (S) is the server in Zone 1 (back right corner). After serving, S sprints to the setting zone near Zone 2–3.",
+        keyPoints:[
+          "S stands in Z1 (back-right) and serves",
+          "OP is in front-left (Z4) — diagonal partner to S",
+          "MB1 at Z2 (front-right) must overlap with S until serve",
+          "Libero (L) replaces MB2 in Zone 6 for serve-receive",
+          "After serve: S runs immediately to the Z2-3 setting zone",
+        ],
         players:[
-          {id:"OH1",label:"OH1",x:OF,y:YT,color:OHC},{id:"MB1",label:"MB1",x:OF,y:YM,color:MBC},
-          {id:"OP", label:"OP", x:OF,y:YB,color:OPC},{id:"OH2",label:"OH2",x:OB,y:YT,color:OHC},
-          {id:"L",  label:"L",  x:OB,y:YM,color:LC },{id:"S",  label:"S",  x:OB,y:YB,color:SC },
+          {id:"OP", label:"OP", x:Z[4].x, y:Z[4].y, color:OPC},  // Z4 front-left
+          {id:"OH1",label:"OH1",x:Z[3].x, y:Z[3].y, color:OHC},  // Z3 front-center
+          {id:"MB1",label:"MB1",x:Z[2].x, y:Z[2].y, color:MBC},  // Z2 front-right
+          {id:"OH2",label:"OH2",x:Z[5].x, y:Z[5].y, color:OHC},  // Z5 back-left
+          {id:"L",  label:"L",  x:Z[6].x, y:Z[6].y, color:LC  },  // Z6 back-center (L replaces MB2)
+          {id:"S",  label:"S★", x:Z[1].x, y:Z[1].y, color:SC  },  // Z1 back-right SERVES
         ],
         arrows:[
-          {x1:OB,y1:YB,x2:SZ.x,y2:SZ.y,color:SC,label:"S runs"},
-          {x1:SZ.x,y1:SZ.y,x2:OF+8,y2:YT+10,color:SC,dashed:true,label:"set→OH1"},
+          {x1:Z[1].x, y1:Z[1].y, x2:SZ.x, y2:SZ.y, color:SC, label:"S runs to set"},
+          {x1:SZ.x, y1:SZ.y, x2:Z[4].x+6, y2:Z[4].y+12, color:SC, dashed:true, label:"set→OP"},
         ]
       },
       {
-        id:"r2", name:"Rotation 2", badge:"R2",
-        description:"Setter in Zone 2 (front right). Already at the net — stays and sets.",
-        keyPoints:["S stays near Z2, short slide to antenna","OP moves from Z1 to back row attack position","OH1 and OH2 on both wings for width","MB can quick-attack Z3"],
+        id:"r2", name:"Rotation 2 — S at Front-Right", badge:"R2",
+        description:"Setter (S) is already in Zone 2 (front right, near the antenna). MB2 serves from Zone 1.",
+        keyPoints:[
+          "MB2 serves from Z1 (back-right)",
+          "S is in Z2 (front-right) — already at the net, ready to set",
+          "OH1 is in Z4 (front-left) for outside attack",
+          "OP is in Z5 (back-left) — in back row this rotation",
+          "After serve: S makes a small slide rightward to the antenna",
+        ],
         players:[
-          {id:"OH2",label:"OH2",x:OF,y:YT,color:OHC},{id:"OH1",label:"OH1",x:OF,y:YM,color:OHC},
-          {id:"S",  label:"S",  x:OF,y:YB,color:SC },{id:"MB1",label:"MB1",x:OB,y:YT,color:MBC},
-          {id:"L",  label:"L",  x:OB,y:YM,color:LC },{id:"OP", label:"OP", x:OB,y:YB,color:OPC},
+          {id:"OH1",label:"OH1",x:Z[4].x, y:Z[4].y, color:OHC},  // Z4 front-left
+          {id:"MB1",label:"MB1",x:Z[3].x, y:Z[3].y, color:MBC},  // Z3 front-center
+          {id:"S",  label:"S",  x:Z[2].x, y:Z[2].y, color:SC  },  // Z2 front-right (SETS)
+          {id:"OP", label:"OP", x:Z[5].x, y:Z[5].y, color:OPC},  // Z5 back-left
+          {id:"L",  label:"L",  x:Z[6].x, y:Z[6].y, color:LC  },  // Z6 back-center
+          {id:"MB2",label:"MB2★",x:Z[1].x, y:Z[1].y, color:MBC},  // Z1 back-right SERVES
         ],
         arrows:[
-          {x1:OF,y1:YB,x2:OF+8,y2:YB-15,color:SC,label:"S slides"},
-          {x1:OF+8,y1:YB-15,x2:OF+8,y2:YT+8,color:SC,dashed:true,label:"set→OH2"},
+          {x1:Z[2].x, y1:Z[2].y, x2:Z[2].x+10, y2:Z[2].y-12, color:SC, label:"S slides to antenna"},
+          {x1:Z[2].x+10, y1:Z[2].y-12, x2:Z[4].x+6, y2:Z[4].y+10, color:SC, dashed:true, label:"set→OH1"},
         ]
       },
       {
-        id:"r3", name:"Rotation 3", badge:"R3",
-        description:"Setter in Zone 3 (front middle). Slides right toward the antenna.",
-        keyPoints:["S slides from Z3 toward Z2 to set","MB1 is in front and can quick-set","OH2 receives and attacks from Z4","OP is in back row (Z6 area)"],
+        id:"r3", name:"Rotation 3 — S at Front-Center", badge:"R3",
+        description:"Setter (S) is in Zone 3 (front center). OH2 serves from Zone 1. S must slide to Z2 area to set.",
+        keyPoints:[
+          "OH2 serves from Z1 (back-right)",
+          "S starts at Z3 (front-center) then slides to Z2 to set",
+          "MB1 is at Z4 (front-left) — can run a fake quick to distract",
+          "OP is in Z6 (back-center) — back row opposite",
+          "After serve: S slides rightward along the net to the antenna",
+        ],
         players:[
-          {id:"OH2",label:"OH2",x:OF,y:YT,color:OHC},{id:"S",  label:"S",  x:OF,y:YM,color:SC },
-          {id:"MB1",label:"MB1",x:OF,y:YB,color:MBC},{id:"OH1",label:"OH1",x:OB,y:YT,color:OHC},
-          {id:"OP", label:"OP", x:OB,y:YM,color:OPC},{id:"L",  label:"L",  x:OB,y:YB,color:LC },
+          {id:"MB1",label:"MB1",x:Z[4].x, y:Z[4].y, color:MBC},  // Z4 front-left
+          {id:"S",  label:"S",  x:Z[3].x, y:Z[3].y, color:SC  },  // Z3 front-center
+          {id:"MB2",label:"MB2",x:Z[2].x, y:Z[2].y, color:MBC},  // Z2 front-right
+          {id:"OH1",label:"OH1",x:Z[5].x, y:Z[5].y, color:OHC},  // Z5 back-left
+          {id:"OP", label:"OP", x:Z[6].x, y:Z[6].y, color:OPC},  // Z6 back-center
+          {id:"OH2",label:"OH2★",x:Z[1].x, y:Z[1].y, color:OHC},  // Z1 back-right SERVES
         ],
         arrows:[
-          {x1:OF,y1:YM,x2:OF+6,y2:YB-20,color:SC,label:"S slides"},
-          {x1:OF+6,y1:YB-20,x2:OF+6,y2:YT+8,color:SC,dashed:true,label:"set→OH2"},
+          {x1:Z[3].x, y1:Z[3].y, x2:Z[2].x+8, y2:Z[2].y-15, color:SC, label:"S slides to Z2"},
+          {x1:Z[2].x+8, y1:Z[2].y-15, x2:Z[4].x+6, y2:Z[4].y+10, color:SC, dashed:true, label:"set→MB1"},
         ]
       },
       {
-        id:"r4", name:"Rotation 4", badge:"R4",
-        description:"Setter in Zone 4 (front left). Makes a long run to the right antenna.",
-        keyPoints:["S makes long run from Z4 to Z2 area","This is the most challenging setter run","MB2 covers Z3 while S moves","OH1 attacks from Z4 after S vacates"],
+        id:"r4", name:"Rotation 4 — S at Front-Left", badge:"R4",
+        description:"Setter (S) is in Zone 4 (front left). OP serves from Zone 1. S must make the LONGEST run to get to the setting zone.",
+        keyPoints:[
+          "OP serves from Z1 (back-right)",
+          "S starts at Z4 (front-LEFT) — the most difficult setting rotation",
+          "S must run diagonally across the front row to Z2 area",
+          "MB2 at Z3 temporarily fills the middle while S runs",
+          "After serve: S sprints the full width of the net to set from Z2",
+        ],
         players:[
-          {id:"S",  label:"S",  x:OF,y:YT,color:SC },{id:"MB2",label:"MB2",x:OF,y:YM,color:MBC},
-          {id:"OH2",label:"OH2",x:OF,y:YB,color:OHC},{id:"MB1",label:"MB1",x:OB,y:YT,color:MBC},
-          {id:"L",  label:"L",  x:OB,y:YM,color:LC },{id:"OP", label:"OP", x:OB,y:YB,color:OPC},
+          {id:"S",  label:"S",  x:Z[4].x, y:Z[4].y, color:SC  },  // Z4 front-left
+          {id:"MB2",label:"MB2",x:Z[3].x, y:Z[3].y, color:MBC},  // Z3 front-center
+          {id:"OH2",label:"OH2",x:Z[2].x, y:Z[2].y, color:OHC},  // Z2 front-right
+          {id:"MB1",label:"MB1",x:Z[5].x, y:Z[5].y, color:MBC},  // Z5 back-left
+          {id:"OH1",label:"OH1",x:Z[6].x, y:Z[6].y, color:OHC},  // Z6 back-center
+          {id:"OP", label:"OP★", x:Z[1].x, y:Z[1].y, color:OPC},  // Z1 back-right SERVES
         ],
         arrows:[
-          {x1:OF,y1:YT,x2:SZ.x,y2:SZ.y,color:SC,label:"S long run"},
-          {x1:SZ.x,y1:SZ.y,x2:OF+6,y2:YB-10,color:SC,dashed:true,label:"set→OH2"},
+          {x1:Z[4].x, y1:Z[4].y, x2:SZ.x, y2:SZ.y, color:SC, label:"S LONG run"},
+          {x1:SZ.x, y1:SZ.y, x2:Z[4].x+8, y2:Z[4].y+15, color:SC, dashed:true, label:"set→OH"},
         ]
       },
       {
-        id:"r5", name:"Rotation 5", badge:"R5",
-        description:"Setter in Zone 5 (back left). Runs across to the right side to set.",
-        keyPoints:["S runs from Z5 diagonally to setting zone","MB1 must hold position until S passes","OH1 is in front row at Z4","OP in back row attacks from Z1"],
+        id:"r5", name:"Rotation 5 — S at Back-Left", badge:"R5",
+        description:"Setter (S) is in Zone 5 (back left). OH1 serves from Zone 1. S must cross the full court diagonally to set.",
+        keyPoints:[
+          "OH1 serves from Z1 (back-right)",
+          "S starts at Z5 (back-left) — long diagonal run needed",
+          "S must pass behind OH1 (or in front if roles switched) to reach setting zone",
+          "MB2 at Z4 and OH2 at Z3 occupy the front row",
+          "After serve: S sprints diagonally to the Z2 setting zone near the net",
+        ],
         players:[
-          {id:"MB1",label:"MB1",x:OF,y:YT,color:MBC},{id:"MB2",label:"MB2",x:OF,y:YM,color:MBC},
-          {id:"OH1",label:"OH1",x:OF,y:YB,color:OHC},{id:"S",  label:"S",  x:OB,y:YT,color:SC },
-          {id:"L",  label:"L",  x:OB,y:YM,color:LC },{id:"OP", label:"OP", x:OB,y:YB,color:OPC},
+          {id:"MB2",label:"MB2",x:Z[4].x, y:Z[4].y, color:MBC},  // Z4 front-left
+          {id:"OH2",label:"OH2",x:Z[3].x, y:Z[3].y, color:OHC},  // Z3 front-center
+          {id:"OP", label:"OP", x:Z[2].x, y:Z[2].y, color:OPC},  // Z2 front-right
+          {id:"S",  label:"S",  x:Z[5].x, y:Z[5].y, color:SC  },  // Z5 back-left
+          {id:"MB1",label:"MB1",x:Z[6].x, y:Z[6].y, color:MBC},  // Z6 back-center
+          {id:"OH1",label:"OH1★",x:Z[1].x, y:Z[1].y, color:OHC},  // Z1 back-right SERVES
         ],
         arrows:[
-          {x1:OB,y1:YT,x2:SZ.x,y2:SZ.y,color:SC,label:"S diagonal run"},
-          {x1:SZ.x,y1:SZ.y,x2:OF+6,y2:YT+8,color:SC,dashed:true,label:"set→MB"},
+          {x1:Z[5].x, y1:Z[5].y, x2:SZ.x, y2:SZ.y, color:SC, label:"S diagonal sprint"},
+          {x1:SZ.x, y1:SZ.y, x2:Z[4].x+6, y2:Z[4].y+10, color:SC, dashed:true, label:"set→MB2"},
         ]
       },
       {
-        id:"r6", name:"Rotation 6", badge:"R6",
-        description:"Setter in Zone 6 (back middle). Runs to right antenna to set.",
-        keyPoints:["S runs from Z6 to Z2 setting zone","All three MBs/OHs in front row","OP in back right (Z1) — no front row attack","Libero takes Z5 in back row"],
+        id:"r6", name:"Rotation 6 — S at Back-Center", badge:"R6",
+        description:"Setter (S) is in Zone 6 (back center). MB1 serves from Zone 1. S runs straight ahead to the setting zone.",
+        keyPoints:[
+          "MB1 serves from Z1 (back-right)",
+          "S in Z6 (back-center) — runs straight toward Z2-3 to set",
+          "Libero replaces MB1 once MB1 finishes serving (back row sub)",
+          "OH2 and OP are in front row with OH1 at Z2",
+          "After serve: S runs directly forward to the setting position near net",
+        ],
         players:[
-          {id:"MB1",label:"MB1",x:OF,y:YT,color:MBC},{id:"OH1",label:"OH1",x:OF,y:YM,color:OHC},
-          {id:"MB2",label:"MB2",x:OF,y:YB,color:MBC},{id:"OH2",label:"OH2",x:OB,y:YT,color:OHC},
-          {id:"S",  label:"S",  x:OB,y:YM,color:SC },{id:"L",  label:"L",  x:OB,y:YB,color:LC },
+          {id:"OH2",label:"OH2",x:Z[4].x, y:Z[4].y, color:OHC},  // Z4 front-left
+          {id:"OP", label:"OP", x:Z[3].x, y:Z[3].y, color:OPC},  // Z3 front-center
+          {id:"OH1",label:"OH1",x:Z[2].x, y:Z[2].y, color:OHC},  // Z2 front-right
+          {id:"MB2",label:"MB2",x:Z[5].x, y:Z[5].y, color:MBC},  // Z5 back-left
+          {id:"S",  label:"S",  x:Z[6].x, y:Z[6].y, color:SC  },  // Z6 back-center
+          {id:"MB1",label:"MB1★",x:Z[1].x, y:Z[1].y, color:MBC},  // Z1 back-right SERVES
         ],
         arrows:[
-          {x1:OB,y1:YM,x2:SZ.x,y2:SZ.y,color:SC,label:"S runs"},
-          {x1:SZ.x,y1:SZ.y,x2:OF+6,y2:YM-10,color:SC,dashed:true,label:"set→OH1"},
+          {x1:Z[6].x, y1:Z[6].y, x2:SZ.x, y2:SZ.y, color:SC, label:"S runs forward"},
+          {x1:SZ.x, y1:SZ.y, x2:Z[4].x+6, y2:Z[4].y+10, color:SC, dashed:true, label:"set→OH2"},
         ]
       },
     ]
@@ -532,6 +587,22 @@ function TacticBoardSection() {
   const [activeTacticId, setActiveTacticId] = useState<string | null>(null);
   const [liveArrows, setLiveArrows] = useState<LA[]>([]);
   const [livePlayers, setLivePlayers] = useState<LP[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const courtContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      courtContainerRef.current?.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  }
 
   const activeCat = TACTIC_CATS.find(c => c.id === activeCatId) ?? null;
   const activeTactic = activeCat?.tactics.find(t => t.id === activeTacticId) ?? null;
@@ -676,9 +747,30 @@ function TacticBoardSection() {
           {/* Court + info */}
           {activeTactic ? (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              {/* Court SVG */}
-              <div className="lg:col-span-2 rounded-xl overflow-hidden border border-afrocat-border">
+              {/* Court SVG — fullscreen wrapper */}
+              <div
+                ref={courtContainerRef}
+                className={`lg:col-span-2 rounded-xl overflow-hidden border border-afrocat-border relative group ${isFullscreen ? "bg-[#0d1117] flex flex-col justify-center p-4" : ""}`}
+              >
                 <LiveCourtSVG players={livePlayers} arrows={liveArrows} />
+                {/* Fullscreen button overlay */}
+                <button
+                  onClick={toggleFullscreen}
+                  data-testid="button-fullscreen-court"
+                  title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                  className="absolute top-2 right-2 p-2 rounded-lg bg-black/60 text-white opacity-70 hover:opacity-100 transition-opacity cursor-pointer hover:bg-black/80 z-10"
+                >
+                  {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </button>
+                {/* Tactic name in fullscreen */}
+                {isFullscreen && (
+                  <div className="absolute top-4 left-4 flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded-lg text-xs font-black border ${activeCat!.accentBg} ${activeCat!.color}`}>
+                      {activeTactic.badge}
+                    </span>
+                    <span className="text-white text-sm font-bold">{activeTactic.name}</span>
+                  </div>
+                )}
               </div>
 
               {/* Info panel */}
