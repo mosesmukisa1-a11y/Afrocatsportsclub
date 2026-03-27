@@ -41,6 +41,14 @@ const ALL_FIELDS: { key: string; label: string; group: string }[] = [
 
   { key: "emergencyContactName", label: "Emergency Contact Name", group: "Emergency" },
   { key: "emergencyContactPhone", label: "Emergency Contact Phone", group: "Emergency" },
+
+  { key: "membershipNo", label: "Membership Number", group: "Registration" },
+  { key: "maritalStatus", label: "Marital Status", group: "Registration" },
+  { key: "facebookName", label: "Facebook Name", group: "Registration" },
+  { key: "joinedAt", label: "Date Joined", group: "Registration" },
+  { key: "employmentClass", label: "Employment Class", group: "Registration" },
+  { key: "registrationStatus", label: "Registration Status", group: "Registration" },
+  { key: "registrationNotes", label: "Registration Notes", group: "Registration" },
 ];
 
 const GROUPS = [...new Set(ALL_FIELDS.map(f => f.group))];

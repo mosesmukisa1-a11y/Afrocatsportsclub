@@ -6938,12 +6938,12 @@ th{background:#0d7377;color:white}
       const allPlayers = await db.select().from(schema.players);
       const allTeams = await db.select().from(schema.teams);
       const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t.name]));
-      const playerByUser = Object.fromEntries(allPlayers.map(p => [p.userId, p]));
+      // Link: users.playerId → players.id  (players table has NO userId field)
+      const playerById = Object.fromEntries(allPlayers.map(p => [p.id, p]));
 
       let results = allUsers
-        .filter(u => u.accountStatus === "APPROVED" || !statusFilter || u.accountStatus === statusFilter)
         .map(u => {
-          const p = playerByUser[u.id];
+          const p = u.playerId ? playerById[u.playerId] : null;
           return {
             id: u.id,
             fullName: u.fullName || "",
@@ -6951,6 +6951,7 @@ th{background:#0d7377;color:white}
             role: u.role || "",
             accountStatus: u.accountStatus || "",
             createdAt: u.createdAt,
+            // Player profile fields
             teamId: p?.teamId || "",
             teamName: p ? teamMap[p.teamId || ""] || "" : "",
             gender: p?.gender || "",
@@ -6968,15 +6969,27 @@ th{background:#0d7377;color:white}
             bloodGroup: p?.bloodGroup || "",
             allergies: p?.allergies || "",
             medicalNotes: p?.medicalNotes || "",
+            // Next of kin
             nextOfKinName: p?.nextOfKinName || "",
             nextOfKinRelation: p?.nextOfKinRelation || "",
             nextOfKinPhone: p?.nextOfKinPhone || "",
             nextOfKinAddress: p?.nextOfKinAddress || "",
+            // Emergency contact
             emergencyContactName: p?.emergencyContactName || "",
             emergencyContactPhone: p?.emergencyContactPhone || "",
+            // Player status fields
             playerStatus: p?.status || "",
             eligibilityStatus: p?.eligibilityStatus || "",
             photoUrl: p?.photoUrl || "",
+            // Registration form extra fields
+            membershipNo: p?.membershipNo || "",
+            maritalStatus: p?.maritalStatus || "",
+            facebookName: p?.facebookName || "",
+            joinedAt: p?.joinedAt || "",
+            employmentClass: p?.employmentClass || "",
+            registrationStatus: p?.registrationStatus || "",
+            registrationNotes: p?.registrationNotes || "",
+            memberCategory: (p as any)?.memberCategory || "",
           };
         });
 
