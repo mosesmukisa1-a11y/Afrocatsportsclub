@@ -5370,7 +5370,20 @@ th{background:#0d7377;color:white}
       const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ ok: false, message: "Match not found" });
 
-      const players = await storage.getPlayersByTeam(teamId);
+      const devInitTeam = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).then(r => r[0]);
+      let players: any[];
+      if (devInitTeam?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters).where(eq(schema.tournamentRosters.tournamentTeamId, teamId));
+        const allPs = await db.select().from(schema.players);
+        const playerMap = Object.fromEntries(allPs.map(p => [p.id, p]));
+        players = rosters.map(r => {
+          const p = playerMap[r.playerId];
+          if (!p) return null;
+          return { ...p, position: r.position || p.position, jerseyNo: r.jerseyNo ?? p.jerseyNo };
+        }).filter(Boolean) as any[];
+      } else {
+        players = await storage.getPlayersByTeam(teamId);
+      }
       const events = await storage.getMatchEvents(matchId);
       const teamEvents = events.filter((e: any) => e.teamId === teamId);
 
@@ -5461,7 +5474,20 @@ th{background:#0d7377;color:white}
       const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ ok: false, message: "Match not found" });
 
-      const rosterPlayers = await storage.getPlayersByTeam(teamId);
+      const devReportTeam = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).then(r => r[0]);
+      let rosterPlayers: any[];
+      if (devReportTeam?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters).where(eq(schema.tournamentRosters.tournamentTeamId, teamId));
+        const allPs = await db.select().from(schema.players);
+        const playerMap = Object.fromEntries(allPs.map(p => [p.id, p]));
+        rosterPlayers = rosters.map(r => {
+          const p = playerMap[r.playerId];
+          if (!p) return null;
+          return { ...p, position: r.position || p.position, jerseyNo: r.jerseyNo ?? p.jerseyNo };
+        }).filter(Boolean) as any[];
+      } else {
+        rosterPlayers = await storage.getPlayersByTeam(teamId);
+      }
       const allEvents = await storage.getMatchEvents(matchId);
       const events = allEvents.filter((e: any) => e.teamId === teamId);
 
@@ -5479,7 +5505,20 @@ th{background:#0d7377;color:white}
       const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ ok: false, message: "Match not found" });
 
-      const rosterPlayers = await storage.getPlayersByTeam(teamId);
+      const coachDashTeam = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).then(r => r[0]);
+      let rosterPlayers: any[];
+      if (coachDashTeam?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters).where(eq(schema.tournamentRosters.tournamentTeamId, teamId));
+        const allPs = await db.select().from(schema.players);
+        const playerMap = Object.fromEntries(allPs.map(p => [p.id, p]));
+        rosterPlayers = rosters.map(r => {
+          const p = playerMap[r.playerId];
+          if (!p) return null;
+          return { ...p, position: r.position || p.position, jerseyNo: r.jerseyNo ?? p.jerseyNo };
+        }).filter(Boolean) as any[];
+      } else {
+        rosterPlayers = await storage.getPlayersByTeam(teamId);
+      }
       const allEvents = await storage.getMatchEvents(matchId);
       const events = allEvents.filter((e: any) => e.teamId === teamId);
 
@@ -5506,7 +5545,20 @@ th{background:#0d7377;color:white}
       const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ error: "Match not found" });
 
-      const players = await storage.getPlayersByTeam(teamId);
+      const touchTeam = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).then(r => r[0]);
+      let players: any[];
+      if (touchTeam?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters).where(eq(schema.tournamentRosters.tournamentTeamId, teamId));
+        const allPs = await db.select().from(schema.players);
+        const playerMap = Object.fromEntries(allPs.map(p => [p.id, p]));
+        players = rosters.map(r => {
+          const p = playerMap[r.playerId];
+          if (!p) return null;
+          return { ...p, position: r.position || p.position, jerseyNo: r.jerseyNo ?? p.jerseyNo };
+        }).filter(Boolean) as any[];
+      } else {
+        players = await storage.getPlayersByTeam(teamId);
+      }
       const events = await storage.getMatchEvents(matchId);
 
       const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
@@ -5584,8 +5636,17 @@ th{background:#0d7377;color:white}
       const isLocked = !!(match.statsEntered || match.scoreLocked || match.scoreSource === "STATS");
       if (isLocked) return res.status(403).json({ error: "Stats locked: match already submitted" });
 
-      const players = await storage.getPlayersByTeam(teamId);
-      const playerBelongs = players.some((p: any) => p.id === playerId);
+      const eventTeam = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).then(r => r[0]);
+      let eventPlayers: any[];
+      if (eventTeam?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters).where(eq(schema.tournamentRosters.tournamentTeamId, teamId));
+        const allPs = await db.select().from(schema.players);
+        const playerMap = Object.fromEntries(allPs.map(p => [p.id, p]));
+        eventPlayers = rosters.map(r => playerMap[r.playerId]).filter(Boolean) as any[];
+      } else {
+        eventPlayers = await storage.getPlayersByTeam(teamId);
+      }
+      const playerBelongs = eventPlayers.some((p: any) => p.id === playerId);
       if (!playerBelongs) {
         return res.status(400).json({ error: "Player does not belong to this team" });
       }
