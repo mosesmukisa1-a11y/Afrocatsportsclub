@@ -53,6 +53,7 @@ export default function Teams() {
   const [rosterSearch, setRosterSearch] = useState("");
   const [rosterGender, setRosterGender] = useState("");
   const [rosterPosition, setRosterPosition] = useState("");
+  const [jerseyEdits, setJerseyEdits] = useState<Record<string, string>>({});
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
 
   const toggleExpand = (id: string) => {
@@ -105,6 +106,22 @@ export default function Teams() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/tournament-teams", rosterTeam?.id, "roster"] }); toast({ title: "Player removed" }); },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
+
+  const updateRosterMut = useMutation({
+    mutationFn: ({ playerId, jerseyNo }: { playerId: string; jerseyNo: number }) =>
+      api.updateTournamentRosterEntry(rosterTeam!.id, playerId, { jerseyNo }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["/api/tournament-teams", rosterTeam?.id, "roster"] });
+      setJerseyEdits(prev => { const next = { ...prev }; delete next[vars.playerId]; return next; });
+      toast({ title: "Jersey number updated" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const saveJersey = (playerId: string, current: string) => {
+    const num = parseInt(current, 10);
+    if (!isNaN(num) && num >= 0) updateRosterMut.mutate({ playerId, jerseyNo: num });
+  };
 
   // ── Derived data ───────────────────────────────────────
   const regularTeams = (teams as any[]).filter((t: any) => !t.isTournament);
@@ -381,27 +398,47 @@ export default function Teams() {
                   <p className="text-xs text-afrocat-muted italic px-3 py-4 text-center border border-dashed border-afrocat-border rounded-lg">No players added yet</p>
                 ) : (
                   <div className="space-y-1 max-h-52 overflow-y-auto">
-                    {(roster as any[]).map((r: any) => (
-                      <div key={r.playerId} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-afrocat-white-5" data-testid={`roster-row-${r.playerId}`}>
-                        <div className="w-7 h-7 rounded-full bg-afrocat-gold-soft flex items-center justify-center text-xs font-bold text-afrocat-gold shrink-0">
-                          {r.player?.jerseyNo ?? "—"}
+                    {(roster as any[]).map((r: any) => {
+                      const pendingJersey = jerseyEdits[r.playerId];
+                      const displayJersey = pendingJersey !== undefined ? pendingJersey : String(r.jerseyNo ?? r.player?.jerseyNo ?? "");
+                      return (
+                        <div key={r.playerId} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-afrocat-white-5" data-testid={`roster-row-${r.playerId}`}>
+                          {canCreateTournament ? (
+                            <div className="relative shrink-0" title="Edit jersey number">
+                              <input
+                                type="number"
+                                min={0}
+                                max={99}
+                                value={displayJersey}
+                                onChange={e => setJerseyEdits(prev => ({ ...prev, [r.playerId]: e.target.value }))}
+                                onBlur={() => { if (pendingJersey !== undefined) saveJersey(r.playerId, pendingJersey); }}
+                                onKeyDown={e => { if (e.key === "Enter") { (e.target as HTMLInputElement).blur(); } }}
+                                className="w-10 h-8 rounded-lg bg-afrocat-gold-soft border border-afrocat-gold/40 text-afrocat-gold text-xs font-bold text-center focus:outline-none focus:border-afrocat-gold appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                data-testid={`input-jersey-${r.playerId}`}
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-afrocat-gold-soft flex items-center justify-center text-xs font-bold text-afrocat-gold shrink-0">
+                              {r.jerseyNo ?? r.player?.jerseyNo ?? "—"}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-afrocat-text truncate">{r.player?.fullName}</p>
+                            <p className="text-[10px] text-afrocat-muted">
+                              {r.position || r.player?.position || "—"}
+                              {r.originalTeamName && <span className="ml-1 text-afrocat-teal">· {r.originalTeamName}</span>}
+                            </p>
+                          </div>
+                          {canCreateTournament && (
+                            <button onClick={() => removePlayerMut.mutate(r.playerId)}
+                              className="p-1 rounded hover:bg-red-500/10 text-afrocat-muted hover:text-red-400 cursor-pointer transition-colors"
+                              data-testid={`button-remove-roster-${r.playerId}`}>
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-afrocat-text truncate">{r.player?.fullName}</p>
-                          <p className="text-[10px] text-afrocat-muted">
-                            {r.player?.position || "—"}
-                            {r.originalTeamName && <span className="ml-1 text-afrocat-teal">· {r.originalTeamName}</span>}
-                          </p>
-                        </div>
-                        {canCreateTournament && (
-                          <button onClick={() => removePlayerMut.mutate(r.playerId)}
-                            className="p-1 rounded hover:bg-red-500/10 text-afrocat-muted hover:text-red-400 cursor-pointer transition-colors"
-                            data-testid={`button-remove-roster-${r.playerId}`}>
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
