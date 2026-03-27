@@ -6926,6 +6926,73 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  app.get("/api/admin/member-extract", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const q = ((req.query.q as string) || "").toLowerCase();
+      const roleFilter = req.query.role as string;
+      const teamFilter = req.query.teamId as string;
+      const genderFilter = req.query.gender as string;
+      const statusFilter = req.query.status as string;
+
+      const allUsers = await db.select().from(schema.users);
+      const allPlayers = await db.select().from(schema.players);
+      const allTeams = await db.select().from(schema.teams);
+      const teamMap = Object.fromEntries(allTeams.map(t => [t.id, t.name]));
+      const playerByUser = Object.fromEntries(allPlayers.map(p => [p.userId, p]));
+
+      let results = allUsers
+        .filter(u => u.accountStatus === "APPROVED" || !statusFilter || u.accountStatus === statusFilter)
+        .map(u => {
+          const p = playerByUser[u.id];
+          return {
+            id: u.id,
+            fullName: u.fullName || "",
+            email: u.email || "",
+            role: u.role || "",
+            accountStatus: u.accountStatus || "",
+            createdAt: u.createdAt,
+            teamId: p?.teamId || "",
+            teamName: p ? teamMap[p.teamId || ""] || "" : "",
+            gender: p?.gender || "",
+            dob: p?.dob || "",
+            phone: p?.phone || "",
+            position: p?.position || "",
+            jerseyNo: p?.jerseyNo ?? null,
+            heightCm: p?.heightCm ?? null,
+            weightKg: p?.weightKg ?? null,
+            homeAddress: p?.homeAddress || "",
+            town: p?.town || "",
+            region: p?.region || "",
+            nationality: p?.nationality || "",
+            idNumber: p?.idNumber || "",
+            bloodGroup: p?.bloodGroup || "",
+            allergies: p?.allergies || "",
+            medicalNotes: p?.medicalNotes || "",
+            nextOfKinName: p?.nextOfKinName || "",
+            nextOfKinRelation: p?.nextOfKinRelation || "",
+            nextOfKinPhone: p?.nextOfKinPhone || "",
+            nextOfKinAddress: p?.nextOfKinAddress || "",
+            emergencyContactName: p?.emergencyContactName || "",
+            emergencyContactPhone: p?.emergencyContactPhone || "",
+            playerStatus: p?.status || "",
+            eligibilityStatus: p?.eligibilityStatus || "",
+            photoUrl: p?.photoUrl || "",
+          };
+        });
+
+      if (q) results = results.filter(r =>
+        r.fullName.toLowerCase().includes(q) || r.email.toLowerCase().includes(q) ||
+        r.teamName.toLowerCase().includes(q) || (r.idNumber || "").toLowerCase().includes(q));
+      if (roleFilter) results = results.filter(r => r.role === roleFilter);
+      if (teamFilter) results = results.filter(r => r.teamId === teamFilter);
+      if (genderFilter) results = results.filter(r => r.gender?.toLowerCase() === genderFilter.toLowerCase());
+      if (statusFilter) results = results.filter(r => r.accountStatus === statusFilter);
+
+      results.sort((a, b) => a.fullName.localeCompare(b.fullName));
+      res.json(results);
+    } catch (e) { next(e); }
+  });
+
   app.get("/api/officials", requireAuth, requireRole(["ADMIN","MANAGER"]), async (_req, res, next) => {
     try {
       const users = await db.select().from(schema.users);

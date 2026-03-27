@@ -6,7 +6,7 @@ import {
   LogOut, ShieldAlert, Award, Menu, X, Star,
   ScrollText, FolderOpen, UserCircle, UserCheck,
   BarChart3, MessageCircle, Gamepad2, FileSpreadsheet,
-  Microscope, Gauge, ChevronDown, RefreshCw, Megaphone, Mail, BookOpen, Image, Mic, Wrench
+  Microscope, Gauge, ChevronDown, RefreshCw, Megaphone, Mail, BookOpen, Image, Mic, Wrench, FileDown
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { MobileNav } from "./MobileNav";
@@ -44,6 +44,7 @@ const allNavItems = [
   { icon: FileSpreadsheet, label: "Report Builder", href: "/report-templates", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","FINANCE"] },
   { icon: UserCircle, label: "My Profile", href: "/profile-setup", roles: ["PLAYER"] },
   { icon: UserCheck, label: "Registrations", href: "/admin/registrations", roles: ["ADMIN","MANAGER"] },
+  { icon: FileDown, label: "Member Extract", href: "/admin/member-extract", roles: ["ADMIN","MANAGER"] },
   { icon: ShieldAlert, label: "User Management", href: "/admin/users", roles: ["ADMIN"] },
   { icon: Wrench, label: "System Check", href: "/admin/system-check", roles: ["ADMIN"] },
 ];

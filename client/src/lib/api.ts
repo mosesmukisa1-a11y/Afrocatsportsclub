@@ -443,6 +443,16 @@ export const api = {
     return apiFetch<any[]>(`/members/search?${params.toString()}`);
   },
 
+  getMemberExtract: (filters: { q?: string; role?: string; teamId?: string; gender?: string; status?: string }) => {
+    const params = new URLSearchParams();
+    if (filters.q) params.set("q", filters.q);
+    if (filters.role) params.set("role", filters.role);
+    if (filters.teamId) params.set("teamId", filters.teamId);
+    if (filters.gender) params.set("gender", filters.gender);
+    if (filters.status) params.set("status", filters.status);
+    return apiFetch<any[]>(`/admin/member-extract?${params.toString()}`);
+  },
+
   getOfficials: () => apiFetch<any[]>("/officials"),
   assignOfficial: (data: { officialUserId: string; teamId: string; officialRole: string }) =>
     apiFetch<any>("/officials/assign", { method: "POST", body: JSON.stringify(data) }),

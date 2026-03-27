@@ -48,6 +48,7 @@ import Media from "@/pages/Media";
 import PlayerInterviews from "@/pages/PlayerInterviews";
 import Officials from "@/pages/Officials";
 import SystemCheck from "@/pages/SystemCheck";
+import MemberExtract from "@/pages/MemberExtract";
 
 function ProtectedRoute({ component: Component, allowMustChange }: { component: React.ComponentType; allowMustChange?: boolean }) {
   const { user, loading } = useAuth();
@@ -101,6 +102,7 @@ function Router() {
       <Route path="/interviews">{() => <ProtectedRoute component={PlayerInterviews} />}</Route>
       <Route path="/officials">{() => <ProtectedRoute component={Officials} />}</Route>
       <Route path="/admin/system-check">{() => <ProtectedRoute component={SystemCheck} />}</Route>
+      <Route path="/admin/member-extract">{() => <ProtectedRoute component={MemberExtract} />}</Route>
       <Route component={NotFound} />
     </Switch>
   );
