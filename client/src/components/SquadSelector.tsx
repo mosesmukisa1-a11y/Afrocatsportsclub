@@ -105,8 +105,7 @@ export function SquadSelector({ matchId, teamId, onClose }: SquadSelectorProps) 
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const togglePlayer = (playerId: string, eligible: boolean) => {
-    if (!eligible) return;
+  const togglePlayer = (playerId: string, _eligible?: boolean) => {
     setSelectedIds(prev => {
       if (prev.includes(playerId)) return prev.filter(id => id !== playerId);
       if (prev.length >= MAX_SQUAD) {
@@ -165,7 +164,7 @@ export function SquadSelector({ matchId, teamId, onClose }: SquadSelectorProps) 
       {playersWithMissing.length > 0 && (
         <div className="bg-amber-500/10 text-amber-400 p-3 rounded-lg flex items-center gap-2 text-sm" data-testid="warning-missing-fields">
           <AlertTriangle className="h-4 w-4" />
-          {playersWithMissing.length} selected player(s) have missing required fields (name, DOB, nationality, jersey, or position). Assign a match position or update player profile to proceed.
+          {playersWithMissing.length} selected player(s) have incomplete profiles. You can still save — assign match positions where needed.
         </div>
       )}
 
@@ -196,19 +195,26 @@ export function SquadSelector({ matchId, teamId, onClose }: SquadSelectorProps) 
                     <p className="text-xs text-muted-foreground">{player.position || "No position"}</p>
                   </div>
                 </div>
-                {player.contractWarning && (
+                {player.ineligibilityReasons?.length > 0 && (
+                  <Badge variant="outline" className="text-amber-500 border-amber-400 shrink-0 text-xs" data-testid={`badge-warning-${player.id}`}>
+                    <AlertTriangle className="h-3 w-3 mr-1" /> {player.ineligibilityReasons[0]}
+                  </Badge>
+                )}
+                {player.contractWarning && !player.ineligibilityReasons?.length && (
                   <Badge variant="outline" className="text-amber-500 border-amber-300 shrink-0 text-xs" data-testid={`badge-contract-warning-${player.id}`}>
                     No contract
                   </Badge>
                 )}
                 {player.missingFields?.length > 0 && (
                   <Badge variant="outline" className="text-orange-500 border-orange-300 shrink-0 text-xs" data-testid={`badge-missing-${player.id}`}>
-                    Missing: {player.missingFields.join(", ")}
+                    Incomplete
                   </Badge>
                 )}
-                <Badge variant="outline" className="text-green-600 border-green-200 shrink-0">
-                  <CheckCircle2 className="h-3 w-3 mr-1" /> Eligible
-                </Badge>
+                {!player.ineligibilityReasons?.length && !player.missingFields?.length && (
+                  <Badge variant="outline" className="text-green-600 border-green-200 shrink-0">
+                    <CheckCircle2 className="h-3 w-3 mr-1" /> OK
+                  </Badge>
+                )}
               </div>
 
               {isSelected && (
@@ -289,7 +295,7 @@ export function SquadSelector({ matchId, teamId, onClose }: SquadSelectorProps) 
       <div className="flex gap-2 pt-2 border-t flex-wrap">
         <Button
           onClick={() => saveMut.mutate()}
-          disabled={selectedIds.length === 0 || selectedIds.length > MAX_SQUAD || saveMut.isPending || (selectedIds.length >= 14 && liberoCount < 2) || hasMissingFields}
+          disabled={selectedIds.length === 0 || selectedIds.length > MAX_SQUAD || saveMut.isPending || (selectedIds.length >= 14 && liberoCount < 2)}
           className="flex-1"
           data-testid="button-save-squad"
         >

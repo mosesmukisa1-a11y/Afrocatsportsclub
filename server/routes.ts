@@ -2978,13 +2978,25 @@ th{background:#0d7377;color:white}
         if (!isAssigned) return res.status(403).json({ message: "You are not assigned to this team" });
       }
 
-      let playerList;
-      if (body.selectedPlayerIds && body.selectedPlayerIds.length > 0) {
-        const allPlayers = await storage.getPlayersByTeam(body.teamId);
-        playerList = allPlayers.filter(p => body.selectedPlayerIds!.includes(p.id));
+      const o2bisTeam = await db.select().from(schema.teams).where(eq(schema.teams.id, body.teamId)).then(r => r[0]);
+      let allTeamPlayers: any[];
+      if (o2bisTeam?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters).where(eq(schema.tournamentRosters.tournamentTeamId, body.teamId));
+        const allPs = await db.select().from(schema.players);
+        const playerMap = Object.fromEntries(allPs.map(p => [p.id, p]));
+        allTeamPlayers = rosters.map(r => {
+          const p = playerMap[r.playerId];
+          if (!p) return null;
+          return { ...p, position: r.position || p.position, jerseyNo: r.jerseyNo ?? p.jerseyNo };
+        }).filter(Boolean) as any[];
       } else {
-        const allPlayers = await storage.getPlayersByTeam(body.teamId);
-        playerList = allPlayers.filter(p => p.status === "ACTIVE");
+        allTeamPlayers = await storage.getPlayersByTeam(body.teamId);
+      }
+      let playerList: any[];
+      if (body.selectedPlayerIds && body.selectedPlayerIds.length > 0) {
+        playerList = allTeamPlayers.filter((p: any) => body.selectedPlayerIds!.includes(p.id));
+      } else {
+        playerList = allTeamPlayers;
       }
 
       const captainIds = await getCaptainPlayerIds();
@@ -3387,17 +3399,31 @@ th{background:#0d7377;color:white}
   // ─── STARTING 12 SQUAD SELECTOR ──────────────
   app.get("/api/squad/eligibility/:teamId", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
-      const players = await storage.getPlayersByTeam(req.params.teamId);
+      const team = await db.select().from(schema.teams).where(eq(schema.teams.id, req.params.teamId)).then(r => r[0]);
+      let players: any[];
+      if (team?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters).where(eq(schema.tournamentRosters.tournamentTeamId, req.params.teamId));
+        const allPs = await db.select().from(schema.players);
+        const playerMap = Object.fromEntries(allPs.map(p => [p.id, p]));
+        players = rosters.map(r => {
+          const p = playerMap[r.playerId];
+          if (!p) return null;
+          return { ...p, position: r.position || p.position, jerseyNo: r.jerseyNo ?? p.jerseyNo, teamId: req.params.teamId };
+        }).filter(Boolean) as any[];
+      } else {
+        players = await storage.getPlayersByTeam(req.params.teamId);
+      }
+
       const injuries = await storage.getInjuries();
       const contracts = await storage.getAllContracts();
 
-      const enriched = players.map(p => {
-        const reasons: string[] = [];
-        if (p.status !== "ACTIVE") reasons.push(`Status: ${p.status}`);
-        if (p.eligibilityStatus === "NOT_ELIGIBLE") reasons.push(p.eligibilityNotes || "Marked ineligible");
-        const openInjury = injuries.find(i => i.playerId === p.id && i.status === "OPEN");
-        if (openInjury) reasons.push(`Injury: ${openInjury.injuryType}`);
-        const activeContract = contracts.find(c => c.playerId === p.id && c.status === "ACTIVE");
+      const enriched = players.map((p: any) => {
+        const warnings: string[] = [];
+        if (p.status && p.status !== "ACTIVE") warnings.push(`Status: ${p.status}`);
+        if (p.eligibilityStatus === "NOT_ELIGIBLE") warnings.push(p.eligibilityNotes || "Marked ineligible");
+        const openInjury = injuries.find((i: any) => i.playerId === p.id && i.status === "OPEN");
+        if (openInjury) warnings.push(`Injury: ${openInjury.injuryType}`);
+        const activeContract = contracts.find((c: any) => c.playerId === p.id && c.status === "ACTIVE");
         const contractWarning = !activeContract;
         const missingFields: string[] = [];
         if (!p.firstName) missingFields.push("firstName");
@@ -3408,8 +3434,9 @@ th{background:#0d7377;color:white}
         if (!p.position) missingFields.push("position");
         return {
           ...p,
-          eligible: reasons.length === 0,
-          ineligibilityReasons: reasons,
+          eligible: true,
+          ineligibilityReasons: warnings,
+          hasWarnings: warnings.length > 0,
           contractWarning,
           missingFields,
         };
@@ -3457,38 +3484,24 @@ th{background:#0d7377;color:white}
         }
       }
 
-      const teamPlayers = await storage.getPlayersByTeam(body.teamId);
-      const teamPlayerIds = new Set(teamPlayers.map(p => p.id));
+      const squadTeam = await db.select().from(schema.teams).where(eq(schema.teams.id, body.teamId)).then(r => r[0]);
+      let teamPlayers: any[];
+      if (squadTeam?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters).where(eq(schema.tournamentRosters.tournamentTeamId, body.teamId));
+        const allPs = await db.select().from(schema.players);
+        const playerMap = Object.fromEntries(allPs.map(p => [p.id, p]));
+        teamPlayers = rosters.map(r => {
+          const p = playerMap[r.playerId];
+          if (!p) return null;
+          return { ...p, position: r.position || p.position, jerseyNo: r.jerseyNo ?? p.jerseyNo, teamId: body.teamId };
+        }).filter(Boolean) as any[];
+      } else {
+        teamPlayers = await storage.getPlayersByTeam(body.teamId);
+      }
+      const teamPlayerIds = new Set(teamPlayers.map((p: any) => p.id));
       const invalidIds = body.playerIds.filter(id => !teamPlayerIds.has(id));
       if (invalidIds.length > 0) {
         return res.status(400).json({ message: "Some players do not belong to this team" });
-      }
-
-      const injuries = await storage.getInjuries();
-      const ineligible = body.playerIds.filter(pid => {
-        const p = teamPlayers.find(tp => tp.id === pid)!;
-        if (p.status !== "ACTIVE") return true;
-        if (p.eligibilityStatus === "NOT_ELIGIBLE") return true;
-        if (injuries.some(i => i.playerId === pid && i.status === "OPEN")) return true;
-        return false;
-      });
-      if (ineligible.length > 0) {
-        return res.status(400).json({ message: "Some selected players are not eligible" });
-      }
-
-      const missingFieldPlayers = body.playerIds.filter(pid => {
-        const p = teamPlayers.find(tp => tp.id === pid)!;
-        const d = details[pid] || {};
-        if (!p.firstName || !p.lastName || !p.dob || !p.nationality || !p.jerseyNo) return true;
-        if (!d.matchPosition && !p.position) return true;
-        return false;
-      });
-      if (missingFieldPlayers.length > 0) {
-        const names = missingFieldPlayers.map(pid => {
-          const p = teamPlayers.find(tp => tp.id === pid);
-          return p ? `${p.lastName} ${p.firstName}` : pid;
-        });
-        return res.status(400).json({ message: `Players with missing required fields (name, DOB, nationality, jersey, position): ${names.join(", ")}` });
       }
 
       const existing = await storage.getMatchSquad(body.matchId, body.teamId);

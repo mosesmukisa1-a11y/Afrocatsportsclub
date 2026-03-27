@@ -65,9 +65,13 @@ export async function generateO2BISPdf(storage: IStorage, options: O2BISOptions)
   const squad = await storage.getMatchSquad(matchId, teamId);
   if (squad) {
     const entries = await storage.getMatchSquadEntries(squad.id);
-    const allPlayers = await storage.getPlayersByTeam(teamId);
+    let allPlayers = await storage.getPlayersByTeam(teamId);
+    if (allPlayers.length === 0) {
+      const allPs = await db.select().from(schema.players);
+      allPlayers = allPs.filter((p: any) => entries.some((e: any) => e.playerId === p.id)) as any;
+    }
     players = entries.map((e: any) => {
-      const p = allPlayers.find(pl => pl.id === e.playerId);
+      const p = allPlayers.find((pl: any) => pl.id === e.playerId);
       return p ? {
         jerseyNo: e.jerseyNo ?? p.jerseyNo ?? "",
         name: `${(p.lastName || "").toUpperCase()} ${p.firstName || ""}`.trim(),
