@@ -3576,8 +3576,7 @@ th{background:#0d7377;color:white}
           }
         }
 
-        const allUsers = await storage.getUsers();
-        const admins = allUsers.filter((u: any) => u.role === "ADMIN" || (u.roles && u.roles.includes("ADMIN")));
+        const admins = await storage.getUsersByRole("ADMIN");
         for (const admin of admins) {
           if (admin.id === req.user!.userId) continue;
           try {

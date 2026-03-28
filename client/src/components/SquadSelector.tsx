@@ -43,6 +43,8 @@ export function SquadSelector({ matchId, teamId, onClose }: SquadSelectorProps) 
     queryFn: () => api.getMatchSquad(matchId, teamId),
   });
 
+  const [autoSelected, setAutoSelected] = useState(false);
+
   useEffect(() => {
     if (existingSquad?.entries?.length) {
       const ids = existingSquad.entries.map((e: any) => e.playerId);
@@ -58,6 +60,23 @@ export function SquadSelector({ matchId, teamId, onClose }: SquadSelectorProps) 
       setPlayerDetails(details);
     }
   }, [existingSquad]);
+
+  // Auto-select all players when team has ≤14 eligible players and no squad saved yet
+  useEffect(() => {
+    if (
+      !loadingPlayers &&
+      !loadingSquad &&
+      !existingSquad?.entries?.length &&
+      (eligiblePlayers as any[]).length > 0 &&
+      (eligiblePlayers as any[]).length <= MAX_SQUAD
+    ) {
+      const allEligibleIds = (eligiblePlayers as any[]).filter((p: any) => p.eligible).map((p: any) => p.id);
+      if (allEligibleIds.length > 0) {
+        setSelectedIds(allEligibleIds);
+        setAutoSelected(true);
+      }
+    }
+  }, [loadingPlayers, loadingSquad, (eligiblePlayers as any[]).length, existingSquad]);
 
   const getDetail = (pid: string): PlayerDetail =>
     playerDetails[pid] || { isLibero: false, isCaptain: false, matchPosition: "" };
@@ -154,6 +173,15 @@ export function SquadSelector({ matchId, teamId, onClose }: SquadSelectorProps) 
           <X className="h-4 w-4" />
         </Button>
       </div>
+
+      {autoSelected && (
+        <div className="bg-green-500/10 text-green-600 p-3 rounded-lg flex items-center gap-2 text-sm" data-testid="banner-auto-selected">
+          <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
+          <span>
+            <strong>All {selectedIds.length} players auto-selected</strong> — your team has {(eligiblePlayers as any[]).length} or fewer players, so everyone is included automatically. You can still deselect individual players or adjust positions.
+          </span>
+        </div>
+      )}
 
       {selectedIds.length >= 14 && liberoCount < 2 && (
         <div className="bg-amber-500/10 text-amber-400 p-3 rounded-lg flex items-center gap-2 text-sm" data-testid="warning-libero">

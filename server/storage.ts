@@ -42,6 +42,7 @@ import type {
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
+  getUsers(): Promise<User[]>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByVerificationToken(tokenHash: string): Promise<User | undefined>;
   getUsersByRole(role: string): Promise<User[]>;
@@ -237,6 +238,9 @@ export class DatabaseStorage implements IStorage {
   async getUserByVerificationToken(tokenHash: string) {
     const [user] = await db.select().from(schema.users).where(eq(schema.users.verificationToken, tokenHash));
     return user;
+  }
+  async getUsers() {
+    return db.select().from(schema.users);
   }
   async getUsersByRole(role: string) {
     return db.select().from(schema.users).where(eq(schema.users.role, role as any));
