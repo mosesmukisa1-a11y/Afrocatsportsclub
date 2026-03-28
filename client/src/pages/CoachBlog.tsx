@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { api } from "@/lib/api";
@@ -69,7 +69,7 @@ const Z: Record<number,{x:number,y:number}> = {
   1:{x:OB,y:YB}, 2:{x:OF,y:YB}, 3:{x:OF,y:YM}, 4:{x:OF,y:YT}, 5:{x:OB,y:YT}, 6:{x:OB,y:YM}
 };
 
-interface LP { id:string; label:string; x:number; y:number; color:string; isOpp?:boolean }
+interface LP { id:string; label:string; x:number; y:number; color:string; isOpp?:boolean; sublabel?:string }
 interface LA { x1:number; y1:number; x2:number; y2:number; color:string; dashed?:boolean; label?:string }
 interface LiveTactic { id:string; name:string; description:string; keyPoints:string[]; players:LP[]; arrows:LA[]; badge?:string }
 interface TacticCat { id:string; name:string; icon:React.ReactNode; color:string; accentBg:string; tactics:LiveTactic[] }
@@ -565,12 +565,42 @@ function LiveCourtSVG({ players, arrows }: { players: LP[]; arrows: LA[] }) {
         <g key={p.id} style={{ transition: "transform 0.55s cubic-bezier(0.34,1.56,0.64,1)", transform: `translate(${p.x}px,${p.y}px)` }}>
           <circle cx={0} cy={0} r={PR} fill={p.color} stroke={p.isOpp ? "#fca5a5" : "#fff"} strokeWidth={p.isOpp ? 1.5 : 2} opacity={0.92} />
           {p.isOpp && <circle cx={0} cy={0} r={PR+3} fill="none" stroke={OPPC} strokeWidth={1} opacity={0.4} strokeDasharray="3,2" />}
-          <text x={0} y={4} textAnchor="middle" fill="white" fontSize={9} fontWeight="bold">{p.label}</text>
+          <text x={0} y={p.sublabel ? 2 : 4} textAnchor="middle" fill="white" fontSize={p.sublabel ? 8 : 9} fontWeight="bold">{p.label}</text>
+          {p.sublabel && <text x={0} y={10} textAnchor="middle" fill="white" fontSize={6.5} opacity={0.85}>{p.sublabel}</text>}
+          {p.sublabel && <text x={0} y={PR+9} textAnchor="middle" fill={p.color} fontSize={7} fontWeight="bold" opacity={0.95}
+            style={{ filter: "drop-shadow(0 0 2px #000)" }}>{p.sublabel}</text>}
         </g>
       ))}
     </svg>
   );
 }
+
+// ─── MATCH ANALYSIS CONSTANTS ─────────────────────────────────────────────────
+// Zone position for each role in each rotation (1=back-right server position)
+const MA_ZONES: Record<number, Record<string, number>> = {
+  1: { OP:4, OH1:3, MB1:2, OH2:5, L:6,  S:1  },   // S serves from Z1
+  2: { OH1:4, MB1:3, S:2,  OP:5,  L:6,  MB2:1 },   // MB2 serves from Z1
+  3: { MB1:4, S:3,  MB2:2, OH1:5, OP:6, OH2:1 },   // OH2 serves from Z1
+  4: { S:4,  MB2:3, OH2:2, MB1:5, OH1:6, OP:1 },   // OP serves from Z1
+  5: { MB2:4, OH2:3, OP:2, S:5,  MB1:6, OH1:1 },   // OH1 serves from Z1
+  6: { OH2:4, OP:3,  OH1:2, MB2:5, S:6, MB1:1 },   // MB1 serves from Z1
+};
+const MA_SERVER: Record<number, string> = { 1:"S", 2:"MB2", 3:"OH2", 4:"OP", 5:"OH1", 6:"MB1" };
+const MA_ROLE_COLORS: Record<string, string> = { S:SC, OH1:OHC, OH2:OHC, MB1:MBC, MB2:MBC, OP:OPC, L:LC };
+const MA_ROLES = ["S","OH1","OH2","MB1","MB2","OP","L"] as const;
+const MA_ROLE_FULL: Record<string, string> = {
+  S:"Setter", OH1:"Outside Hitter 1", OH2:"Outside Hitter 2",
+  MB1:"Middle Blocker 1", MB2:"Middle Blocker 2", OP:"Opposite", L:"Libero",
+};
+const MA_S_ZONE: Record<number, number> = { 1:1, 2:2, 3:3, 4:4, 5:5, 6:6 };
+const MA_ROT_DESC: Record<number, { title:string; tip:string }> = {
+  1: { title:"S Serves (Z1)", tip:"Setter is in back-right and serves. Runs diagonally to the setting zone after contact." },
+  2: { title:"S at Front-Right (Z2)", tip:"Setter already at the net. Short slide to the antenna to set. MB2 serves." },
+  3: { title:"S at Front-Center (Z3)", tip:"Setter slides right along the net from Z3 to set. OH2 serves." },
+  4: { title:"S at Front-Left (Z4)", tip:"Hardest rotation — setter makes the longest run across the net to Z2. OP serves." },
+  5: { title:"S at Back-Left (Z5)", tip:"Setter sprints diagonally from back-left to the setting zone. OH1 serves." },
+  6: { title:"S at Back-Center (Z6)", tip:"Setter runs straight forward from Z6 to the setting zone. MB1 serves." },
+};
 
 // ─── MAIN TACTIC BOARD SECTION ─────────────────────────────────────────────────
 function TacticBoardSection() {
@@ -580,7 +610,7 @@ function TacticBoardSection() {
   const canEdit = user?.isSuperAdmin || ["ADMIN", "MANAGER", "COACH"].includes(user?.role || "");
 
   // Board mode: live tactics or free draw
-  const [boardMode, setBoardMode] = useState<"live" | "free">("live");
+  const [boardMode, setBoardMode] = useState<"live" | "match" | "free">("live");
 
   // ── Live tactics state ──
   const [activeCatId, setActiveCatId] = useState<string | null>(null);
@@ -623,6 +653,100 @@ function TacticBoardSection() {
       setLiveArrows(tactic.arrows);
     }, 60);
   }
+
+  // ── Match Analysis state ──
+  const [maMatchId, setMaMatchId] = useState("");
+  const [maRoleMap, setMaRoleMap] = useState<Record<string, string>>({});
+  const [maRotation, setMaRotation] = useState(1);
+  const maCourtRef = useRef<HTMLDivElement>(null);
+
+  const { data: allMatches = [] } = useQuery({ queryKey: ["/api/matches"], queryFn: api.getMatches });
+  const { data: allPlayers = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
+
+  const selectedMatch = useMemo(() => allMatches.find((m: any) => m.id === maMatchId), [allMatches, maMatchId]);
+  const maTeamId = (selectedMatch as any)?.teamId || "";
+
+  const { data: squadData } = useQuery({
+    queryKey: ["/api/squad", maMatchId, maTeamId],
+    queryFn: () => api.getMatchSquad(maMatchId, maTeamId),
+    enabled: !!(maMatchId && maTeamId),
+  });
+
+  const squadPlayers = useMemo(() => {
+    const entries: any[] = squadData?.entries || [];
+    return entries.map((e: any) => {
+      const p = (allPlayers as any[]).find((pl: any) => pl.id === e.playerId);
+      const name = p ? [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || "?" : "?";
+      return { ...e, player: p, name };
+    }).sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [squadData, allPlayers]);
+
+  // Auto-assign roles from squad positions when a match is selected
+  useEffect(() => {
+    if (!squadPlayers.length) return;
+    const map: Record<string, string> = {};
+    for (const sp of squadPlayers) {
+      const pos = (sp.matchPosition || sp.player?.position || "").toUpperCase();
+      if (pos === "SETTER" && !map["S"])          { map["S"]   = sp.playerId; }
+      else if (sp.isLibero && !map["L"])           { map["L"]   = sp.playerId; }
+      else if (pos === "OPPOSITE" && !map["OP"])   { map["OP"]  = sp.playerId; }
+      else if (pos === "OUTSIDE_HITTER") {
+        if (!map["OH1"]) map["OH1"] = sp.playerId;
+        else if (!map["OH2"]) map["OH2"] = sp.playerId;
+      } else if (pos === "MIDDLE_BLOCKER") {
+        if (!map["MB1"]) map["MB1"] = sp.playerId;
+        else if (!map["MB2"]) map["MB2"] = sp.playerId;
+      }
+    }
+    // Fallback: fill remaining roles from unassigned squad players
+    const assigned = new Set(Object.values(map));
+    const unassigned = squadPlayers.filter((sp: any) => !assigned.has(sp.playerId));
+    const fillRole = (role: string) => {
+      if (!map[role] && unassigned.length) { map[role] = unassigned.shift()!.playerId; }
+    };
+    MA_ROLES.forEach(r => fillRole(r));
+    setMaRoleMap(map);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maMatchId, squadPlayers.length]);
+
+  // Build players for the live court based on current rotation + role assignments
+  const maCourtPlayers = useMemo((): LP[] => {
+    const zones = MA_ZONES[maRotation] || {};
+    const server = MA_SERVER[maRotation];
+    return Object.entries(zones).map(([role, zone]) => {
+      const pid = maRoleMap[role] || "";
+      const sp = squadPlayers.find((s: any) => s.playerId === pid);
+      const jersey = sp?.player?.jerseyNo;
+      const lastName = (sp?.player?.lastName || sp?.name || "").split(" ").pop() || "";
+      const circleLabel = pid
+        ? (jersey ? `#${jersey}` : lastName.substring(0, 3))
+        : role.substring(0, 2);
+      const subLabel = pid && lastName ? lastName.substring(0, 5) : "";
+      return {
+        id: role,
+        label: circleLabel + (role === server ? "★" : ""),
+        sublabel: subLabel,
+        x: Z[zone].x,
+        y: Z[zone].y,
+        color: MA_ROLE_COLORS[role] || SC,
+      };
+    });
+  }, [maRotation, maRoleMap, squadPlayers]);
+
+  // Setter movement arrows per rotation
+  const maArrows = useMemo((): LA[] => {
+    const sZone = MA_S_ZONE[maRotation];
+    if ([1, 4, 5, 6].includes(maRotation)) {
+      return [
+        { x1: Z[sZone].x, y1: Z[sZone].y, x2: SZ.x, y2: SZ.y, color: SC, label: "S runs" },
+        { x1: SZ.x, y1: SZ.y, x2: Z[4].x+6, y2: Z[4].y+12, color: SC, dashed: true, label: "→set" },
+      ];
+    }
+    return [
+      { x1: Z[sZone].x, y1: Z[sZone].y, x2: Z[sZone].x+12, y2: Z[sZone].y-16, color: SC, label: "S slides" },
+      { x1: Z[sZone].x+12, y1: Z[sZone].y-16, x2: Z[4].x+6, y2: Z[4].y+12, color: SC, dashed: true, label: "→set" },
+    ];
+  }, [maRotation]);
 
   // ── Free board state ──
   const [activeBoard, setActiveBoard] = useState<any>(null);
@@ -693,11 +817,16 @@ function TacticBoardSection() {
   return (
     <div className="space-y-4">
       {/* Mode toggle */}
-      <div className="flex gap-2 p-1 bg-afrocat-white-5 rounded-xl w-fit border border-afrocat-border">
+      <div className="flex gap-2 p-1 bg-afrocat-white-5 rounded-xl w-fit border border-afrocat-border flex-wrap">
         <button onClick={() => setBoardMode("live")}
           className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${boardMode === "live" ? "bg-afrocat-teal text-white shadow" : "text-afrocat-muted hover:text-afrocat-text"}`}
           data-testid="tab-live-tactics">
           <Layers className="inline h-3.5 w-3.5 mr-1" /> Live Tactics
+        </button>
+        <button onClick={() => setBoardMode("match")}
+          className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${boardMode === "match" ? "bg-afrocat-gold text-white shadow" : "text-afrocat-muted hover:text-afrocat-text"}`}
+          data-testid="tab-match-analysis">
+          <Target className="inline h-3.5 w-3.5 mr-1" /> Match Analysis
         </button>
         <button onClick={() => setBoardMode("free")}
           className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${boardMode === "free" ? "bg-afrocat-teal text-white shadow" : "text-afrocat-muted hover:text-afrocat-text"}`}
@@ -842,6 +971,180 @@ function TacticBoardSection() {
                   <p className="text-xs text-afrocat-muted max-w-xs">Choose a category above — Rotations, Defence, Blocking, Attack Plays or Serve Receive — then click a formation to see players auto-position on the court</p>
                 </>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── MATCH ANALYSIS MODE ── */}
+      {boardMode === "match" && (
+        <div className="space-y-4">
+          {/* Match selector */}
+          <div className="afrocat-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Target className="h-4 w-4 text-afrocat-gold" />
+              <span className="text-sm font-bold text-afrocat-text">Select Match for Rotation Analysis</span>
+            </div>
+            <select
+              value={maMatchId}
+              onChange={e => { setMaMatchId(e.target.value); setMaRoleMap({}); setMaRotation(1); }}
+              className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm"
+              data-testid="select-ma-match"
+            >
+              <option value="">— Choose a saved match —</option>
+              {(allMatches as any[]).map((m: any) => (
+                <option key={m.id} value={m.id}>
+                  vs {m.opponent || "Unknown"} · {m.startTime ? new Date(m.startTime).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" }) : (m.matchDate ? new Date(m.matchDate).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" }) : "?")} · {m.teamName || m.teamId || ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {maMatchId && (
+            <>
+              {/* Role Assignment */}
+              <div className="afrocat-card p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <RotateCcw className="h-4 w-4 text-purple-400" />
+                  <span className="text-sm font-bold text-afrocat-text">Assign Players to 5-1 Positions</span>
+                  {!squadPlayers.length && (
+                    <span className="text-xs text-afrocat-gold ml-auto">⚠ No squad saved for this match yet</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {MA_ROLES.map(role => (
+                    <div key={role} className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: MA_ROLE_COLORS[role] }} />
+                        <span className="text-[11px] font-black" style={{ color: MA_ROLE_COLORS[role] }}>{role}</span>
+                        <span className="text-[9px] text-afrocat-muted truncate">{MA_ROLE_FULL[role]}</span>
+                      </div>
+                      <select
+                        value={maRoleMap[role] || ""}
+                        onChange={e => setMaRoleMap(prev => ({ ...prev, [role]: e.target.value }))}
+                        className="w-full px-2 py-1.5 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-xs"
+                        data-testid={`select-ma-role-${role}`}
+                      >
+                        <option value="">— Unassigned —</option>
+                        {squadPlayers.map((sp: any) => (
+                          <option key={sp.playerId} value={sp.playerId}>
+                            {sp.player?.jerseyNo ? `#${sp.player.jerseyNo} ` : ""}{sp.name}{sp.isLibero ? " (L)" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Court + info panel */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                {/* Court */}
+                <div className="lg:col-span-2 space-y-2">
+                  {/* Rotation stepper */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-afrocat-muted">Rotation:</span>
+                    {[1,2,3,4,5,6].map(r => (
+                      <button
+                        key={r}
+                        onClick={() => setMaRotation(r)}
+                        data-testid={`btn-ma-rotation-${r}`}
+                        className={`w-9 h-9 rounded-lg text-xs font-black border transition-all cursor-pointer ${
+                          maRotation === r
+                            ? "bg-afrocat-gold text-white border-afrocat-gold shadow-lg scale-110"
+                            : "bg-afrocat-white-5 text-afrocat-muted border-afrocat-border hover:border-afrocat-gold/40 hover:text-afrocat-gold"
+                        }`}>
+                        R{r}
+                      </button>
+                    ))}
+                    <span className="ml-auto text-[10px] text-afrocat-muted font-bold">
+                      Server: <span className="text-afrocat-gold">{MA_SERVER[maRotation]}★</span>
+                    </span>
+                  </div>
+                  {/* Court SVG */}
+                  <div
+                    ref={maCourtRef}
+                    className="rounded-xl overflow-hidden border border-afrocat-gold/30 relative group"
+                    data-testid="ma-court-container"
+                  >
+                    <LiveCourtSVG players={maCourtPlayers} arrows={maArrows} />
+                    <button
+                      onClick={() => { if (!document.fullscreenElement) maCourtRef.current?.requestFullscreen?.(); else document.exitFullscreen?.(); }}
+                      data-testid="btn-ma-fullscreen"
+                      title="Fullscreen"
+                      className="absolute top-2 right-2 p-2 rounded-lg bg-black/60 text-white opacity-70 hover:opacity-100 transition-opacity cursor-pointer hover:bg-black/80 z-10"
+                    >
+                      {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Info panel */}
+                <div className="space-y-3">
+                  {/* Rotation description */}
+                  <div className="afrocat-card p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-afrocat-gold/20 text-afrocat-gold border-afrocat-gold/40">R{maRotation}</span>
+                      <span className="text-xs font-bold text-afrocat-text">{MA_ROT_DESC[maRotation]?.title}</span>
+                    </div>
+                    <p className="text-xs text-afrocat-muted leading-relaxed">{MA_ROT_DESC[maRotation]?.tip}</p>
+                  </div>
+
+                  {/* Player legend — shows actual players */}
+                  <div className="afrocat-card p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <User className="h-3.5 w-3.5 text-afrocat-teal" />
+                      <span className="text-xs font-bold text-afrocat-text">Lineup</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {MA_ROLES.map(role => {
+                        const pid = maRoleMap[role] || "";
+                        const sp = squadPlayers.find((s: any) => s.playerId === pid);
+                        const displayName = sp ? sp.name : "Unassigned";
+                        const jersey = sp?.player?.jerseyNo;
+                        const isServer = role === MA_SERVER[maRotation];
+                        return (
+                          <div key={role} className={`flex items-center gap-2 py-1 rounded-lg px-1 ${isServer ? "bg-afrocat-gold/10 border border-afrocat-gold/30" : ""}`}>
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: MA_ROLE_COLORS[role] }} />
+                            <span className="text-[10px] font-black w-8 flex-shrink-0" style={{ color: MA_ROLE_COLORS[role] }}>{role}</span>
+                            {jersey && <span className="text-[9px] text-afrocat-gold font-bold">#{jersey}</span>}
+                            <span className={`text-[10px] flex-1 truncate ${pid ? "text-afrocat-text" : "text-afrocat-muted italic"}`}>{displayName}</span>
+                            {isServer && <span className="text-afrocat-gold text-[9px] font-black">SERVES★</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Navigation hint */}
+                  <div className="text-center">
+                    <div className="flex gap-2 justify-center">
+                      <button
+                        onClick={() => setMaRotation(r => r > 1 ? r - 1 : 6)}
+                        className="flex-1 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted text-xs font-bold hover:border-afrocat-gold/40 hover:text-afrocat-gold transition-all cursor-pointer"
+                        data-testid="btn-ma-prev">
+                        ← Prev
+                      </button>
+                      <button
+                        onClick={() => setMaRotation(r => r < 6 ? r + 1 : 1)}
+                        className="flex-1 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted text-xs font-bold hover:border-afrocat-gold/40 hover:text-afrocat-gold transition-all cursor-pointer"
+                        data-testid="btn-ma-next">
+                        Next →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {!maMatchId && (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <Target className="h-12 w-12 text-afrocat-gold opacity-25" />
+              <p className="text-sm font-bold text-afrocat-text">Match Analysis Board</p>
+              <p className="text-xs text-afrocat-muted max-w-xs">
+                Select a saved match above. The system will load the squad, auto-assign players to the 5-1 positions, and let you step through all 6 rotations with real player names on the court.
+              </p>
             </div>
           )}
         </div>
