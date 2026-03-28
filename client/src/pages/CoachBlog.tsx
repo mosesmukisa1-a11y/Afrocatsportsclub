@@ -82,48 +82,52 @@ const TACTIC_CATS: TacticCat[] = [
     tactics:[
       {
         id:"r1", name:"Rotation 1 — S Serves", badge:"R1",
-        description:"Setter (S) is the server in Zone 1 (back right corner). After serving, S sprints to the setting zone near Zone 2–3.",
+        description:"Setter (S) serves from Zone 1 (back-right). After serving, S sprints forward to the setting zone. OH1 lines up at Z2 (front-right), MB1 at Z3 (front-center), OP at Z4 (front-left). MB2 is replaced by the Libero in Z6.",
         keyPoints:[
           "S stands in Z1 (back-right) and serves",
-          "OP is in front-left (Z4) — diagonal partner to S",
-          "MB1 at Z2 (front-right) must overlap with S until serve",
-          "Libero (L) replaces MB2 in Zone 6 for serve-receive",
-          "After serve: S runs immediately to the Z2-3 setting zone",
+          "OH1 at Z2 (front-right) — inside the antenna, ready for pipe/back attack",
+          "MB1 at Z3 (front-center) — ready for quick-set attack",
+          "OP at Z4 (front-left) — diagonal partner to S",
+          "OH2 at Z5 (back-left) for serve-receive and back-row attack",
+          "Libero (L) replaces MB2 in Z6 (back-center) for serve-receive",
+          "After serve: S sprints to the Z2–3 setting zone near the net",
         ],
         players:[
           {id:"OP", label:"OP", x:Z[4].x, y:Z[4].y, color:OPC},  // Z4 front-left
-          {id:"OH1",label:"OH1",x:Z[3].x, y:Z[3].y, color:OHC},  // Z3 front-center
-          {id:"MB1",label:"MB1",x:Z[2].x, y:Z[2].y, color:MBC},  // Z2 front-right
+          {id:"MB1",label:"MB1",x:Z[3].x, y:Z[3].y, color:MBC},  // Z3 front-center
+          {id:"OH1",label:"OH1",x:Z[2].x, y:Z[2].y, color:OHC},  // Z2 front-right
           {id:"OH2",label:"OH2",x:Z[5].x, y:Z[5].y, color:OHC},  // Z5 back-left
           {id:"L",  label:"L",  x:Z[6].x, y:Z[6].y, color:LC  },  // Z6 back-center (L replaces MB2)
           {id:"S",  label:"S★", x:Z[1].x, y:Z[1].y, color:SC  },  // Z1 back-right SERVES
         ],
         arrows:[
           {x1:Z[1].x, y1:Z[1].y, x2:SZ.x, y2:SZ.y, color:SC, label:"S runs to set"},
-          {x1:SZ.x, y1:SZ.y, x2:Z[4].x+6, y2:Z[4].y+12, color:SC, dashed:true, label:"set→OP"},
+          {x1:SZ.x, y1:SZ.y, x2:Z[3].x+6, y2:Z[3].y+12, color:SC, dashed:true, label:"set→MB1"},
         ]
       },
       {
         id:"r2", name:"Rotation 2 — S at Front-Right", badge:"R2",
-        description:"Setter (S) is already in Zone 2 (front right, near the antenna). MB2 serves from Zone 1.",
+        description:"Setter (S) is already in Zone 2 (front-right, near the antenna). MB2 serves from Zone 1. MB1 moves to Z4 (front-left), OH1 at Z3 (front-center), OH2 at Z6 (back-center), OP at Z5 (back-left).",
         keyPoints:[
           "MB2 serves from Z1 (back-right)",
-          "S is in Z2 (front-right) — already at the net, ready to set",
-          "OH1 is in Z4 (front-left) for outside attack",
-          "OP is in Z5 (back-left) — in back row this rotation",
-          "After serve: S makes a small slide rightward to the antenna",
+          "S is in Z2 (front-right) — already at the net, minimal movement to set",
+          "MB1 at Z4 (front-left) — blocking and quick-set option on the left pin",
+          "OH1 at Z3 (front-center) — crossing attacker / pipe option",
+          "OP at Z5 (back-left) — in back row this rotation, available for back-row attack",
+          "OH2 at Z6 (back-center) — serve-receive and back-row support",
+          "After serve: S makes a small slide rightward to the antenna to set",
         ],
         players:[
-          {id:"OH1",label:"OH1",x:Z[4].x, y:Z[4].y, color:OHC},  // Z4 front-left
-          {id:"MB1",label:"MB1",x:Z[3].x, y:Z[3].y, color:MBC},  // Z3 front-center
+          {id:"MB1",label:"MB1",x:Z[4].x, y:Z[4].y, color:MBC},  // Z4 front-left
+          {id:"OH1",label:"OH1",x:Z[3].x, y:Z[3].y, color:OHC},  // Z3 front-center
           {id:"S",  label:"S",  x:Z[2].x, y:Z[2].y, color:SC  },  // Z2 front-right (SETS)
           {id:"OP", label:"OP", x:Z[5].x, y:Z[5].y, color:OPC},  // Z5 back-left
-          {id:"L",  label:"L",  x:Z[6].x, y:Z[6].y, color:LC  },  // Z6 back-center
+          {id:"OH2",label:"OH2",x:Z[6].x, y:Z[6].y, color:OHC},  // Z6 back-center
           {id:"MB2",label:"MB2★",x:Z[1].x, y:Z[1].y, color:MBC},  // Z1 back-right SERVES
         ],
         arrows:[
           {x1:Z[2].x, y1:Z[2].y, x2:Z[2].x+10, y2:Z[2].y-12, color:SC, label:"S slides to antenna"},
-          {x1:Z[2].x+10, y1:Z[2].y-12, x2:Z[4].x+6, y2:Z[4].y+10, color:SC, dashed:true, label:"set→OH1"},
+          {x1:Z[2].x+10, y1:Z[2].y-12, x2:Z[4].x+6, y2:Z[4].y+10, color:SC, dashed:true, label:"set→MB1"},
         ]
       },
       {
@@ -578,8 +582,8 @@ function LiveCourtSVG({ players, arrows }: { players: LP[]; arrows: LA[] }) {
 // ─── MATCH ANALYSIS CONSTANTS ─────────────────────────────────────────────────
 // Zone position for each role in each rotation (1=back-right server position)
 const MA_ZONES: Record<number, Record<string, number>> = {
-  1: { OP:4, OH1:3, MB1:2, OH2:5, L:6,  S:1  },   // S serves from Z1
-  2: { OH1:4, MB1:3, S:2,  OP:5,  L:6,  MB2:1 },   // MB2 serves from Z1
+  1: { S:1,  OP:4, MB1:3, OH1:2, OH2:5, L:6  },   // S serves from Z1; OH1→Z2, MB1→Z3, OP→Z4
+  2: { S:2,  MB2:1, MB1:4, OH1:3, OH2:6, OP:5 },   // MB2 serves from Z1; MB1→Z4, OH1→Z3, OH2→Z6, OP→Z5
   3: { MB1:4, S:3,  MB2:2, OH1:5, OP:6, OH2:1 },   // OH2 serves from Z1
   4: { S:4,  MB2:3, OH2:2, MB1:5, OH1:6, OP:1 },   // OP serves from Z1
   5: { MB2:4, OH2:3, OP:2, S:5,  MB1:6, OH1:1 },   // OH1 serves from Z1
@@ -594,8 +598,8 @@ const MA_ROLE_FULL: Record<string, string> = {
 };
 const MA_S_ZONE: Record<number, number> = { 1:1, 2:2, 3:3, 4:4, 5:5, 6:6 };
 const MA_ROT_DESC: Record<number, { title:string; tip:string }> = {
-  1: { title:"S Serves (Z1)", tip:"Setter is in back-right and serves. Runs diagonally to the setting zone after contact." },
-  2: { title:"S at Front-Right (Z2)", tip:"Setter already at the net. Short slide to the antenna to set. MB2 serves." },
+  1: { title:"S Serves (Z1)", tip:"S serves from back-right. OH1 at Z2, MB1 at Z3, OP at Z4. L replaces MB2 in Z6. S sprints to setting zone after serve." },
+  2: { title:"S at Front-Right (Z2)", tip:"S already at net. MB2 serves from Z1. MB1 at Z4 (front-left), OH1 at Z3 (front-center), OP at Z5 (back), OH2 at Z6. S slides right to antenna to set." },
   3: { title:"S at Front-Center (Z3)", tip:"Setter slides right along the net from Z3 to set. OH2 serves." },
   4: { title:"S at Front-Left (Z4)", tip:"Hardest rotation — setter makes the longest run across the net to Z2. OP serves." },
   5: { title:"S at Back-Left (Z5)", tip:"Setter sprints diagonally from back-left to the setting zone. OH1 serves." },
