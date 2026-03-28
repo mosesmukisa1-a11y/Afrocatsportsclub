@@ -69,7 +69,7 @@ const Z: Record<number,{x:number,y:number}> = {
   1:{x:OB,y:YB}, 2:{x:OF,y:YB}, 3:{x:OF,y:YM}, 4:{x:OF,y:YT}, 5:{x:OB,y:YT}, 6:{x:OB,y:YM}
 };
 
-interface LP { id:string; label:string; x:number; y:number; color:string; isOpp?:boolean; sublabel?:string }
+interface LP { id:string; label:string; x:number; y:number; color:string; isOpp?:boolean; sublabel?:string; photoUrl?:string }
 interface LA { x1:number; y1:number; x2:number; y2:number; color:string; dashed?:boolean; label?:string }
 interface LiveTactic { id:string; name:string; description:string; keyPoints:string[]; players:LP[]; arrows:LA[]; badge?:string }
 interface TacticCat { id:string; name:string; icon:React.ReactNode; color:string; accentBg:string; tactics:LiveTactic[] }
@@ -565,16 +565,46 @@ function LiveCourtSVG({ players, arrows }: { players: LP[]; arrows: LA[] }) {
       })}
 
       {/* Players */}
-      {players.map((p) => (
-        <g key={p.id} style={{ transition: "transform 0.55s cubic-bezier(0.34,1.56,0.64,1)", transform: `translate(${p.x}px,${p.y}px)` }}>
-          <circle cx={0} cy={0} r={PR} fill={p.color} stroke={p.isOpp ? "#fca5a5" : "#fff"} strokeWidth={p.isOpp ? 1.5 : 2} opacity={0.92} />
-          {p.isOpp && <circle cx={0} cy={0} r={PR+3} fill="none" stroke={OPPC} strokeWidth={1} opacity={0.4} strokeDasharray="3,2" />}
-          <text x={0} y={p.sublabel ? 2 : 4} textAnchor="middle" fill="white" fontSize={p.sublabel ? 8 : 9} fontWeight="bold">{p.label}</text>
-          {p.sublabel && <text x={0} y={10} textAnchor="middle" fill="white" fontSize={6.5} opacity={0.85}>{p.sublabel}</text>}
-          {p.sublabel && <text x={0} y={PR+9} textAnchor="middle" fill={p.color} fontSize={7} fontWeight="bold" opacity={0.95}
-            style={{ filter: "drop-shadow(0 0 2px #000)" }}>{p.sublabel}</text>}
-        </g>
-      ))}
+      {players.map((p) => {
+        const hasPhoto = !!p.photoUrl;
+        return (
+          <g key={p.id} style={{ transition: "transform 0.55s cubic-bezier(0.34,1.56,0.64,1)", transform: `translate(${p.x}px,${p.y}px)` }}>
+            {hasPhoto ? (
+              <>
+                {/* Colored base ring behind photo */}
+                <circle cx={0} cy={0} r={PR+1.5} fill={p.color} opacity={0.9} />
+                {/* Player profile photo clipped to circle via CSS */}
+                <image
+                  href={p.photoUrl}
+                  x={-PR} y={-PR}
+                  width={PR*2} height={PR*2}
+                  preserveAspectRatio="xMidYMid slice"
+                  style={{ clipPath: `circle(${PR}px at center)` }}
+                />
+                {/* Colored border ring on top */}
+                <circle cx={0} cy={0} r={PR} fill="none" stroke={p.color} strokeWidth={2.5} opacity={0.95} />
+                {/* White outer ring */}
+                <circle cx={0} cy={0} r={PR+1.5} fill="none" stroke="#fff" strokeWidth={1} opacity={0.6} />
+                {/* Label (jersey + serve star) below the photo */}
+                <text x={0} y={PR+9} textAnchor="middle" fill={p.color} fontSize={7} fontWeight="bold" opacity={0.98}
+                  style={{ filter: "drop-shadow(0 0 3px #000)" }}>{p.label}</text>
+                {/* Player name below label */}
+                {p.sublabel && <text x={0} y={PR+17} textAnchor="middle" fill="#fff" fontSize={6} opacity={0.85}
+                  style={{ filter: "drop-shadow(0 0 2px #000)" }}>{p.sublabel}</text>}
+              </>
+            ) : (
+              <>
+                <circle cx={0} cy={0} r={PR} fill={p.color} stroke={p.isOpp ? "#fca5a5" : "#fff"} strokeWidth={p.isOpp ? 1.5 : 2} opacity={0.92} />
+                {p.isOpp && <circle cx={0} cy={0} r={PR+3} fill="none" stroke={OPPC} strokeWidth={1} opacity={0.4} strokeDasharray="3,2" />}
+                <text x={0} y={p.sublabel ? 2 : 4} textAnchor="middle" fill="white" fontSize={p.sublabel ? 8 : 9} fontWeight="bold">{p.label}</text>
+                {p.sublabel && <text x={0} y={10} textAnchor="middle" fill="white" fontSize={6.5} opacity={0.85}>{p.sublabel}</text>}
+                {p.sublabel && <text x={0} y={PR+9} textAnchor="middle" fill={p.color} fontSize={7} fontWeight="bold" opacity={0.95}
+                  style={{ filter: "drop-shadow(0 0 2px #000)" }}>{p.sublabel}</text>}
+              </>
+            )}
+          </g>
+        );
+      })}
     </svg>
   );
 }
@@ -703,8 +733,8 @@ function TacticBoardSection() {
     onSuccess: (data: any) => {
       if (data?.bestOf) setMaBestOf(data.bestOf);
       toast({ title: `Format set to Best of ${data?.bestOf}` });
-      queryClient.invalidateQueries({ queryKey: ["/api/match-live", maMatchId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      qc.invalidateQueries({ queryKey: ["/api/match-live", maMatchId] });
+      qc.invalidateQueries({ queryKey: ["/api/matches"] });
     },
     onError: (err: any) => toast({ title: "Cannot change format", description: err?.message || "Scoring may have already started", variant: "destructive" }),
   });
@@ -812,6 +842,8 @@ function TacticBoardSection() {
     return Object.entries(zones).map(([role, zone]) => {
       const pid = maRoleMap[role] || "";
       const { jersey, lastName } = getMaEffective(pid);
+      const sp = squadPlayers.find((s: any) => s.playerId === pid);
+      const photoUrl: string | undefined = sp?.player?.photoUrl || undefined;
       const circleLabel = pid
         ? (jersey != null ? `#${jersey}` : (lastName.substring(0, 3) || role.substring(0, 2)))
         : role.substring(0, 2);
@@ -823,6 +855,7 @@ function TacticBoardSection() {
         x: Z[zone].x,
         y: Z[zone].y,
         color: MA_ROLE_COLORS[role] || SC,
+        photoUrl,
       };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
