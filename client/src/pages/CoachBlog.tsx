@@ -657,39 +657,44 @@ function TacticBoardSection() {
   // ── Match Analysis state ──
   const [maMatchId, setMaMatchId] = useState("");
   const [maRoleMap, setMaRoleMap] = useState<Record<string, string>>({});
+  const [maAmendments, setMaAmendments] = useState<Record<string, { jerseyNo?: string; position?: string }>>({});
   const [maRotation, setMaRotation] = useState(1);
   const maCourtRef = useRef<HTMLDivElement>(null);
 
   const { data: allMatches = [] } = useQuery({ queryKey: ["/api/matches"], queryFn: api.getMatches });
-  const { data: allPlayers = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
 
-  const selectedMatch = useMemo(() => allMatches.find((m: any) => m.id === maMatchId), [allMatches, maMatchId]);
-  const maTeamId = (selectedMatch as any)?.teamId || "";
+  const selectedMatch = useMemo(() => (allMatches as any[]).find((m: any) => m.id === maMatchId), [allMatches, maMatchId]);
+  const maTeamId: string = (selectedMatch as any)?.teamId || "";
 
-  const { data: squadData } = useQuery({
+  const { data: squadData, isLoading: squadLoading } = useQuery({
     queryKey: ["/api/squad", maMatchId, maTeamId],
     queryFn: () => api.getMatchSquad(maMatchId, maTeamId),
     enabled: !!(maMatchId && maTeamId),
   });
 
+  // Squad players — now fully enriched from the server (player names, jerseys, positions)
   const squadPlayers = useMemo(() => {
-    const entries: any[] = squadData?.entries || [];
-    return entries.map((e: any) => {
-      const p = (allPlayers as any[]).find((pl: any) => pl.id === e.playerId);
-      const name = p ? [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || "?" : "?";
-      return { ...e, player: p, name };
-    }).sort((a: any, b: any) => a.name.localeCompare(b.name));
-  }, [squadData, allPlayers]);
+    const entries: any[] = (squadData as any)?.entries || [];
+    return entries
+      .map((e: any) => ({
+        ...e,
+        // Prefer entry-level jersey/position (match-specific) over player defaults
+        name: e.displayName || (e.player ? [e.player.firstName, e.player.lastName].filter(Boolean).join(" ") || e.player.fullName || "?" : "?"),
+        resolvedJersey: e.effectiveJerseyNo ?? e.player?.jerseyNo ?? null,
+        resolvedPosition: e.effectivePosition || e.player?.position || "",
+      }))
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [squadData]);
 
   // Auto-assign roles from squad positions when a match is selected
   useEffect(() => {
     if (!squadPlayers.length) return;
     const map: Record<string, string> = {};
     for (const sp of squadPlayers) {
-      const pos = (sp.matchPosition || sp.player?.position || "").toUpperCase();
-      if (pos === "SETTER" && !map["S"])          { map["S"]   = sp.playerId; }
-      else if (sp.isLibero && !map["L"])           { map["L"]   = sp.playerId; }
-      else if (pos === "OPPOSITE" && !map["OP"])   { map["OP"]  = sp.playerId; }
+      const pos = sp.resolvedPosition.toUpperCase();
+      if (pos === "SETTER" && !map["S"])               { map["S"]   = sp.playerId; }
+      else if (sp.isLibero && !map["L"])                { map["L"]   = sp.playerId; }
+      else if (pos === "OPPOSITE" && !map["OP"])        { map["OP"]  = sp.playerId; }
       else if (pos === "OUTSIDE_HITTER") {
         if (!map["OH1"]) map["OH1"] = sp.playerId;
         else if (!map["OH2"]) map["OH2"] = sp.playerId;
@@ -698,16 +703,28 @@ function TacticBoardSection() {
         else if (!map["MB2"]) map["MB2"] = sp.playerId;
       }
     }
-    // Fallback: fill remaining roles from unassigned squad players
-    const assigned = new Set(Object.values(map));
-    const unassigned = squadPlayers.filter((sp: any) => !assigned.has(sp.playerId));
-    const fillRole = (role: string) => {
-      if (!map[role] && unassigned.length) { map[role] = unassigned.shift()!.playerId; }
-    };
-    MA_ROLES.forEach(r => fillRole(r));
+    // Fallback: fill unfilled roles from remaining unassigned players
+    const assigned = new Set(Object.values(map).filter(Boolean));
+    const remaining = [...squadPlayers.filter((sp: any) => !assigned.has(sp.playerId))];
+    MA_ROLES.forEach(r => {
+      if (!map[r] && remaining.length) map[r] = remaining.shift()!.playerId;
+    });
     setMaRoleMap(map);
+    setMaAmendments({});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [maMatchId, squadPlayers.length]);
+
+  // Helper: get effective jersey/position for a player (amendment → entry override → player default)
+  function getMaEffective(playerId: string) {
+    if (!playerId) return { jersey: null, position: "", lastName: "", displayName: "" };
+    const sp = squadPlayers.find((s: any) => s.playerId === playerId);
+    if (!sp) return { jersey: null, position: "", lastName: "", displayName: "" };
+    const am = maAmendments[playerId] || {};
+    const jersey = am.jerseyNo !== undefined ? Number(am.jerseyNo) || null : sp.resolvedJersey;
+    const position = am.position || sp.resolvedPosition;
+    const lastName = (sp.player?.lastName || sp.name || "").split(" ").pop() || "";
+    return { jersey, position, lastName, displayName: sp.name };
+  }
 
   // Build players for the live court based on current rotation + role assignments
   const maCourtPlayers = useMemo((): LP[] => {
@@ -715,11 +732,9 @@ function TacticBoardSection() {
     const server = MA_SERVER[maRotation];
     return Object.entries(zones).map(([role, zone]) => {
       const pid = maRoleMap[role] || "";
-      const sp = squadPlayers.find((s: any) => s.playerId === pid);
-      const jersey = sp?.player?.jerseyNo;
-      const lastName = (sp?.player?.lastName || sp?.name || "").split(" ").pop() || "";
+      const { jersey, lastName } = getMaEffective(pid);
       const circleLabel = pid
-        ? (jersey ? `#${jersey}` : lastName.substring(0, 3))
+        ? (jersey != null ? `#${jersey}` : (lastName.substring(0, 3) || role.substring(0, 2)))
         : role.substring(0, 2);
       const subLabel = pid && lastName ? lastName.substring(0, 5) : "";
       return {
@@ -731,7 +746,8 @@ function TacticBoardSection() {
         color: MA_ROLE_COLORS[role] || SC,
       };
     });
-  }, [maRotation, maRoleMap, squadPlayers]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [maRotation, maRoleMap, squadPlayers, maAmendments]);
 
   // Setter movement arrows per rotation
   const maArrows = useMemo((): LA[] => {
@@ -987,17 +1003,36 @@ function TacticBoardSection() {
             </div>
             <select
               value={maMatchId}
-              onChange={e => { setMaMatchId(e.target.value); setMaRoleMap({}); setMaRotation(1); }}
+              onChange={e => { setMaMatchId(e.target.value); setMaRoleMap({}); setMaAmendments({}); setMaRotation(1); }}
               className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm"
               data-testid="select-ma-match"
             >
               <option value="">— Choose a saved match —</option>
-              {(allMatches as any[]).map((m: any) => (
-                <option key={m.id} value={m.id}>
-                  vs {m.opponent || "Unknown"} · {m.startTime ? new Date(m.startTime).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" }) : (m.matchDate ? new Date(m.matchDate).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" }) : "?")} · {m.teamName || m.teamId || ""}
-                </option>
-              ))}
+              {(allMatches as any[]).map((m: any) => {
+                const teamName = (teams as any[]).find((t: any) => t.id === m.teamId)?.name || m.teamId || "";
+                const dateStr = m.startTime
+                  ? new Date(m.startTime).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })
+                  : m.matchDate
+                    ? new Date(m.matchDate + "T00:00:00").toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })
+                    : "Unknown date";
+                return (
+                  <option key={m.id} value={m.id}>
+                    {teamName} vs {m.opponent || "Unknown"} · {dateStr} · {m.competition || ""}
+                  </option>
+                );
+              })}
             </select>
+            {maMatchId && selectedMatch && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-afrocat-muted">
+                <span className="px-2 py-0.5 rounded-full bg-afrocat-white-5 border border-afrocat-border">
+                  {(teams as any[]).find((t: any) => t.id === maTeamId)?.name || "Unknown team"}
+                </span>
+                <span>vs</span>
+                <span className="text-afrocat-text font-bold">{(selectedMatch as any).opponent}</span>
+                <span>·</span>
+                <span>{(selectedMatch as any).venue || ""}</span>
+              </div>
+            )}
           </div>
 
           {maMatchId && (

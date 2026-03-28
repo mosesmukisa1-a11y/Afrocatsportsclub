@@ -3450,7 +3450,28 @@ th{background:#0d7377;color:white}
       const squad = await storage.getMatchSquad(req.params.matchId, req.params.teamId);
       if (!squad) return res.json({ squad: null, entries: [] });
       const entries = await storage.getMatchSquadEntries(squad.id);
-      res.json({ squad, entries });
+      // Enrich each entry with full player details (match-specific overrides take priority)
+      const enriched = await Promise.all(entries.map(async (e) => {
+        const p = await storage.getPlayer(e.playerId);
+        return {
+          ...e,
+          player: p ? {
+            id: p.id,
+            firstName: p.firstName,
+            lastName: p.lastName,
+            fullName: p.fullName || [p.firstName, p.lastName].filter(Boolean).join(" "),
+            position: p.position,
+            jerseyNo: p.jerseyNo,
+            photoUrl: p.photoUrl,
+            gender: p.gender,
+          } : null,
+          // Effective values: entry overrides player defaults
+          effectiveJerseyNo: e.jerseyNo ?? (p?.jerseyNo ?? null),
+          effectivePosition: e.matchPosition || p?.position || "",
+          displayName: p ? [p.firstName, p.lastName].filter(Boolean).join(" ") || p.fullName || "Unknown" : "Unknown",
+        };
+      }));
+      res.json({ squad, entries: enriched });
     } catch (e) { next(e); }
   });
 
