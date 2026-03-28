@@ -5732,9 +5732,36 @@ th{background:#0d7377;color:white}
       const match = await storage.getMatch(matchId);
       if (!match) return res.status(404).json({ error: "Match not found" });
       const events = await storage.getMatchEvents(matchId);
-      const team = await db.select().from(schema.teams).where(eq(schema.teams.id, (match as any).teamId)).then(r => r[0]);
+      const teamId = (match as any).teamId;
+      const team = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).then(r => r[0]);
+
+      // Build playerMap from base players table
       const allPlayers = await db.select().from(schema.players);
-      const playerMap = Object.fromEntries(allPlayers.map((p: any) => [p.id, p]));
+      const playerMap: Record<string, any> = Object.fromEntries(allPlayers.map((p: any) => [p.id, { ...p }]));
+
+      // For tournament teams: overlay roster-specific jerseyNo and position from tournamentRosters
+      if (team?.isTournament) {
+        const rosters = await db.select().from(schema.tournamentRosters)
+          .where(eq(schema.tournamentRosters.tournamentTeamId, teamId));
+        for (const r of rosters) {
+          if (playerMap[r.playerId]) {
+            if (r.jerseyNo != null) playerMap[r.playerId].jerseyNo = r.jerseyNo;
+            if (r.position) playerMap[r.playerId].position = r.position;
+          }
+        }
+      }
+
+      // Further enrich with match squad entries (jerseyNo/position set at squad save time — most accurate)
+      const squad = await storage.getMatchSquad(matchId, teamId);
+      if (squad) {
+        const squadEntries = await storage.getMatchSquadEntries(squad.id);
+        for (const e of squadEntries) {
+          if (playerMap[e.playerId]) {
+            if ((e as any).jerseyNo != null) playerMap[e.playerId].jerseyNo = (e as any).jerseyNo;
+            if ((e as any).matchPosition) playerMap[e.playerId].position = (e as any).matchPosition;
+          }
+        }
+      }
 
       // Per-player stats aggregation from events
       const stats: Record<string, any> = {};
