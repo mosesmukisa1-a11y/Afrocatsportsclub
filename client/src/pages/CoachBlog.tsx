@@ -690,6 +690,7 @@ function TacticBoardSection() {
 
   // ── Match Analysis state ──
   const [maMatchId, setMaMatchId] = useState("");
+  const [maTeamIdDirect, setMaTeamIdDirect] = useState(""); // direct team picker (no match required)
   const [maRoleMap, setMaRoleMap] = useState<Record<string, string>>({});
   const [maAmendments, setMaAmendments] = useState<Record<string, { jerseyNo?: string; position?: string }>>({});
   const [maRotation, setMaRotation] = useState(1);
@@ -702,6 +703,8 @@ function TacticBoardSection() {
 
   const selectedMatch = useMemo(() => (allMatches as any[]).find((m: any) => m.id === maMatchId), [allMatches, maMatchId]);
   const maTeamId: string = (selectedMatch as any)?.teamId || "";
+  // Effective team: direct picker takes priority over match-derived team
+  const effectiveTeamId = maTeamIdDirect || maTeamId;
 
   // ── Live match data (polls every 10s during match analysis) ──
   const { data: maLiveMatch } = useQuery({
@@ -781,26 +784,59 @@ function TacticBoardSection() {
     enabled: !!(maMatchId && maTeamId),
   });
 
-  // Squad players — now fully enriched from the server (player names, jerseys, positions)
+  // Team roster fallback — loads the full team player list so the board works even without a saved squad
+  const { data: teamRosterRaw = [], isLoading: rosterLoading } = useQuery({
+    queryKey: ["/api/players/team", effectiveTeamId],
+    queryFn: () => api.getPlayersByTeam(effectiveTeamId),
+    enabled: !!effectiveTeamId,
+  });
+
+  const hasSquadEntries = !!((squadData as any)?.entries?.length);
+
+  // Squad players — uses saved squad entries when available, falls back to full team roster
   const squadPlayers = useMemo(() => {
     const entries: any[] = (squadData as any)?.entries || [];
-    return entries
-      .map((e: any) => ({
-        ...e,
-        // Prefer entry-level jersey/position (match-specific) over player defaults
-        name: e.displayName || (e.player ? [e.player.firstName, e.player.lastName].filter(Boolean).join(" ") || e.player.fullName || "?" : "?"),
-        resolvedJersey: e.effectiveJerseyNo ?? e.player?.jerseyNo ?? null,
-        resolvedPosition: e.effectivePosition || e.player?.position || "",
-      }))
+    if (entries.length > 0) {
+      // Saved squad: use enriched entry data
+      return entries
+        .map((e: any) => ({
+          ...e,
+          name: e.displayName || (e.player ? [e.player.firstName, e.player.lastName].filter(Boolean).join(" ") || e.player.fullName || "?" : "?"),
+          resolvedJersey: e.effectiveJerseyNo ?? e.player?.jerseyNo ?? null,
+          resolvedPosition: e.effectivePosition || e.player?.position || "",
+        }))
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
+    }
+    // No squad saved — fall back to the full team roster
+    return (teamRosterRaw as any[])
+      .filter((p: any) => ["ACTIVE", ""].includes(p.status || "ACTIVE"))
+      .map((p: any) => {
+        const fullName = p.fullName || [p.firstName, p.lastName].filter(Boolean).join(" ") || "?";
+        return {
+          playerId: p.id,
+          player: {
+            id: p.id, firstName: p.firstName, lastName: p.lastName,
+            fullName, position: p.position, jerseyNo: p.jerseyNo, photoUrl: p.photoUrl,
+          },
+          effectiveJerseyNo: p.jerseyNo,
+          effectivePosition: p.position || "",
+          displayName: fullName,
+          name: fullName,
+          resolvedJersey: p.jerseyNo,
+          resolvedPosition: p.position || "",
+          isLibero: (p.position || "").toUpperCase() === "LIBERO",
+          isCaptain: false,
+        };
+      })
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
-  }, [squadData]);
+  }, [squadData, teamRosterRaw]);
 
-  // Auto-assign roles from squad positions when a match is selected
+  // Auto-assign roles from squad positions/roster when a match or team is selected
   useEffect(() => {
     if (!squadPlayers.length) return;
     const map: Record<string, string> = {};
     for (const sp of squadPlayers) {
-      const pos = sp.resolvedPosition.toUpperCase();
+      const pos = (sp.resolvedPosition || "").toUpperCase();
       if (pos === "SETTER" && !map["S"])               { map["S"]   = sp.playerId; }
       else if (sp.isLibero && !map["L"])                { map["L"]   = sp.playerId; }
       else if (pos === "OPPOSITE" && !map["OP"])        { map["OP"]  = sp.playerId; }
@@ -821,7 +857,7 @@ function TacticBoardSection() {
     setMaRoleMap(map);
     setMaAmendments({});
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maMatchId, squadPlayers.length]);
+  }, [maMatchId, effectiveTeamId, squadPlayers.length]);
 
   // Helper: get effective jersey/position for a player (amendment → entry override → player default)
   function getMaEffective(playerId: string) {
@@ -1107,49 +1143,97 @@ function TacticBoardSection() {
       {/* ── MATCH ANALYSIS MODE ── */}
       {boardMode === "match" && (
         <div className="space-y-4">
-          {/* Match selector */}
-          <div className="afrocat-card p-4">
-            <div className="flex items-center gap-2 mb-3">
+          {/* Team + Match selectors */}
+          <div className="afrocat-card p-4 space-y-3">
+            <div className="flex items-center gap-2 mb-1">
               <Target className="h-4 w-4 text-afrocat-gold" />
-              <span className="text-sm font-bold text-afrocat-text">Select Match for Rotation Analysis</span>
+              <span className="text-sm font-bold text-afrocat-text">Rotation Analysis Setup</span>
             </div>
-            <select
-              value={maMatchId}
-              onChange={e => { setMaMatchId(e.target.value); setMaRoleMap({}); setMaAmendments({}); setMaRotation(1); }}
-              className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm"
-              data-testid="select-ma-match"
-            >
-              <option value="">— Choose a saved match —</option>
-              {(allMatches as any[]).map((m: any) => {
-                const teamName = (teams as any[]).find((t: any) => t.id === m.teamId)?.name || m.teamId || "";
-                const dateStr = m.startTime
-                  ? new Date(m.startTime).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })
-                  : m.matchDate
-                    ? new Date(m.matchDate + "T00:00:00").toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })
-                    : "Unknown date";
-                return (
-                  <option key={m.id} value={m.id}>
-                    {teamName} vs {m.opponent || "Unknown"} · {dateStr} · {m.competition || ""}
-                  </option>
-                );
-              })}
-            </select>
-            {maMatchId && selectedMatch && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-afrocat-muted">
-                <span className="px-2 py-0.5 rounded-full bg-afrocat-white-5 border border-afrocat-border">
-                  {(teams as any[]).find((t: any) => t.id === maTeamId)?.name || "Unknown team"}
+
+            {/* Direct team picker — works without a match */}
+            <div>
+              <label className="block text-xs text-afrocat-muted mb-1 font-semibold uppercase tracking-wide">Team (required)</label>
+              <select
+                value={maTeamIdDirect}
+                onChange={e => {
+                  setMaTeamIdDirect(e.target.value);
+                  setMaMatchId("");
+                  setMaRoleMap({});
+                  setMaAmendments({});
+                  setMaRotation(1);
+                }}
+                className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm"
+                data-testid="select-ma-team-direct"
+              >
+                <option value="">— Select a team to load players —</option>
+                {(teams as any[]).map((t: any) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Optional match picker — narrows to saved squad + enables live scoreboard */}
+            <div>
+              <label className="block text-xs text-afrocat-muted mb-1 font-semibold uppercase tracking-wide">
+                Match (optional — links live scoreboard &amp; squad)
+              </label>
+              <select
+                value={maMatchId}
+                onChange={e => {
+                  const m = (allMatches as any[]).find((x: any) => x.id === e.target.value);
+                  setMaMatchId(e.target.value);
+                  if (m?.teamId) setMaTeamIdDirect("");   // let match drive the team
+                  setMaRoleMap({});
+                  setMaAmendments({});
+                  setMaRotation(1);
+                }}
+                className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm"
+                data-testid="select-ma-match"
+              >
+                <option value="">— Choose a saved match (optional) —</option>
+                {(allMatches as any[]).map((m: any) => {
+                  const teamName = (teams as any[]).find((t: any) => t.id === m.teamId)?.name || "";
+                  const dateStr = m.startTime
+                    ? new Date(m.startTime).toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })
+                    : m.matchDate
+                      ? new Date(m.matchDate + "T00:00:00").toLocaleDateString([], { day:"numeric", month:"short", year:"numeric" })
+                      : "Unknown date";
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {teamName} vs {m.opponent || "Unknown"} · {dateStr} · {m.competition || ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Status pills */}
+            {effectiveTeamId && (
+              <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
+                <span className="px-2 py-0.5 rounded-full bg-afrocat-teal/20 border border-afrocat-teal/40 text-afrocat-teal font-bold">
+                  {(teams as any[]).find((t: any) => t.id === effectiveTeamId)?.name || "Team"}
                 </span>
-                <span>vs</span>
-                <span className="text-afrocat-text font-bold">{(selectedMatch as any).opponent}</span>
-                <span>·</span>
-                <span>{(selectedMatch as any).venue || ""}</span>
+                {maMatchId && selectedMatch && (
+                  <>
+                    <span className="text-afrocat-muted">vs</span>
+                    <span className="text-afrocat-text font-bold">{(selectedMatch as any).opponent}</span>
+                    {(selectedMatch as any).venue && <><span className="text-afrocat-muted">·</span><span className="text-afrocat-muted">{(selectedMatch as any).venue}</span></>}
+                  </>
+                )}
+                {(rosterLoading || squadLoading) && <span className="text-afrocat-muted italic">Loading players…</span>}
+                {!rosterLoading && !squadLoading && squadPlayers.length > 0 && (
+                  <span className={`px-2 py-0.5 rounded-full border font-bold ${hasSquadEntries ? "bg-green-500/10 border-green-500/40 text-green-400" : "bg-afrocat-gold/10 border-afrocat-gold/40 text-afrocat-gold"}`}>
+                    {hasSquadEntries ? `${squadPlayers.length} players (saved squad)` : `${squadPlayers.length} players (team roster)`}
+                  </span>
+                )}
               </div>
             )}
           </div>
 
-          {maMatchId && (
+          {effectiveTeamId && (
             <>
-              {/* ── LIVE COMMAND CENTER ── */}
+              {/* ── LIVE COMMAND CENTER — only when a match is linked ── */}
+              {maMatchId && (
               <div className="afrocat-card p-4 border border-afrocat-teal/30 bg-afrocat-teal/5">
                 <div className="flex items-center gap-2 mb-3">
                   <RefreshCw className="h-4 w-4 text-afrocat-teal" />
@@ -1218,6 +1302,7 @@ function TacticBoardSection() {
                   </button>
                 </div>
               </div>
+              )}
 
               {/* Role Assignment */}
               <div className="afrocat-card p-4">
@@ -1225,7 +1310,7 @@ function TacticBoardSection() {
                   <RotateCcw className="h-4 w-4 text-purple-400" />
                   <span className="text-sm font-bold text-afrocat-text">Assign Players to 5-1 Positions</span>
                   {!squadPlayers.length && (
-                    <span className="text-xs text-afrocat-gold ml-auto">⚠ No squad saved for this match yet</span>
+                    <span className="text-xs text-afrocat-muted ml-auto italic text-xs">Loading team players…</span>
                   )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
