@@ -55,7 +55,7 @@ function timeAgo(dateStr: string) {
 }
 
 // ─── COURT CONSTANTS ──────────────────────────────────────────────────────────
-const CW = 600, CH = 400, NET = 298, PR = 17;
+const CW = 600, CH = 400, NET = 298, PR = 24;
 const OF = 248, OM = 150, OB = 55;   // Our x: front / 3m / back
 const PF = 352, PB = 545;            // Opponent x: front / back
 const YT = 72, YM = 200, YB = 328;  // Y: top / mid / bottom
@@ -487,125 +487,189 @@ const DEFAULT_POSITIONS = [
 
 // ─── LIVE TACTICS COURT SVG ────────────────────────────────────────────────────
 function LiveCourtSVG({ players, arrows }: { players: LP[]; arrows: LA[] }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  // Dragged positions override — reset whenever the players prop changes (new tactic selected)
+  const [dragPos, setDragPos] = useState<Record<string, {x:number; y:number}>>({});
+  const dragRef = useRef<{id:string; ox:number; oy:number; px:number; py:number} | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  useEffect(() => { setDragPos({}); setActiveId(null); }, [players]);
+
+  function toSVG(e: React.PointerEvent): {x:number; y:number} {
+    const svg = svgRef.current;
+    if (!svg) return {x:0, y:0};
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX; pt.y = e.clientY;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return {x:0, y:0};
+    const s = pt.matrixTransform(ctm.inverse());
+    return {x: s.x, y: s.y};
+  }
+
+  function onPlayerDown(e: React.PointerEvent, id: string, curX: number, curY: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    const {x, y} = toSVG(e);
+    dragRef.current = {id, ox: x, oy: y, px: curX, py: curY};
+    setActiveId(id);
+    (e.currentTarget as SVGElement).setPointerCapture(e.pointerId);
+  }
+
+  function onSVGMove(e: React.PointerEvent) {
+    if (!dragRef.current) return;
+    const {x, y} = toSVG(e);
+    const dx = x - dragRef.current.ox;
+    const dy = y - dragRef.current.oy;
+    const nx = Math.max(PR + 2, Math.min(CW - PR - 2, dragRef.current.px + dx));
+    const ny = Math.max(PR + 2, Math.min(CH - PR - 2, dragRef.current.py + dy));
+    setDragPos(prev => ({...prev, [dragRef.current!.id]: {x: nx, y: ny}}));
+  }
+
+  function onSVGUp() { dragRef.current = null; setActiveId(null); }
+
+  const hasDragged = Object.keys(dragPos).length > 0;
+
   return (
-    <svg viewBox={`0 0 ${CW} ${CH}`} className="w-full" style={{ touchAction: "none" }}>
-      <defs>
-        <marker id="arr-main" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="#facc15" />
-        </marker>
-        <marker id="arr-s" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill={SC} />
-        </marker>
-        <marker id="arr-oh" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill={OHC} />
-        </marker>
-        <marker id="arr-mb" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill={MBC} />
-        </marker>
-        <marker id="arr-opp" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill={OPPC} />
-        </marker>
-        <marker id="arr-gold" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
-          <polygon points="0 0, 8 3, 0 6" fill="#facc15" />
-        </marker>
-      </defs>
+    <div className="relative">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${CW} ${CH}`}
+        className="w-full rounded-lg"
+        style={{ touchAction: "none", cursor: activeId ? "grabbing" : "default" }}
+        onPointerMove={onSVGMove}
+        onPointerUp={onSVGUp}
+        onPointerLeave={onSVGUp}
+      >
+        <defs>
+          <marker id="arr-main" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#facc15" />
+          </marker>
+          <marker id="arr-s" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill={SC} />
+          </marker>
+          <marker id="arr-oh" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill={OHC} />
+          </marker>
+          <marker id="arr-mb" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill={MBC} />
+          </marker>
+          <marker id="arr-opp" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill={OPPC} />
+          </marker>
+          <marker id="arr-gold" markerWidth={8} markerHeight={6} refX={7} refY={3} orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#facc15" />
+          </marker>
+        </defs>
 
-      {/* Court background */}
-      <rect width={CW} height={CH} fill="#0d2218" />
+        {/* Court background */}
+        <rect width={CW} height={CH} fill="#0d2218" />
 
-      {/* Our half */}
-      <rect x={8} y={8} width={NET-12} height={CH-16} fill="#0f2e1c" stroke="#22c55e" strokeWidth={1.5} strokeOpacity={0.45} rx={4} />
-      {/* Opponent half */}
-      <rect x={NET+4} y={8} width={CW-NET-12} height={CH-16} fill="#1a1210" stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.35} rx={4} />
+        {/* Our half */}
+        <rect x={8} y={8} width={NET-12} height={CH-16} fill="#0f2e1c" stroke="#22c55e" strokeWidth={1.5} strokeOpacity={0.45} rx={4} />
+        {/* Opponent half */}
+        <rect x={NET+4} y={8} width={CW-NET-12} height={CH-16} fill="#1a1210" stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.35} rx={4} />
 
-      {/* 3m attack lines */}
-      <line x1={OM} y1={10} x2={OM} y2={CH-10} stroke="#22c55e" strokeWidth={1} strokeOpacity={0.3} strokeDasharray="6,4" />
-      <line x1={CW-OM} y1={10} x2={CW-OM} y2={CH-10} stroke="#ef4444" strokeWidth={1} strokeOpacity={0.25} strokeDasharray="6,4" />
+        {/* 3m attack lines */}
+        <line x1={OM} y1={10} x2={OM} y2={CH-10} stroke="#22c55e" strokeWidth={1} strokeOpacity={0.3} strokeDasharray="6,4" />
+        <line x1={CW-OM} y1={10} x2={CW-OM} y2={CH-10} stroke="#ef4444" strokeWidth={1} strokeOpacity={0.25} strokeDasharray="6,4" />
 
-      {/* Net */}
-      <rect x={NET-3} y={4} width={6} height={CH-8} fill="#6b7280" rx={2} />
-      <line x1={NET} y1={4} x2={NET} y2={CH-4} stroke="#d1d5db" strokeWidth={1.5} strokeOpacity={0.7} />
-      {/* Net posts */}
-      <circle cx={NET} cy={6} r={4} fill="#9ca3af" />
-      <circle cx={NET} cy={CH-6} r={4} fill="#9ca3af" />
+        {/* Net */}
+        <rect x={NET-3} y={4} width={6} height={CH-8} fill="#6b7280" rx={2} />
+        <line x1={NET} y1={4} x2={NET} y2={CH-4} stroke="#d1d5db" strokeWidth={1.5} strokeOpacity={0.7} />
+        {/* Net posts */}
+        <circle cx={NET} cy={6} r={4} fill="#9ca3af" />
+        <circle cx={NET} cy={CH-6} r={4} fill="#9ca3af" />
 
-      {/* Zone numbers (our half, small) */}
-      {([1,2,3,4,5,6] as const).map(z => (
-        <text key={z} x={Z[z].x} y={z<=3?Z[z].y+38:Z[z].y-24} textAnchor="middle"
-          fill="#4ade80" fontSize={9} opacity={0.35} fontWeight="bold">Z{z}</text>
-      ))}
+        {/* Zone numbers */}
+        {([1,2,3,4,5,6] as const).map(z => (
+          <text key={z} x={Z[z].x} y={z<=3?Z[z].y+44:Z[z].y-30} textAnchor="middle"
+            fill="#4ade80" fontSize={9} opacity={0.3} fontWeight="bold">Z{z}</text>
+        ))}
 
-      {/* Labels */}
-      <text x={60} y={CH/2} textAnchor="middle" fill="#22c55e" fontSize={10} fontWeight="bold" opacity={0.5}
-        transform={`rotate(-90 60 ${CH/2})`}>OUR TEAM</text>
-      <text x={CW-30} y={CH/2} textAnchor="middle" fill="#ef4444" fontSize={10} fontWeight="bold" opacity={0.4}
-        transform={`rotate(90 ${CW-30} ${CH/2})`}>OPPONENTS</text>
+        {/* Court labels */}
+        <text x={60} y={CH/2} textAnchor="middle" fill="#22c55e" fontSize={10} fontWeight="bold" opacity={0.5}
+          transform={`rotate(-90 60 ${CH/2})`}>OUR TEAM</text>
+        <text x={CW-30} y={CH/2} textAnchor="middle" fill="#ef4444" fontSize={10} fontWeight="bold" opacity={0.4}
+          transform={`rotate(90 ${CW-30} ${CH/2})`}>OPPONENTS</text>
 
-      {/* Arrows */}
-      {arrows.map((a, i) => {
-        const arrowColor = a.color;
-        const markerId = a.color === SC ? "arr-s" : a.color === OHC ? "arr-oh" : a.color === MBC ? "arr-mb" : a.color === OPPC ? "arr-opp" : "arr-gold";
-        return (
-          <g key={`a${i}`}>
-            <line
-              x1={a.x1} y1={a.y1} x2={a.x2} y2={a.y2}
-              stroke={arrowColor} strokeWidth={a.dashed ? 1.5 : 2}
-              strokeDasharray={a.dashed ? "5,4" : undefined}
-              markerEnd={`url(#${markerId})`}
-              opacity={0.85}
-            />
-            {a.label && (
-              <text
-                x={(a.x1+a.x2)/2} y={(a.y1+a.y2)/2 - 6}
-                textAnchor="middle" fill={arrowColor} fontSize={8} fontWeight="bold" opacity={0.9}
-              >{a.label}</text>
-            )}
-          </g>
-        );
-      })}
+        {/* Arrows */}
+        {arrows.map((a, i) => {
+          const markerId = a.color === SC ? "arr-s" : a.color === OHC ? "arr-oh" : a.color === MBC ? "arr-mb" : a.color === OPPC ? "arr-opp" : "arr-gold";
+          return (
+            <g key={`a${i}`}>
+              <line x1={a.x1} y1={a.y1} x2={a.x2} y2={a.y2}
+                stroke={a.color} strokeWidth={a.dashed ? 1.5 : 2}
+                strokeDasharray={a.dashed ? "5,4" : undefined}
+                markerEnd={`url(#${markerId})`} opacity={0.85} />
+              {a.label && (
+                <text x={(a.x1+a.x2)/2} y={(a.y1+a.y2)/2 - 6}
+                  textAnchor="middle" fill={a.color} fontSize={8} fontWeight="bold" opacity={0.9}
+                >{a.label}</text>
+              )}
+            </g>
+          );
+        })}
 
-      {/* Players */}
-      {players.map((p) => {
-        const hasPhoto = !!p.photoUrl;
-        return (
-          <g key={p.id} style={{ transition: "transform 0.55s cubic-bezier(0.34,1.56,0.64,1)", transform: `translate(${p.x}px,${p.y}px)` }}>
-            {hasPhoto ? (
-              <>
-                {/* Colored base ring behind photo */}
-                <circle cx={0} cy={0} r={PR+1.5} fill={p.color} opacity={0.9} />
-                {/* Player profile photo clipped to circle via CSS */}
-                <image
-                  href={p.photoUrl}
-                  x={-PR} y={-PR}
-                  width={PR*2} height={PR*2}
-                  preserveAspectRatio="xMidYMid slice"
-                  style={{ clipPath: `circle(${PR}px at center)` }}
-                />
-                {/* Colored border ring on top */}
-                <circle cx={0} cy={0} r={PR} fill="none" stroke={p.color} strokeWidth={2.5} opacity={0.95} />
-                {/* White outer ring */}
-                <circle cx={0} cy={0} r={PR+1.5} fill="none" stroke="#fff" strokeWidth={1} opacity={0.6} />
-                {/* Label (jersey + serve star) below the photo */}
-                <text x={0} y={PR+9} textAnchor="middle" fill={p.color} fontSize={7} fontWeight="bold" opacity={0.98}
-                  style={{ filter: "drop-shadow(0 0 3px #000)" }}>{p.label}</text>
-                {/* Player name below label */}
-                {p.sublabel && <text x={0} y={PR+17} textAnchor="middle" fill="#fff" fontSize={6} opacity={0.85}
-                  style={{ filter: "drop-shadow(0 0 2px #000)" }}>{p.sublabel}</text>}
-              </>
-            ) : (
-              <>
-                <circle cx={0} cy={0} r={PR} fill={p.color} stroke={p.isOpp ? "#fca5a5" : "#fff"} strokeWidth={p.isOpp ? 1.5 : 2} opacity={0.92} />
-                {p.isOpp && <circle cx={0} cy={0} r={PR+3} fill="none" stroke={OPPC} strokeWidth={1} opacity={0.4} strokeDasharray="3,2" />}
-                <text x={0} y={p.sublabel ? 2 : 4} textAnchor="middle" fill="white" fontSize={p.sublabel ? 8 : 9} fontWeight="bold">{p.label}</text>
-                {p.sublabel && <text x={0} y={10} textAnchor="middle" fill="white" fontSize={6.5} opacity={0.85}>{p.sublabel}</text>}
-                {p.sublabel && <text x={0} y={PR+9} textAnchor="middle" fill={p.color} fontSize={7} fontWeight="bold" opacity={0.95}
-                  style={{ filter: "drop-shadow(0 0 2px #000)" }}>{p.sublabel}</text>}
-              </>
-            )}
-          </g>
-        );
-      })}
-    </svg>
+        {/* Players — draggable */}
+        {players.map((p) => {
+          const pos = dragPos[p.id] || {x: p.x, y: p.y};
+          const isDragging = activeId === p.id;
+          const hasPhoto = !!p.photoUrl;
+          return (
+            <g
+              key={p.id}
+              style={{
+                transform: `translate(${pos.x}px,${pos.y}px)`,
+                transition: isDragging ? "none" : "transform 0.55s cubic-bezier(0.34,1.56,0.64,1)",
+                cursor: isDragging ? "grabbing" : "grab",
+                filter: isDragging ? "drop-shadow(0 0 8px rgba(255,255,255,0.6))" : "none",
+              }}
+              onPointerDown={e => onPlayerDown(e, p.id, pos.x, pos.y)}
+            >
+              {hasPhoto ? (
+                <>
+                  <circle cx={0} cy={0} r={PR+2} fill={p.color} opacity={0.9} />
+                  <image
+                    href={p.photoUrl}
+                    x={-PR} y={-PR}
+                    width={PR*2} height={PR*2}
+                    preserveAspectRatio="xMidYMid slice"
+                    style={{ clipPath: `circle(${PR}px at center)` }}
+                  />
+                  <circle cx={0} cy={0} r={PR} fill="none" stroke={p.color} strokeWidth={2.5} opacity={0.95} />
+                  <circle cx={0} cy={0} r={PR+2} fill="none" stroke="#fff" strokeWidth={isDragging ? 2 : 1} opacity={isDragging ? 0.9 : 0.6} />
+                  <text x={0} y={PR+10} textAnchor="middle" fill={p.color} fontSize={8} fontWeight="bold" opacity={0.98}
+                    style={{ filter: "drop-shadow(0 0 3px #000)" }}>{p.label}</text>
+                  {p.sublabel && <text x={0} y={PR+19} textAnchor="middle" fill="#fff" fontSize={7} opacity={0.85}
+                    style={{ filter: "drop-shadow(0 0 2px #000)" }}>{p.sublabel}</text>}
+                </>
+              ) : (
+                <>
+                  <circle cx={0} cy={0} r={PR} fill={p.color} stroke={isDragging ? "#fff" : p.isOpp ? "#fca5a5" : "#fff"}
+                    strokeWidth={isDragging ? 2.5 : p.isOpp ? 1.5 : 2} opacity={0.92} />
+                  {p.isOpp && <circle cx={0} cy={0} r={PR+4} fill="none" stroke={OPPC} strokeWidth={1} opacity={0.4} strokeDasharray="3,2" />}
+                  <text x={0} y={p.sublabel ? 1 : 5} textAnchor="middle" fill="white" fontSize={p.sublabel ? 9 : 10} fontWeight="bold">{p.label}</text>
+                  {p.sublabel && <text x={0} y={11} textAnchor="middle" fill="white" fontSize={7} opacity={0.85}>{p.sublabel}</text>}
+                  {p.sublabel && <text x={0} y={PR+11} textAnchor="middle" fill={p.color} fontSize={8} fontWeight="bold" opacity={0.95}
+                    style={{ filter: "drop-shadow(0 0 2px #000)" }}>{p.sublabel}</text>}
+                </>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Reset button — appears once any player has been moved */}
+      {hasDragged && (
+        <button
+          onClick={() => { setDragPos({}); setActiveId(null); }}
+          className="absolute bottom-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/70 border border-white/20 text-white text-xs font-bold hover:bg-black/90 transition-colors cursor-pointer"
+          style={{ backdropFilter: "blur(4px)" }}
+        >
+          ↺ Reset Positions
+        </button>
+      )}
+    </div>
   );
 }
 
