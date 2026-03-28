@@ -65,14 +65,51 @@ export async function generateO2BISPdf(storage: IStorage, options: O2BISOptions)
   const squad = await storage.getMatchSquad(matchId, teamId);
   if (squad) {
     const entries = await storage.getMatchSquadEntries(squad.id);
-    let allPlayers = await storage.getPlayersByTeam(teamId);
-    if (allPlayers.length === 0) {
+
+    // Build a player map that correctly handles tournament teams
+    // For tournament teams, players live in tournamentRosters (not players.teamId)
+    // so we must join through that table to get roster-specific jersey/position overrides
+    const teamRow = await db.select().from(schema.teams).where(eq(schema.teams.id, teamId)).then(r => r[0]);
+    let playerMap: Map<string, any> = new Map();
+
+    if (teamRow?.isTournament) {
+      // Load all base player records
       const allPs = await db.select().from(schema.players);
-      allPlayers = allPs.filter((p: any) => entries.some((e: any) => e.playerId === p.id)) as any;
+      const baseMap = Object.fromEntries(allPs.map((p: any) => [p.id, p]));
+      // Load tournament roster for this team
+      const rosters = await db.select().from(schema.tournamentRosters)
+        .where(eq(schema.tournamentRosters.tournamentTeamId, teamId));
+      // Build enriched player map: roster jersey/position override base player data
+      for (const r of rosters) {
+        const base = baseMap[r.playerId];
+        if (!base) continue;
+        playerMap.set(r.playerId, {
+          ...base,
+          jerseyNo: r.jerseyNo ?? base.jerseyNo,
+          position: r.position || base.position,
+        });
+      }
+      // Also include any entry playerIds not in roster (fallback to base player)
+      for (const e of entries) {
+        if (!playerMap.has(e.playerId) && baseMap[e.playerId]) {
+          playerMap.set(e.playerId, baseMap[e.playerId]);
+        }
+      }
+    } else {
+      // Standard team: load players directly
+      let allPlayers = await storage.getPlayersByTeam(teamId);
+      if (allPlayers.length === 0) {
+        // Last-resort fallback: load by matching entry playerIds
+        const allPs = await db.select().from(schema.players);
+        allPlayers = allPs.filter((p: any) => entries.some((e: any) => e.playerId === p.id)) as any;
+      }
+      for (const p of allPlayers) playerMap.set(p.id, p);
     }
+
     players = entries.map((e: any) => {
-      const p = allPlayers.find((pl: any) => pl.id === e.playerId);
+      const p = playerMap.get(e.playerId);
       return p ? {
+        // Squad entry jersey overrides roster/player default (coach may have set it at squad time)
         jerseyNo: e.jerseyNo ?? p.jerseyNo ?? "",
         name: `${(p.lastName || "").toUpperCase()} ${p.firstName || ""}`.trim(),
         position: e.matchPosition || p.position || "",
