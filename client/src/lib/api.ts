@@ -292,6 +292,7 @@ export const api = {
 
   getTouchStatsInit: (matchId: string, teamId: string) => apiFetch<any>(`/matches/${matchId}/stats-touch/init?teamId=${teamId}`),
   syncTouchStats: (matchId: string) => apiFetch<any>(`/matches/${matchId}/stats-touch/sync`, { method: "POST" }),
+  getMatchById: (matchId: string) => apiFetch<any>(`/matches/${matchId}`),
   getMatchEvents: (matchId: string) => apiFetch<any[]>(`/matches/${matchId}/events`),
   createMatchEvent: (matchId: string, data: any) =>
     apiFetch<any>(`/matches/${matchId}/events`, { method: "POST", body: JSON.stringify(data) }),

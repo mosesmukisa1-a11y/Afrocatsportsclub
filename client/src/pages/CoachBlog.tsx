@@ -659,12 +659,87 @@ function TacticBoardSection() {
   const [maRoleMap, setMaRoleMap] = useState<Record<string, string>>({});
   const [maAmendments, setMaAmendments] = useState<Record<string, { jerseyNo?: string; position?: string }>>({});
   const [maRotation, setMaRotation] = useState(1);
+  const [maCoachingNotes, setMaCoachingNotes] = useState("");
+  const [maBestOf, setMaBestOf] = useState<3 | 5>(5);
+  const [maFormatSaving, setMaFormatSaving] = useState(false);
   const maCourtRef = useRef<HTMLDivElement>(null);
 
   const { data: allMatches = [] } = useQuery({ queryKey: ["/api/matches"], queryFn: api.getMatches });
 
   const selectedMatch = useMemo(() => (allMatches as any[]).find((m: any) => m.id === maMatchId), [allMatches, maMatchId]);
   const maTeamId: string = (selectedMatch as any)?.teamId || "";
+
+  // ── Live match data (polls every 10s during match analysis) ──
+  const { data: maLiveMatch } = useQuery({
+    queryKey: ["/api/match-live", maMatchId],
+    queryFn: () => api.getMatchById(maMatchId),
+    enabled: !!maMatchId,
+    refetchInterval: 10000,
+  });
+
+  // ── Live events (polls every 10s, used to compute per-player stats) ──
+  const { data: maLiveEvents = [] } = useQuery({
+    queryKey: ["/api/match-events-live", maMatchId],
+    queryFn: () => api.getMatchEvents(maMatchId),
+    enabled: !!maMatchId,
+    refetchInterval: 10000,
+  });
+
+  // Sync maBestOf from live match data
+  useEffect(() => {
+    const bo = (maLiveMatch as any)?.bestOf;
+    if (bo === 3 || bo === 5) setMaBestOf(bo);
+  }, [maLiveMatch]);
+
+  // ── Format mutation ──
+  const formatMutation = useMutation({
+    mutationFn: (bo: 3 | 5) => api.setMatchFormat(maMatchId, bo),
+    onMutate: () => setMaFormatSaving(true),
+    onSettled: () => setMaFormatSaving(false),
+    onSuccess: (data: any) => {
+      if (data?.bestOf) setMaBestOf(data.bestOf);
+      toast({ title: `Format set to Best of ${data?.bestOf}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/match-live", maMatchId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+    },
+    onError: (err: any) => toast({ title: "Cannot change format", description: err?.message || "Scoring may have already started", variant: "destructive" }),
+  });
+
+  // ── Per-player live stats computed from events ──
+  const maLiveStats = useMemo(() => {
+    const map: Record<string, { kills: number; aces: number; blocks: number; digs: number; assists: number; errors: number; pts: number; touches: number }> = {};
+    for (const ev of (maLiveEvents as any[])) {
+      const pid = ev.playerId;
+      if (!map[pid]) map[pid] = { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0, errors: 0, pts: 0, touches: 0 };
+      const s = map[pid];
+      const od = ev.outcomeDetail || "";
+      s.touches++;
+      if (ev.action === "ATTACK" && od === "KILL") { s.kills++; s.pts++; }
+      else if (ev.action === "SERVE" && od === "ACE") { s.aces++; s.pts++; }
+      else if (ev.action === "BLOCK" && od === "STUFF") { s.blocks++; s.pts++; }
+      else if (ev.action === "DIG" && ev.outcome === "PLUS") s.digs++;
+      else if (ev.action === "SET" && ev.outcome === "PLUS") s.assists++;
+      if (ev.outcome === "MINUS") s.errors++;
+    }
+    return map;
+  }, [maLiveEvents]);
+
+  // ── RAG (Red/Amber/Green) performance indicator per player ──
+  function maGetRag(playerId: string): "green" | "amber" | "red" | "none" {
+    const s = maLiveStats[playerId];
+    if (!s || s.touches === 0) return "none";
+    const net = s.pts - s.errors;
+    if (net >= 2) return "green";
+    if (net <= -1 || s.errors >= 3) return "red";
+    return "amber";
+  }
+
+  // ── Print activity report ──
+  function maPrintReport() {
+    const token = localStorage.getItem("token") || "";
+    const url = `/api/matches/${maMatchId}/activity-report?token=${encodeURIComponent(token)}`;
+    window.open(url, "_blank");
+  }
 
   const { data: squadData, isLoading: squadLoading } = useQuery({
     queryKey: ["/api/squad", maMatchId, maTeamId],
@@ -1037,6 +1112,76 @@ function TacticBoardSection() {
 
           {maMatchId && (
             <>
+              {/* ── LIVE COMMAND CENTER ── */}
+              <div className="afrocat-card p-4 border border-afrocat-teal/30 bg-afrocat-teal/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <RefreshCw className="h-4 w-4 text-afrocat-teal" />
+                  <span className="text-sm font-black text-afrocat-text">Live Match Command Center</span>
+                  <span className="ml-auto text-[10px] text-afrocat-muted">Auto-refreshes every 10s</span>
+                </div>
+
+                {/* Live scoreboard */}
+                <div className="flex items-center justify-center gap-4 mb-4 py-3 rounded-xl bg-black/30 border border-afrocat-border">
+                  <div className="text-center flex-1">
+                    <div className="text-[10px] text-afrocat-teal font-black uppercase tracking-widest truncate">
+                      {(teams as any[]).find((t: any) => t.id === maTeamId)?.name || "AFROCAT"}
+                    </div>
+                    <div className="text-4xl font-black text-white leading-none" data-testid="ma-live-home-sets">
+                      {(maLiveMatch as any)?.homeSetsWon ?? "—"}
+                    </div>
+                    <div className="text-[9px] text-afrocat-muted mt-1">
+                      {(maLiveMatch as any)?.liveHomePoints ?? "—"} pts
+                    </div>
+                  </div>
+                  <div className="text-center px-3">
+                    <div className="text-[9px] text-afrocat-muted font-bold">SETS</div>
+                    <div className="text-xl font-black text-afrocat-gold">vs</div>
+                    <div className="text-[9px] text-afrocat-muted font-bold">Best of {maBestOf}</div>
+                  </div>
+                  <div className="text-center flex-1">
+                    <div className="text-[10px] text-afrocat-gold font-black uppercase tracking-widest truncate">
+                      {(selectedMatch as any)?.opponent || "OPPONENT"}
+                    </div>
+                    <div className="text-4xl font-black text-white leading-none" data-testid="ma-live-away-sets">
+                      {(maLiveMatch as any)?.awaySetsWon ?? "—"}
+                    </div>
+                    <div className="text-[9px] text-afrocat-muted mt-1">
+                      {(maLiveMatch as any)?.liveAwayPoints ?? "—"} pts
+                    </div>
+                  </div>
+                </div>
+
+                {/* Best of 3 / 5 selector + Print */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-xs font-bold text-afrocat-muted">Format:</span>
+                  {([3, 5] as const).map(bo => (
+                    <button
+                      key={bo}
+                      data-testid={`btn-ma-bestof-${bo}`}
+                      disabled={maFormatSaving || !!(maLiveMatch as any)?.scoringStartedAt}
+                      onClick={() => { setMaBestOf(bo); formatMutation.mutate(bo); }}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-black border transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                        maBestOf === bo
+                          ? "bg-afrocat-teal text-white border-afrocat-teal shadow-lg"
+                          : "bg-afrocat-white-5 text-afrocat-muted border-afrocat-border hover:border-afrocat-teal/40 hover:text-afrocat-teal"
+                      }`}>
+                      Best of {bo}
+                    </button>
+                  ))}
+                  {(maLiveMatch as any)?.scoringStartedAt && (
+                    <span className="text-[10px] text-afrocat-gold">⚠ Scoring started — format locked</span>
+                  )}
+                  {maFormatSaving && <RefreshCw className="h-3 w-3 text-afrocat-teal animate-spin" />}
+                  <button
+                    onClick={maPrintReport}
+                    data-testid="btn-ma-print-report"
+                    className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-afrocat-gold text-white text-xs font-black cursor-pointer hover:opacity-90 transition-opacity"
+                  >
+                    <Layers className="h-3.5 w-3.5" /> Print Activity Report
+                  </button>
+                </div>
+              </div>
+
               {/* Role Assignment */}
               <div className="afrocat-card p-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -1076,7 +1221,6 @@ function TacticBoardSection() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Court */}
                 <div className="lg:col-span-2 space-y-2">
-                  {/* Rotation stepper */}
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-afrocat-muted">Rotation:</span>
                     {[1,2,3,4,5,6].map(r => (
@@ -1096,7 +1240,6 @@ function TacticBoardSection() {
                       Server: <span className="text-afrocat-gold">{MA_SERVER[maRotation]}★</span>
                     </span>
                   </div>
-                  {/* Court SVG */}
                   <div
                     ref={maCourtRef}
                     className="rounded-xl overflow-hidden border border-afrocat-gold/30 relative group"
@@ -1116,7 +1259,6 @@ function TacticBoardSection() {
 
                 {/* Info panel */}
                 <div className="space-y-3">
-                  {/* Rotation description */}
                   <div className="afrocat-card p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-afrocat-gold/20 text-afrocat-gold border-afrocat-gold/40">R{maRotation}</span>
@@ -1125,25 +1267,29 @@ function TacticBoardSection() {
                     <p className="text-xs text-afrocat-muted leading-relaxed">{MA_ROT_DESC[maRotation]?.tip}</p>
                   </div>
 
-                  {/* Player legend — shows actual players */}
+                  {/* Lineup with live RAG indicators */}
                   <div className="afrocat-card p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <User className="h-3.5 w-3.5 text-afrocat-teal" />
                       <span className="text-xs font-bold text-afrocat-text">Lineup</span>
+                      <span className="ml-auto text-[9px] text-afrocat-muted">🟢 Good 🟡 Watch 🔴 Struggling</span>
                     </div>
                     <div className="space-y-1.5">
                       {MA_ROLES.map(role => {
                         const pid = maRoleMap[role] || "";
                         const sp = squadPlayers.find((s: any) => s.playerId === pid);
                         const displayName = sp ? sp.name : "Unassigned";
-                        const jersey = sp?.player?.jerseyNo;
+                        const jersey = sp?.resolvedJersey ?? sp?.player?.jerseyNo;
                         const isServer = role === MA_SERVER[maRotation];
+                        const rag = pid ? maGetRag(pid) : "none";
+                        const ragColor = rag === "green" ? "bg-green-500" : rag === "amber" ? "bg-yellow-400" : rag === "red" ? "bg-red-500" : "bg-afrocat-white-10";
                         return (
                           <div key={role} className={`flex items-center gap-2 py-1 rounded-lg px-1 ${isServer ? "bg-afrocat-gold/10 border border-afrocat-gold/30" : ""}`}>
                             <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: MA_ROLE_COLORS[role] }} />
                             <span className="text-[10px] font-black w-8 flex-shrink-0" style={{ color: MA_ROLE_COLORS[role] }}>{role}</span>
                             {jersey && <span className="text-[9px] text-afrocat-gold font-bold">#{jersey}</span>}
                             <span className={`text-[10px] flex-1 truncate ${pid ? "text-afrocat-text" : "text-afrocat-muted italic"}`}>{displayName}</span>
+                            {pid && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ragColor}`} title={`Performance: ${rag}`} />}
                             {isServer && <span className="text-afrocat-gold text-[9px] font-black">SERVES★</span>}
                           </div>
                         );
@@ -1151,23 +1297,138 @@ function TacticBoardSection() {
                     </div>
                   </div>
 
-                  {/* Navigation hint */}
-                  <div className="text-center">
-                    <div className="flex gap-2 justify-center">
-                      <button
-                        onClick={() => setMaRotation(r => r > 1 ? r - 1 : 6)}
-                        className="flex-1 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted text-xs font-bold hover:border-afrocat-gold/40 hover:text-afrocat-gold transition-all cursor-pointer"
-                        data-testid="btn-ma-prev">
-                        ← Prev
-                      </button>
-                      <button
-                        onClick={() => setMaRotation(r => r < 6 ? r + 1 : 1)}
-                        className="flex-1 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted text-xs font-bold hover:border-afrocat-gold/40 hover:text-afrocat-gold transition-all cursor-pointer"
-                        data-testid="btn-ma-next">
-                        Next →
-                      </button>
-                    </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setMaRotation(r => r > 1 ? r - 1 : 6)}
+                      className="flex-1 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted text-xs font-bold hover:border-afrocat-gold/40 hover:text-afrocat-gold transition-all cursor-pointer"
+                      data-testid="btn-ma-prev">
+                      ← Prev
+                    </button>
+                    <button
+                      onClick={() => setMaRotation(r => r < 6 ? r + 1 : 1)}
+                      className="flex-1 px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted text-xs font-bold hover:border-afrocat-gold/40 hover:text-afrocat-gold transition-all cursor-pointer"
+                      data-testid="btn-ma-next">
+                      Next →
+                    </button>
                   </div>
+                </div>
+              </div>
+
+              {/* ── LIVE PLAYER STATS PANEL ── */}
+              <div className="afrocat-card p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="h-4 w-4 text-afrocat-gold" />
+                  <span className="text-sm font-black text-afrocat-text">Live Player Performance</span>
+                  <span className="ml-auto text-[10px] text-afrocat-muted">
+                    {(maLiveEvents as any[]).length} touch events recorded
+                  </span>
+                </div>
+                {squadPlayers.length === 0 ? (
+                  <p className="text-xs text-afrocat-muted italic text-center py-4">No squad loaded — select a match with a saved squad.</p>
+                ) : (maLiveEvents as any[]).length === 0 ? (
+                  <p className="text-xs text-afrocat-muted italic text-center py-4">No stats entered yet. Stats will appear here automatically as they are recorded in Touch Stats.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px] border-collapse">
+                      <thead>
+                        <tr className="border-b border-afrocat-border">
+                          <th className="text-left py-1.5 px-2 text-afrocat-muted font-bold">#</th>
+                          <th className="text-left py-1.5 px-2 text-afrocat-muted font-bold">Player</th>
+                          <th className="text-center py-1.5 px-2 text-green-400 font-bold" title="Kills">K</th>
+                          <th className="text-center py-1.5 px-2 text-yellow-400 font-bold" title="Aces">A</th>
+                          <th className="text-center py-1.5 px-2 text-blue-400 font-bold" title="Blocks">B</th>
+                          <th className="text-center py-1.5 px-2 text-afrocat-teal font-bold" title="Digs">D</th>
+                          <th className="text-center py-1.5 px-2 text-purple-400 font-bold" title="Assists">Ast</th>
+                          <th className="text-center py-1.5 px-2 text-red-400 font-bold" title="Errors">Err</th>
+                          <th className="text-center py-1.5 px-2 text-afrocat-text font-bold" title="Net Points">±</th>
+                          <th className="text-center py-1.5 px-2 text-afrocat-muted font-bold">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {squadPlayers.map((sp: any) => {
+                          const s = maLiveStats[sp.playerId] || { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0, errors: 0, pts: 0, touches: 0 };
+                          const net = s.pts - s.errors;
+                          const rag = maGetRag(sp.playerId);
+                          const ragLabel = rag === "green" ? "🟢 Good" : rag === "amber" ? "🟡 Watch" : rag === "red" ? "🔴 Sub?" : "—";
+                          const jersey = sp.resolvedJersey ?? sp.player?.jerseyNo;
+                          return (
+                            <tr key={sp.playerId} className="border-b border-afrocat-border/30 hover:bg-afrocat-white-5 transition-colors">
+                              <td className="py-1.5 px-2 text-afrocat-gold font-bold">#{jersey || "—"}</td>
+                              <td className="py-1.5 px-2 text-afrocat-text font-bold truncate max-w-[100px]">{sp.name}</td>
+                              <td className="py-1.5 px-2 text-center text-green-400 font-black">{s.kills || "—"}</td>
+                              <td className="py-1.5 px-2 text-center text-yellow-400 font-black">{s.aces || "—"}</td>
+                              <td className="py-1.5 px-2 text-center text-blue-400 font-black">{s.blocks || "—"}</td>
+                              <td className="py-1.5 px-2 text-center text-afrocat-teal font-black">{s.digs || "—"}</td>
+                              <td className="py-1.5 px-2 text-center text-purple-400">{s.assists || "—"}</td>
+                              <td className={`py-1.5 px-2 text-center font-black ${s.errors >= 3 ? "text-red-400" : "text-afrocat-muted"}`}>{s.errors || "—"}</td>
+                              <td className={`py-1.5 px-2 text-center font-black ${net > 0 ? "text-green-400" : net < 0 ? "text-red-400" : "text-afrocat-muted"}`}>
+                                {s.touches > 0 ? (net > 0 ? `+${net}` : `${net}`) : "—"}
+                              </td>
+                              <td className="py-1.5 px-2 text-center text-[10px]">{s.touches > 0 ? ragLabel : "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Substitution / Timeout suggestions */}
+                {(() => {
+                  const struggling = squadPlayers.filter((sp: any) => maGetRag(sp.playerId) === "red");
+                  if (!struggling.length) return null;
+                  return (
+                    <div className="mt-3 p-3 rounded-lg border border-red-500/30 bg-red-500/5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Shield className="h-3.5 w-3.5 text-red-400" />
+                        <span className="text-xs font-black text-red-400">⚠ Coach Alert — Consider Action</span>
+                      </div>
+                      <div className="space-y-1">
+                        {struggling.map((sp: any) => {
+                          const s = maLiveStats[sp.playerId] || {};
+                          return (
+                            <div key={sp.playerId} className="text-[11px] text-afrocat-muted">
+                              <span className="text-red-400 font-bold">{sp.name}</span>
+                              {" "}— {s.errors || 0} errors, net {(s.pts || 0) - (s.errors || 0)} pts · Consider sub or timeout
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* ── COACHING NOTES ── */}
+              <div className="afrocat-card p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <BookOpen className="h-4 w-4 text-afrocat-teal" />
+                  <span className="text-sm font-bold text-afrocat-text">Coaching Notes</span>
+                  <span className="text-[10px] text-afrocat-muted ml-auto">Saved locally for this session</span>
+                </div>
+                <textarea
+                  value={maCoachingNotes}
+                  onChange={e => setMaCoachingNotes(e.target.value)}
+                  placeholder="Track substitutions, timeouts, tactical adjustments and observations here..."
+                  rows={4}
+                  data-testid="textarea-ma-coaching-notes"
+                  className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-xs resize-none focus:outline-none focus:border-afrocat-teal/50 placeholder:text-afrocat-muted"
+                />
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={maPrintReport}
+                    data-testid="btn-ma-print-report-2"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-afrocat-gold text-white text-xs font-black cursor-pointer hover:opacity-90 transition-opacity"
+                  >
+                    <Layers className="h-3.5 w-3.5" /> Print Full Match Report
+                  </button>
+                  <button
+                    onClick={() => setMaCoachingNotes("")}
+                    className="px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted text-xs font-bold cursor-pointer hover:border-red-500/40 hover:text-red-400 transition-all"
+                    data-testid="btn-ma-clear-notes"
+                  >
+                    Clear Notes
+                  </button>
                 </div>
               </div>
             </>

@@ -5726,6 +5726,187 @@ th{background:#0d7377;color:white}
     } catch (err) { next(err); }
   });
 
+  // ── Match Activity Report (HTML print) ──────────────────────
+  app.get("/api/matches/:matchId/activity-report", requireAuth, async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ error: "Match not found" });
+      const events = await storage.getMatchEvents(matchId);
+      const team = await db.select().from(schema.teams).where(eq(schema.teams.id, (match as any).teamId)).then(r => r[0]);
+      const allPlayers = await db.select().from(schema.players);
+      const playerMap = Object.fromEntries(allPlayers.map((p: any) => [p.id, p]));
+
+      // Per-player stats aggregation from events
+      const stats: Record<string, any> = {};
+      for (const ev of events) {
+        const pid = ev.playerId;
+        if (!stats[pid]) stats[pid] = { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0, errors: 0, total: 0 };
+        const s = stats[pid];
+        const a = ev.action; const o = ev.outcome; const od = (ev as any).outcomeDetail || "";
+        if (a === "ATTACK" && od === "KILL") s.kills++;
+        else if (a === "SERVE" && od === "ACE") s.aces++;
+        else if (a === "BLOCK" && od === "STUFF") s.blocks++;
+        else if (a === "DIG" && o === "PLUS") s.digs++;
+        else if (a === "SET" && o === "PLUS") s.assists++;
+        if (o === "MINUS") s.errors++;
+        s.total = s.kills + s.aces + s.blocks - s.errors;
+      }
+
+      // Set breakdown
+      const sets: Record<number, { home: number; away: number; events: any[] }> = {};
+      for (const ev of events) {
+        const sn = (ev as any).setNumber || 1;
+        if (!sets[sn]) sets[sn] = { home: 0, away: 0, events: [] };
+        if ((ev as any).pointWonByTeamId === (match as any).teamId) sets[sn].home++;
+        else if ((ev as any).pointWonByTeamId === "OPPONENT") sets[sn].away++;
+        sets[sn].events.push(ev);
+      }
+
+      const esc = (s: any) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const matchDate = (match as any).startTime
+        ? new Date((match as any).startTime).toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })
+        : (match as any).matchDate || "Unknown";
+      const bestOf = (match as any).bestOf || 5;
+      const homeSets = (match as any).homeSetsWon || 0;
+      const awaySets = (match as any).awaySetsWon || 0;
+
+      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Match Activity Report</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",Arial,sans-serif;background:#fff;color:#1a1a2e;padding:20mm;max-width:210mm;margin:0 auto;font-size:11px}
+  h1{font-size:20px;font-weight:900;color:#0F8B7D;margin-bottom:4px}
+  h2{font-size:13px;font-weight:700;color:#0F8B7D;margin:14px 0 6px;border-bottom:2px solid #0F8B7D;padding-bottom:3px}
+  h3{font-size:11px;font-weight:700;color:#444;margin:10px 0 4px}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;padding-bottom:10px;border-bottom:3px solid #0F8B7D;margin-bottom:14px}
+  .logo-area h1{font-size:22px} .logo-area p{color:#666;font-size:10px;margin-top:2px}
+  .match-meta{text-align:right;font-size:10px;color:#444;line-height:1.6}
+  .score-banner{display:flex;align-items:center;justify-content:center;gap:20px;background:#0F8B7D;color:#fff;border-radius:8px;padding:10px 20px;margin:10px 0;font-weight:900}
+  .score-banner .team{font-size:14px} .score-banner .sets{font-size:26px;min-width:60px;text-align:center} .score-banner .bestof{font-size:10px;opacity:0.8}
+  table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0}
+  th{background:#0F8B7D;color:#fff;padding:5px 8px;text-align:left;font-size:10px}
+  td{padding:4px 8px;border-bottom:1px solid #eee}
+  tr:nth-child(even) td{background:#f8f8f8}
+  .good{color:#15803d;font-weight:700} .bad{color:#dc2626;font-weight:700} .neutral{color:#555}
+  .set-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:8px 0}
+  .set-card{border:1px solid #0F8B7D;border-radius:6px;padding:8px;text-align:center}
+  .set-card .label{font-size:9px;text-transform:uppercase;color:#888;font-weight:700}
+  .set-card .score{font-size:18px;font-weight:900;color:#0F8B7D}
+  .ev-list{max-height:none}
+  .ev-item{display:flex;align-items:center;gap:6px;padding:2px 0;border-bottom:1px solid #f0f0f0;font-size:9.5px}
+  .ev-action{font-weight:700;min-width:55px;text-transform:uppercase}
+  .ev-plus{color:#15803d} .ev-minus{color:#dc2626} .ev-zero{color:#888}
+  .ev-name{flex:1;color:#444} .ev-detail{color:#666;font-size:9px}
+  .section-split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .notes-box{border:1px dashed #ccc;border-radius:6px;min-height:40mm;padding:8px;margin-top:4px;font-style:italic;color:#aaa;font-size:10px}
+  .footer{margin-top:20px;padding-top:8px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:9px;color:#999}
+  @media print{body{padding:10mm}@page{margin:10mm;size:A4}button{display:none!important}}
+</style>
+</head><body>
+<div class="header">
+  <div class="logo-area">
+    <h1>AFROCAT VOLLEYBALL CLUB</h1>
+    <p>Match Activity Report &mdash; Generated ${new Date().toLocaleString()}</p>
+  </div>
+  <div class="match-meta">
+    <div><strong>${esc(team?.name || "Afrocat")} vs ${esc((match as any).opponent)}</strong></div>
+    <div>${matchDate}</div>
+    <div>${esc((match as any).venue || "")}${(match as any).competition ? " &bull; " + esc((match as any).competition) : ""}</div>
+    <div>Format: Best of ${bestOf}</div>
+  </div>
+</div>
+
+<div class="score-banner">
+  <span class="team">${esc(team?.name || "AFROCAT")}</span>
+  <span class="sets">${homeSets} &ndash; ${awaySets}</span>
+  <span class="team">${esc((match as any).opponent)}</span>
+  <span class="bestof">&nbsp;(Best of ${bestOf})</span>
+</div>`;
+
+      // Set scores
+      if (Object.keys(sets).length > 0) {
+        html += `<h2>Set Scores</h2><div class="set-row">`;
+        Object.entries(sets).sort(([a], [b]) => Number(a) - Number(b)).forEach(([sn, sv]) => {
+          const won = sv.home > sv.away;
+          html += `<div class="set-card">
+            <div class="label">Set ${sn}</div>
+            <div class="score" style="color:${won ? "#0F8B7D" : "#dc2626"}">${sv.home} &ndash; ${sv.away}</div>
+            <div class="label">${won ? "✓ Won" : "✗ Lost"}</div>
+          </div>`;
+        });
+        html += `</div>`;
+      }
+
+      // Player stats
+      const statRows = Object.entries(stats).map(([pid, s]) => ({ pid, player: playerMap[pid], ...s as any }))
+        .filter(r => r.player)
+        .sort((a: any, b: any) => b.total - a.total);
+      if (statRows.length > 0) {
+        html += `<h2>Player Statistics</h2>
+<table>
+  <tr><th>#</th><th>Player</th><th>Position</th><th class="good">Kills</th><th class="good">Aces</th><th class="good">Blocks</th><th class="good">Digs</th><th>Assists</th><th class="bad">Errors</th><th>Net Pts</th></tr>`;
+        statRows.forEach((r: any) => {
+          const p = r.player;
+          html += `<tr>
+            <td>${p.jerseyNo || "—"}</td>
+            <td><strong>${esc(p.firstName)} ${esc(p.lastName)}</strong></td>
+            <td>${esc(p.position || "—")}</td>
+            <td class="good">${r.kills}</td><td class="good">${r.aces}</td><td class="good">${r.blocks}</td>
+            <td class="good">${r.digs}</td><td>${r.assists}</td>
+            <td class="${r.errors > 2 ? "bad" : "neutral"}">${r.errors}</td>
+            <td class="${r.total > 0 ? "good" : r.total < 0 ? "bad" : "neutral"}">${r.total > 0 ? "+" : ""}${r.total}</td>
+          </tr>`;
+        });
+        html += `</table>`;
+      }
+
+      // Event timeline per set
+      html += `<h2>Match Event Timeline</h2>`;
+      const ACTION_ICONS: Record<string, string> = {
+        SERVE: "Serve", RECEIVE: "Recv", SET: "Set", ATTACK: "Atk", BLOCK: "Block", DIG: "Dig", FREEBALL: "FB"
+      };
+      Object.entries(sets).sort(([a], [b]) => Number(a) - Number(b)).forEach(([sn, sv]) => {
+        html += `<h3>Set ${sn} — Afrocat ${sv.home} : ${sv.away} ${esc((match as any).opponent)}</h3>`;
+        html += `<div class="ev-list">`;
+        sv.events.forEach((ev: any) => {
+          const p = playerMap[ev.playerId];
+          const name = p ? `#${p.jerseyNo || "?"} ${p.firstName || ""} ${p.lastName || ""}` : "Unknown";
+          const cls = ev.outcome === "PLUS" ? "ev-plus" : ev.outcome === "MINUS" ? "ev-minus" : "ev-zero";
+          const sym = ev.outcome === "PLUS" ? "+" : ev.outcome === "MINUS" ? "−" : "○";
+          html += `<div class="ev-item">
+            <span class="ev-action ${cls}">${sym} ${ACTION_ICONS[ev.action] || ev.action}</span>
+            <span class="ev-name">${esc(name)}</span>
+            <span class="ev-detail">${esc(ev.outcomeDetail || ev.outcome)}</span>
+          </div>`;
+        });
+        html += `</div>`;
+      });
+
+      if (events.length === 0) html += `<p style="color:#999;font-style:italic;padding:10px 0">No match events recorded yet.</p>`;
+
+      html += `
+<div class="section-split" style="margin-top:16px">
+  <div>
+    <h2>Coaching Notes</h2>
+    <div class="notes-box">Coach notes from match board...</div>
+  </div>
+  <div>
+    <h2>Substitution Record</h2>
+    <div class="notes-box">Record substitutions here...</div>
+  </div>
+</div>
+<div class="footer">
+  <span>Afrocat Volleyball Club &mdash; Confidential Match Report</span>
+  <span>Match ID: ${matchId}</span>
+</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),400)</script>
+</body></html>`;
+
+      res.setHeader("Content-Type", "text/html");
+      res.send(html);
+    } catch (err) { next(err); }
+  });
+
   app.patch("/api/matches/:matchId/format", requireAuth, requireRole(["ADMIN","MANAGER","COACH","STATISTICIAN"]), async (req, res, next) => {
     try {
       const { matchId } = req.params;
