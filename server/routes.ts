@@ -1420,6 +1420,56 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     } catch (e) { next(e); }
   });
 
+  app.get("/api/awards/match-mvps", requireAuth, async (_req, res, next) => {
+    try {
+      const allAwards = await storage.getAwards();
+      const mvps = allAwards.filter((a: any) => a.awardType === "MATCH_MVP")
+        .sort((a: any, b: any) => (b.createdAt || "").toString().localeCompare((a.createdAt || "").toString()));
+      const allPlayers = await storage.getPlayers();
+      const allMatches = await storage.getMatches();
+      const pMap = new Map(allPlayers.map((p: any) => [p.id, p]));
+      const mMap = new Map(allMatches.map((m: any) => [m.id, m]));
+      const enriched = mvps.map((a: any) => {
+        const player = pMap.get(a.playerId);
+        const match = a.matchId ? mMap.get(a.matchId) : null;
+        return {
+          ...a,
+          playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
+          playerJersey: player?.jerseyNo || "?",
+          playerPosition: player?.position || "—",
+          playerPhotoUrl: player?.photoUrl || null,
+          matchDate: match?.matchDate || null,
+          matchOpponent: match?.opponent || null,
+          matchResult: match?.result || null,
+          matchSets: match ? `${match.setsFor || 0}-${match.setsAgainst || 0}` : null,
+          matchCompetition: match?.competition || null,
+        };
+      });
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/awards/player/:playerId/mvps", requireAuth, async (req, res, next) => {
+    try {
+      const awards = await storage.getAwardsByPlayer(req.params.playerId);
+      const mvps = awards.filter((a: any) => a.awardType === "MATCH_MVP")
+        .sort((a: any, b: any) => (b.createdAt || "").toString().localeCompare((a.createdAt || "").toString()));
+      const allMatches = await storage.getMatches();
+      const mMap = new Map(allMatches.map((m: any) => [m.id, m]));
+      const enriched = mvps.map((a: any) => {
+        const match = a.matchId ? mMap.get(a.matchId) : null;
+        return {
+          ...a,
+          matchDate: match?.matchDate || null,
+          matchOpponent: match?.opponent || null,
+          matchResult: match?.result || null,
+          matchSets: match ? `${match.setsFor || 0}-${match.setsAgainst || 0}` : null,
+        };
+      });
+      res.json(enriched);
+    } catch (e) { next(e); }
+  });
+
   app.get("/api/matches/played", requireAuth, async (_req, res, next) => {
     try {
       const all = await storage.getMatches();
@@ -2066,7 +2116,7 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     try {
       const body = z.object({
         playerId: z.string(),
-        awardType: z.enum(["MVP","MOST_IMPROVED","BEST_SERVER","BEST_BLOCKER","COACH_AWARD"]),
+        awardType: z.enum(["MVP","MATCH_MVP","MOST_IMPROVED","BEST_SERVER","BEST_BLOCKER","COACH_AWARD"]),
         awardMonth: z.string(),
         notes: z.string().optional().nullable(),
       }).parse(req.body);
@@ -6253,11 +6303,41 @@ th{background:#0d7377;color:white}
     if (pomPlayerId) {
       const pomPlayer = await storage.getPlayer(pomPlayerId);
       if (pomPlayer) {
+        const awardMonth = new Date().toISOString().slice(0, 7);
+        try {
+          await storage.createAward({
+            playerId: pomPlayerId,
+            awardType: "MATCH_MVP",
+            awardMonth,
+            notes: `Match MVP — ${matchLabel} on ${(match as any).matchDate || new Date().toLocaleDateString()}`,
+            matchId,
+          } as any);
+        } catch (_) {}
+
+        if (pomPlayer.userId) {
+          try {
+            await storage.createNotification({
+              userId: pomPlayer.userId,
+              type: "MATCH_SELECTION",
+              title: "🏆 You are Match MVP!",
+              message: `Congratulations! You have been selected as the Match MVP for ${matchLabel}. Outstanding performance — keep it up!`,
+              metadata: { matchId, awardType: "MATCH_MVP" },
+            });
+          } catch (_) {}
+        }
+
         const allUsers = await storage.getUsers();
         for (const u of allUsers) {
           if (u.accountStatus !== "ACTIVE") continue;
+          if (u.id === pomPlayer.userId) continue;
           try {
-            await storage.createNotification({ userId: u.id, type: "MATCH_SELECTION", title: "Player of the Match", message: `${pomPlayer.firstName} ${pomPlayer.lastName} (#${pomPlayer.jerseyNo}) — ${matchLabel}`, metadata: { matchId } });
+            await storage.createNotification({
+              userId: u.id,
+              type: "MATCH_SELECTION",
+              title: "Match MVP Announced",
+              message: `${pomPlayer.firstName} ${pomPlayer.lastName} (#${pomPlayer.jerseyNo || "?"}) has been named Match MVP — ${matchLabel}`,
+              metadata: { matchId, awardType: "MATCH_MVP" },
+            });
           } catch (_) {}
         }
       }

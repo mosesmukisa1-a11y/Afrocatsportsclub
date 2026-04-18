@@ -103,6 +103,12 @@ export default function Dashboard() {
     enabled: isPlayerView && !!user,
   });
 
+  const { data: myMvps = [] } = useQuery({
+    queryKey: ["/api/awards/player/mvps", playerDashId],
+    queryFn: () => api.getPlayerMvps(playerDashId),
+    enabled: isPlayerView && !!playerDashId,
+  });
+
   const { data: spotlight } = useQuery({
     queryKey: ["/api/player-spotlight"],
     queryFn: api.getPlayerSpotlight,
@@ -248,6 +254,47 @@ export default function Dashboard() {
                   View Fees
                 </span>
               </Link>
+            </div>
+          </div>
+        )}
+
+        {isPlayerView && (myMvps as any[]).length > 0 && (
+          <div className="afrocat-card overflow-hidden border border-afrocat-gold/30" data-testid="card-my-mvps">
+            <div className="bg-gradient-to-r from-afrocat-gold-soft to-afrocat-teal-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px] flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold">
+                <Star className="h-5 w-5 fill-afrocat-gold" /> My MVP Awards
+              </h3>
+              <span className="text-xs font-bold bg-afrocat-gold text-black px-2 py-0.5 rounded-full" data-testid="text-mvp-count">
+                {(myMvps as any[]).length} MVP{(myMvps as any[]).length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="p-4 space-y-2">
+              {(myMvps as any[]).slice(0, 4).map((mvp: any) => (
+                <div key={mvp.id} className="flex items-center gap-3 p-3 rounded-xl bg-afrocat-gold-soft border border-afrocat-gold/20" data-testid={`card-my-mvp-${mvp.id}`}>
+                  <div className="w-8 h-8 rounded-full bg-afrocat-gold flex items-center justify-center shrink-0">
+                    <Star size={14} className="fill-black text-black" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-afrocat-text">
+                      {mvp.matchOpponent ? `vs ${mvp.matchOpponent}` : "Match MVP"}
+                    </p>
+                    <p className="text-xs text-afrocat-muted">
+                      {mvp.matchDate || mvp.awardMonth}
+                      {mvp.matchSets ? ` — Sets ${mvp.matchSets}` : ""}
+                    </p>
+                  </div>
+                  {mvp.matchResult && (
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${mvp.matchResult === "W" ? "bg-afrocat-green-soft text-afrocat-green" : "bg-afrocat-red-soft text-afrocat-red"}`}>
+                      {mvp.matchResult === "W" ? "WIN" : "LOSS"}
+                    </span>
+                  )}
+                </div>
+              ))}
+              {(myMvps as any[]).length > 4 && (
+                <p className="text-xs text-afrocat-muted text-center pt-1">
+                  +{(myMvps as any[]).length - 4} more on the Awards page
+                </p>
+              )}
             </div>
           </div>
         )}

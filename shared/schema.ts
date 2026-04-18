@@ -15,7 +15,7 @@ export const attendanceStatusEnum = pgEnum("attendance_status", ["PRESENT", "LAT
 export const txnTypeEnum = pgEnum("txn_type", ["INCOME", "EXPENSE"]);
 export const injurySeverityEnum = pgEnum("injury_severity", ["LOW", "MEDIUM", "HIGH"]);
 export const injuryStatusEnum = pgEnum("injury_status", ["OPEN", "CLEARED"]);
-export const awardTypeEnum = pgEnum("award_type", ["MVP", "MOST_IMPROVED", "BEST_SERVER", "BEST_BLOCKER", "COACH_AWARD"]);
+export const awardTypeEnum = pgEnum("award_type", ["MVP", "MATCH_MVP", "MOST_IMPROVED", "BEST_SERVER", "BEST_BLOCKER", "COACH_AWARD"]);
 export const contractTypeEnum = pgEnum("contract_type", ["PERMANENT", "SEASONAL", "TRIAL", "YOUTH"]);
 export const contractStatusEnum = pgEnum("contract_status", ["DRAFT", "ACTIVE", "EXPIRED", "TERMINATED"]);
 export const coachAssignmentRoleEnum = pgEnum("coach_assignment_role", ["HEAD_COACH", "ASSISTANT_COACH"]);
@@ -294,6 +294,8 @@ export const awards = pgTable("awards", {
   awardType: awardTypeEnum("award_type").notNull(),
   awardMonth: text("award_month").notNull(),
   notes: text("notes"),
+  matchId: varchar("match_id", { length: 36 }),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const coachAssignments = pgTable("coach_assignments", {

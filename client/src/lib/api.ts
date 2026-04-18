@@ -114,6 +114,8 @@ export const api = {
   getAwards: () => apiFetch<any[]>("/awards"),
   getAwardsByPlayer: (playerId: string) => apiFetch<any[]>(`/awards/player/${playerId}`),
   createAward: (data: any) => apiFetch<any>("/awards", { method: "POST", body: JSON.stringify(data) }),
+  getMatchMvps: () => apiFetch<any[]>("/awards/match-mvps"),
+  getPlayerMvps: (playerId: string) => apiFetch<any[]>(`/awards/player/${playerId}/mvps`),
 
   getSmartFocus: (playerId: string) => apiFetch<any[]>(`/smart-focus/player/${playerId}`),
 
