@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout";
+import { openHtmlAsPdf } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,8 +66,7 @@ export default function Players() {
   const pdfMut = useMutation({
     mutationFn: (playerId: string) => api.generatePlayerProfilePdf(playerId),
     onSuccess: (data) => {
-      const win = window.open("", "_blank");
-      if (win) { win.document.write(data.html); win.document.close(); }
+      openHtmlAsPdf(data.html);
       toast({ title: "Profile PDF generated" });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),

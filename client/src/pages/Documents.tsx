@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout";
+import { openHtmlAsPdf } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -104,8 +105,7 @@ export default function Documents() {
       if (data === null) return;
       toast({ title: "O-2 Bis Generated!", description: "Form is ready to view and print." });
       if (data?.data) {
-        const w = window.open("", "_blank");
-        if (w) { w.document.write(generateO2bisHTML(data.data)); w.document.close(); }
+        openHtmlAsPdf(generateO2bisHTML(data.data));
       }
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -118,8 +118,7 @@ export default function Documents() {
       setShowTeamList(false);
       toast({ title: "Team List Generated!", description: "Document ready." });
       if (data?.data) {
-        const w = window.open("", "_blank");
-        if (w) { w.document.write(generateTeamListHTML(data.data)); w.document.close(); }
+        openHtmlAsPdf(generateTeamListHTML(data.data));
       }
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -404,16 +403,14 @@ function DocumentCard({ doc, teams, matches }: { doc: any; teams: any[]; matches
   const match = matches.find((m: any) => m.id === doc.matchId);
 
   const openDoc = () => {
-    const w = window.open("", "_blank");
-    if (!w || !meta) return;
+    if (!meta) return;
     if (doc.documentType === "O2BIS") {
-      w.document.write(generateO2bisHTML(meta));
+      openHtmlAsPdf(generateO2bisHTML(meta));
     } else if (doc.documentType === "TEAM_LIST") {
-      w.document.write(generateTeamListHTML(meta));
+      openHtmlAsPdf(generateTeamListHTML(meta));
     } else {
-      w.document.write(`<pre>${JSON.stringify(meta, null, 2)}</pre>`);
+      openHtmlAsPdf(`<pre>${JSON.stringify(meta, null, 2)}</pre>`);
     }
-    w.document.close();
   };
 
   return (

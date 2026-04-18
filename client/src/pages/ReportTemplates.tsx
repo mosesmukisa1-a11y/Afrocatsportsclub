@@ -4,6 +4,7 @@ import { Layout } from "@/components/Layout";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { openHtmlAsPdf } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,11 +27,7 @@ const tabs: { key: ReportTab; label: string; icon: any; roles?: string[] }[] = [
 ];
 
 function openReportWindow(html: string) {
-  const win = window.open("", "_blank");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-  }
+  openHtmlAsPdf(html);
 }
 
 function ReportCard({ children, color = "teal" }: { children: React.ReactNode; color?: string }) {
@@ -89,7 +86,7 @@ export default function ReportTemplates() {
     if (data?.html) {
       openReportWindow(data.html);
       setLastGenerated(tab);
-      toast({ title: "Report generated!", description: "Opening in a new tab — use browser Save as PDF to download." });
+      toast({ title: "Report generated!", description: "The Save as PDF dialog will open automatically." });
     } else {
       toast({ title: "No report data returned", variant: "destructive" });
     }
@@ -143,7 +140,7 @@ export default function ReportTemplates() {
     const token = localStorage.getItem("token") || "";
     window.open(`/api/matches/${matchId}/stats-report/print?token=${token}`, "_blank");
     setLastGenerated("match");
-    toast({ title: "Opening Stats PDF…", description: "Use browser Save as PDF to download." });
+    toast({ title: "Opening Stats PDF…", description: "The Save as PDF dialog will open automatically." });
   }
 
   function openMatchActivity() {
@@ -325,7 +322,7 @@ export default function ReportTemplates() {
 
             {lastGenerated === "season" && !seasonMut.isPending && (
               <div className="flex items-center gap-2 text-sm text-afrocat-green">
-                <CheckCircle2 size={14} /> Report opened in new tab — use File → Print → Save as PDF
+                <CheckCircle2 size={14} /> PDF save dialog will open automatically
               </div>
             )}
           </ReportCard>
@@ -381,7 +378,7 @@ export default function ReportTemplates() {
 
             {lastGenerated === "player" && !playerMut.isPending && (
               <div className="flex items-center gap-2 text-sm text-afrocat-green">
-                <CheckCircle2 size={14} /> Report opened in new tab — use File → Print → Save as PDF
+                <CheckCircle2 size={14} /> PDF save dialog will open automatically
               </div>
             )}
           </ReportCard>
@@ -430,7 +427,7 @@ export default function ReportTemplates() {
 
             {lastGenerated === "roster" && !rosterMut.isPending && (
               <div className="flex items-center gap-2 text-sm text-afrocat-green">
-                <CheckCircle2 size={14} /> Roster opened in new tab — use File → Print → Save as PDF
+                <CheckCircle2 size={14} /> PDF save dialog will open automatically
               </div>
             )}
           </ReportCard>
@@ -502,7 +499,7 @@ export default function ReportTemplates() {
 
             {lastGenerated === "attendance" && !attendanceMut.isPending && (
               <div className="flex items-center gap-2 text-sm text-afrocat-green">
-                <CheckCircle2 size={14} /> Report opened in new tab — use File → Print → Save as PDF
+                <CheckCircle2 size={14} /> PDF save dialog will open automatically
               </div>
             )}
           </ReportCard>
@@ -560,19 +557,19 @@ export default function ReportTemplates() {
 
             {lastGenerated === "financial" && !financialMut.isPending && (
               <div className="flex items-center gap-2 text-sm text-afrocat-green">
-                <CheckCircle2 size={14} /> Report opened in new tab — use File → Print → Save as PDF
+                <CheckCircle2 size={14} /> PDF save dialog will open automatically
               </div>
             )}
           </ReportCard>
         )}
 
-        <div className="rounded-2xl bg-afrocat-white-3 border border-afrocat-border p-4">
+        <div className="rounded-2xl bg-afrocat-teal-soft border border-afrocat-teal/20 p-4">
           <div className="flex items-start gap-3">
-            <Shield size={16} className="text-afrocat-muted shrink-0 mt-0.5" />
+            <Shield size={16} className="text-afrocat-teal shrink-0 mt-0.5" />
             <div className="text-xs text-afrocat-muted space-y-0.5">
-              <p className="font-semibold text-afrocat-text">How to save as PDF</p>
-              <p>When a report opens in a new tab: press <strong>Ctrl+P</strong> (or <strong>Cmd+P</strong> on Mac) → set Destination to <strong>Save as PDF</strong> → click Save.</p>
-              <p>The Match Stats report automatically opens the print dialog. All other reports open in a new window where you can print or save.</p>
+              <p className="font-semibold text-afrocat-text">Saving reports as PDF</p>
+              <p>When you generate a report, it opens in a new tab and the <strong>Save as PDF dialog opens automatically</strong>. Select your save location and click Save.</p>
+              <p>On desktop: choose <strong>Destination → Save as PDF</strong>. On mobile: tap the share icon and choose <strong>Print → Save as PDF</strong>.</p>
             </div>
           </div>
         </div>

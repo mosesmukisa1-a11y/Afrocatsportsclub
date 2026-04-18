@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout";
+import { openHtmlAsPdf } from "@/lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -105,8 +106,7 @@ function ContractSummary({ contract, isAdmin }: { contract: any; isAdmin: boolea
   const investPdfMut = useMutation({
     mutationFn: () => api.generateContractInvestmentPdf(contract.id),
     onSuccess: (data: any) => {
-      const w = window.open("", "_blank");
-      if (w) { w.document.write(data.html); w.document.close(); }
+      openHtmlAsPdf(data.html);
     },
   });
 
@@ -875,8 +875,7 @@ function TransferCalculator({ contract, isAdmin }: { contract: any; isAdmin: boo
   const transferPdfMut = useMutation({
     mutationFn: (id: string) => api.generateTransferPdf(id),
     onSuccess: (data: any) => {
-      const w = window.open("", "_blank");
-      if (w) { w.document.write(data.html); w.document.close(); }
+      openHtmlAsPdf(data.html);
     },
   });
 

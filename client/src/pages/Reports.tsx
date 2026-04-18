@@ -1,4 +1,5 @@
 import { Layout } from "@/components/Layout";
+import { openHtmlAsPdf } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -164,11 +165,7 @@ export default function Reports() {
       qc.invalidateQueries({ queryKey: ["/api/match-documents"] });
       toast({ title: "Match report generated!", description: "You can now view and print the report." });
       if (result?.data) {
-        const w = window.open("", "_blank");
-        if (w) {
-          w.document.write(generateMatchReportHTML(result.data));
-          w.document.close();
-        }
+        openHtmlAsPdf(generateMatchReportHTML(result.data));
       }
     },
     onError: (err: any) => {
@@ -325,13 +322,7 @@ export default function Reports() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            const w = window.open("", "_blank");
-                            if (w) {
-                              w.document.write(generateMatchReportHTML(meta));
-                              w.document.close();
-                            }
-                          }}
+                          onClick={() => openHtmlAsPdf(generateMatchReportHTML(meta))}
                           data-testid={`button-view-report-${doc.id}`}
                         >
                           <Download size={14} className="mr-1" /> View / Print
