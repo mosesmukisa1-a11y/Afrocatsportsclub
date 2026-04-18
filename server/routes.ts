@@ -4831,24 +4831,55 @@ th{background:#0d7377;color:white}
       const pMap: Record<string, any> = {};
       for (const p of allPlayers) pMap[p.id] = p;
 
-      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Season Summary</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}.record{font-size:24px;font-weight:bold;margin:10px 0}@media print{body{padding:0}}</style></head><body>`;
-      html += `<h1>AFROCAT VOLLEYBALL CLUB — Season Summary</h1>`;
-      html += `<p><strong>Team:</strong> ${esc(team?.name || "All Teams")} | <strong>Generated:</strong> ${new Date().toLocaleDateString()}</p>`;
-      html += `<div class="record">${wins}W - ${losses}L (${played.length > 0 ? ((wins / played.length) * 100).toFixed(0) : 0}% Win Rate)</div>`;
-      html += `<p>Total Matches Played: ${played.length}</p>`;
+      const winRate = played.length > 0 ? ((wins / played.length) * 100).toFixed(0) : "0";
+      const teamTotals = Object.values(playerTotals).reduce((acc: any, t: any) => {
+        acc.kills += t.kills; acc.aces += t.aces; acc.blocks += t.blocks;
+        acc.digs += t.digs; acc.assists += t.assists; acc.points += t.points;
+        return acc;
+      }, { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0, points: 0 });
 
-      html += `<h2>Match Results</h2><table><tr><th>Date</th><th>Opponent</th><th>Competition</th><th>Result</th><th>Score</th></tr>`;
+      const reportCss = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;color:#1a1a2e;font-size:12px}.hdr{border-bottom:4px solid #0F8B7D;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}.hdr-left .club{font-size:20px;font-weight:900;color:#0F8B7D;letter-spacing:1px}.hdr-left .motto{font-size:9px;color:#888;margin-top:2px;letter-spacing:0.5px}.hdr-right{text-align:right;font-size:10px;color:#555;line-height:1.8}.report-title{font-size:15px;font-weight:700;color:#333;margin-bottom:4px}.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.kpi{background:#f0faf9;border:1px solid #b2dfdb;border-radius:10px;padding:12px;text-align:center}.kpi .val{font-size:26px;font-weight:900;color:#0F8B7D}.kpi .lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}.section-title{font-size:11px;font-weight:700;color:#0F8B7D;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F8B7D;padding-bottom:4px;margin:20px 0 10px}table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px}th{background:#0F8B7D;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:0.3px}td{padding:6px 8px;border-bottom:1px solid #e8edf0}tr:nth-child(even) td{background:#f8fbfa}tfoot td{background:#0F8B7D;color:#fff;font-weight:700;padding:6px 8px}.win{color:#15803d;font-weight:700}.loss{color:#dc2626;font-weight:700}.num{text-align:center}.footer{margin-top:24px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#9ca3af}@media print{body{padding:10px;max-width:100%}@page{margin:10mm}}`;
+
+      let html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Season Summary — ${esc(team?.name || "All Teams")}</title><style>${reportCss}</style></head><body>`;
+      html += `<div class="hdr"><div class="hdr-left"><div class="club">AFROCAT VOLLEYBALL CLUB</div><div class="motto">One Team One Dream — Passion Discipline Victory</div></div><div class="hdr-right"><div class="report-title">Season Summary Report</div><div><strong>Team:</strong> ${esc(team?.name || "All Teams")}</div><div><strong>Generated:</strong> ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div></div></div>`;
+
+      html += `<div class="kpi-row">
+        <div class="kpi"><div class="val">${played.length}</div><div class="lbl">Matches Played</div></div>
+        <div class="kpi"><div class="val" style="color:#15803d">${wins}</div><div class="lbl">Wins</div></div>
+        <div class="kpi"><div class="val" style="color:#dc2626">${losses}</div><div class="lbl">Losses</div></div>
+        <div class="kpi"><div class="val">${winRate}%</div><div class="lbl">Win Rate</div></div>
+      </div>`;
+
+      html += `<div class="kpi-row">
+        <div class="kpi"><div class="val">${teamTotals.kills}</div><div class="lbl">Total Kills</div></div>
+        <div class="kpi"><div class="val">${teamTotals.aces}</div><div class="lbl">Total Aces</div></div>
+        <div class="kpi"><div class="val">${teamTotals.blocks}</div><div class="lbl">Total Blocks</div></div>
+        <div class="kpi"><div class="val">${teamTotals.digs}</div><div class="lbl">Total Digs</div></div>
+      </div>`;
+
+      html += `<div class="section-title">Match Results (${played.length} played)</div>`;
+      html += `<table><thead><tr><th>Date</th><th>Opponent</th><th>Competition</th><th>Venue</th><th class="num">Score</th><th class="num">Result</th></tr></thead><tbody>`;
       for (const m of played.sort((a: any, b: any) => new Date(b.matchDate).getTime() - new Date(a.matchDate).getTime())) {
-        html += `<tr><td>${esc(m.matchDate)}</td><td>${esc(m.opponent)}</td><td>${esc(m.competition)}</td><td style="color:${m.result === 'W' ? 'green' : 'red'};font-weight:bold">${esc(m.result)}</td><td>${m.setsFor || 0}-${m.setsAgainst || 0}</td></tr>`;
+        const resClass = m.result === "W" ? "win" : "loss";
+        const resLabel = m.result === "W" ? "WIN" : "LOSS";
+        html += `<tr><td>${esc(m.matchDate)}</td><td><strong>${esc(m.opponent)}</strong></td><td>${esc(m.competition || "—")}</td><td>${esc(m.venue || "—")}</td><td class="num">${m.setsFor || 0}–${m.setsAgainst || 0}</td><td class="num ${resClass}">${resLabel}</td></tr>`;
       }
-      html += `</table>`;
+      if (played.length === 0) html += `<tr><td colspan="6" style="text-align:center;color:#888;padding:16px">No matches played yet</td></tr>`;
+      html += `</tbody></table>`;
 
-      html += `<h2>Top Performers (by Points)</h2><table><tr><th>#</th><th>Player</th><th>Matches</th><th>Points</th><th>Kills</th><th>Aces</th><th>Blocks</th><th>Digs</th><th>Assists</th></tr>`;
+      html += `<div class="section-title">Top 10 Performers by Total Points</div>`;
+      html += `<table><thead><tr><th class="num">#</th><th>Player</th><th>Team</th><th class="num">Matches</th><th class="num">Points</th><th class="num">Kills</th><th class="num">Aces</th><th class="num">Blocks</th><th class="num">Digs</th><th class="num">Assists</th><th class="num">Avg Pts</th></tr></thead><tbody>`;
       topPerformers.forEach((t: any, i: number) => {
         const p = pMap[t.playerId];
-        html += `<tr><td>${i + 1}</td><td>${esc(p?.fullName || "Unknown")}</td><td>${t.matches}</td><td><strong>${t.points}</strong></td><td>${t.kills}</td><td>${t.aces}</td><td>${t.blocks}</td><td>${t.digs}</td><td>${t.assists}</td></tr>`;
+        const pTeam = p?.teamId ? (allPlayers.find((ap: any) => ap.id === p.id && ap.teamId) as any)?.teamId : null;
+        const avg = t.matches > 0 ? (t.points / t.matches).toFixed(1) : "—";
+        html += `<tr><td class="num">${i + 1}</td><td><strong>${esc(p?.fullName || "Unknown")}</strong>${p?.position ? ` <span style="font-size:9px;color:#888">(${esc(p.position)})</span>` : ""}</td><td style="font-size:10px;color:#666">${esc(p?.teamId ? (Object.values(pMap).find((op: any) => op.id !== p.id)?.name || "") : "")}</td><td class="num">${t.matches}</td><td class="num" style="font-weight:700;color:#0F8B7D">${t.points}</td><td class="num">${t.kills}</td><td class="num">${t.aces}</td><td class="num">${t.blocks}</td><td class="num">${t.digs}</td><td class="num">${t.assists}</td><td class="num" style="color:#555">${avg}</td></tr>`;
       });
-      html += `</table></body></html>`;
+      if (topPerformers.length === 0) html += `<tr><td colspan="11" style="text-align:center;color:#888;padding:16px">No statistics recorded yet</td></tr>`;
+      html += `</tbody></table>`;
+
+      html += `<div class="footer"><span>AFROCAT VOLLEYBALL CLUB — One Team One Dream</span><span>Generated: ${new Date().toLocaleString()}</span></div>`;
+      html += `</body></html>`;
 
       res.json({ html });
     } catch (e) { next(e); }
@@ -4872,25 +4903,91 @@ th{background:#0d7377;color:white}
         points: stats.reduce((s, st) => s + (st.pointsTotal || 0), 0),
       };
 
-      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Player Report — ${esc(player.fullName)}</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:15px 0}.stat-box{background:#f0f9f8;border:1px solid #0F8B7D;border-radius:8px;padding:12px;text-align:center}.stat-val{font-size:24px;font-weight:bold;color:#0F8B7D}.stat-label{font-size:11px;color:#666;text-transform:uppercase}@media print{body{padding:0}}</style></head><body>`;
-      html += `<h1>AFROCAT VOLLEYBALL CLUB — Player Report</h1>`;
-      html += `<h2>${esc(player.fullName)}</h2>`;
-      html += `<table><tr><td><strong>Position:</strong> ${esc(player.position)}</td><td><strong>Jersey:</strong> #${player.jerseyNo || "N/A"}</td><td><strong>Team:</strong> ${esc(team?.name)}</td></tr>`;
-      html += `<tr><td><strong>Age:</strong> ${age ?? "N/A"}</td><td><strong>Height:</strong> ${player.heightCm || "N/A"}cm</td><td><strong>Weight:</strong> ${player.weightKg || "N/A"}kg</td></tr>`;
-      html += `<tr><td><strong>DOB:</strong> ${esc(player.dob)}</td><td><strong>Gender:</strong> ${esc(player.gender)}</td><td><strong>Nationality:</strong> ${esc(player.nationality)}</td></tr></table>`;
+      const allMatches = await storage.getMatches();
+      const matchMap = new Map(allMatches.map((m: any) => [m.id, m]));
+      const matchHistory = stats
+        .map((s: any) => {
+          const m = matchMap.get(s.matchId);
+          const totalErr = (s.spikesError || 0) + (s.servesError || 0) + (s.receiveError || 0) + (s.settingError || 0);
+          return {
+            date: m?.matchDate || "—",
+            opponent: m?.opponent || "Unknown",
+            competition: m?.competition || "—",
+            result: m?.result || "—",
+            kills: s.spikesKill || 0,
+            aces: s.servesAce || 0,
+            blocks: (s.blocksSolo || 0) + (s.blocksAssist || 0),
+            digs: s.digs || 0,
+            assists: s.settingAssist || 0,
+            errors: totalErr,
+            pts: s.pointsTotal || 0,
+          };
+        })
+        .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""));
 
-      html += `<h3>Career Statistics (${stats.length} Matches)</h3>`;
-      html += `<div class="stat-grid">`;
-      for (const [label, val] of Object.entries(totals)) {
-        html += `<div class="stat-box"><div class="stat-val">${val}</div><div class="stat-label">${label}</div></div>`;
+      const avgPts = stats.length > 0 ? (totals.points / stats.length).toFixed(1) : "—";
+      const avgKills = stats.length > 0 ? (totals.kills / stats.length).toFixed(1) : "—";
+
+      const pCss = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;color:#1a1a2e;font-size:12px}.hdr{border-bottom:4px solid #0F8B7D;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}.club{font-size:20px;font-weight:900;color:#0F8B7D;letter-spacing:1px}.motto{font-size:9px;color:#888;margin-top:2px}.hdr-right{text-align:right;font-size:10px;color:#555;line-height:1.8}.rpt-title{font-size:15px;font-weight:700;color:#333;margin-bottom:4px}.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;border:1px solid #e0e0e0;border-radius:10px;padding:16px}.profile-row{display:flex;flex-direction:column;gap:8px}.pf-item{display:flex;gap:8px;font-size:11px}.pf-label{color:#888;min-width:100px;font-size:10px}.pf-val{font-weight:600;color:#1a1a2e}.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}.kpi{background:#f0faf9;border:1px solid #b2dfdb;border-radius:10px;padding:12px;text-align:center}.kpi .val{font-size:26px;font-weight:900;color:#0F8B7D}.kpi .lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}.section-title{font-size:11px;font-weight:700;color:#0F8B7D;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F8B7D;padding-bottom:4px;margin:20px 0 10px}table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px}th{background:#0F8B7D;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:0.3px}td{padding:6px 8px;border-bottom:1px solid #e8edf0}tr:nth-child(even) td{background:#f8fbfa}.num{text-align:center}.win{color:#15803d;font-weight:700}.loss{color:#dc2626;font-weight:700}.award-badge{display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700;margin-right:4px}.footer{margin-top:24px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#9ca3af}@media print{body{padding:10px;max-width:100%}@page{margin:10mm}}`;
+
+      let html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Player Report — ${esc(player.fullName)}</title><style>${pCss}</style></head><body>`;
+
+      html += `<div class="hdr"><div><div class="club">AFROCAT VOLLEYBALL CLUB</div><div class="motto">One Team One Dream — Passion Discipline Victory</div></div><div class="hdr-right"><div class="rpt-title">Player Report</div><div><strong>Generated:</strong> ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div></div></div>`;
+
+      html += `<div class="profile-grid">
+        <div class="profile-row">
+          <div class="pf-item"><span class="pf-label">Full Name</span><span class="pf-val" style="font-size:15px;color:#0F8B7D">${esc(player.fullName)}</span></div>
+          <div class="pf-item"><span class="pf-label">Position</span><span class="pf-val">${esc(player.position || "—")}</span></div>
+          <div class="pf-item"><span class="pf-label">Jersey Number</span><span class="pf-val">#${player.jerseyNo || "—"}</span></div>
+          <div class="pf-item"><span class="pf-label">Team</span><span class="pf-val">${esc(team?.name || "Unassigned")}</span></div>
+          <div class="pf-item"><span class="pf-label">Status</span><span class="pf-val">${esc(player.status || "ACTIVE")}</span></div>
+        </div>
+        <div class="profile-row">
+          <div class="pf-item"><span class="pf-label">Date of Birth</span><span class="pf-val">${esc(player.dob || "—")}</span></div>
+          <div class="pf-item"><span class="pf-label">Age</span><span class="pf-val">${age ?? "—"} years</span></div>
+          <div class="pf-item"><span class="pf-label">Gender</span><span class="pf-val">${esc(player.gender || "—")}</span></div>
+          <div class="pf-item"><span class="pf-label">Height</span><span class="pf-val">${player.heightCm ? player.heightCm + " cm" : "—"}</span></div>
+          <div class="pf-item"><span class="pf-label">Weight</span><span class="pf-val">${player.weightKg ? player.weightKg + " kg" : "—"}</span></div>
+          <div class="pf-item"><span class="pf-label">Nationality</span><span class="pf-val">${esc(player.nationality || "—")}</span></div>
+        </div>
+      </div>`;
+
+      html += `<div class="section-title">Career Statistics — ${stats.length} Matches Played</div>`;
+      html += `<div class="kpi-row">
+        <div class="kpi"><div class="val">${totals.points}</div><div class="lbl">Total Points</div></div>
+        <div class="kpi"><div class="val">${totals.kills}</div><div class="lbl">Total Kills</div></div>
+        <div class="kpi"><div class="val">${totals.aces}</div><div class="lbl">Total Aces</div></div>
+        <div class="kpi"><div class="val">${totals.blocks}</div><div class="lbl">Total Blocks</div></div>
+      </div>
+      <div class="kpi-row">
+        <div class="kpi"><div class="val">${totals.digs}</div><div class="lbl">Total Digs</div></div>
+        <div class="kpi"><div class="val">${totals.assists}</div><div class="lbl">Total Assists</div></div>
+        <div class="kpi"><div class="val">${avgPts}</div><div class="lbl">Avg Pts/Match</div></div>
+        <div class="kpi"><div class="val">${avgKills}</div><div class="lbl">Avg Kills/Match</div></div>
+      </div>`;
+
+      html += `<div class="section-title">Match-by-Match History</div>`;
+      html += `<table><thead><tr><th>Date</th><th>Opponent</th><th>Competition</th><th class="num">Result</th><th class="num">Kills</th><th class="num">Aces</th><th class="num">Blks</th><th class="num">Digs</th><th class="num">Ast</th><th class="num">Err</th><th class="num">Pts</th></tr></thead><tbody>`;
+      if (matchHistory.length === 0) {
+        html += `<tr><td colspan="11" style="text-align:center;color:#888;padding:16px">No match statistics recorded</td></tr>`;
+      } else {
+        for (const m of matchHistory) {
+          const resClass = m.result === "W" ? "win" : m.result === "L" ? "loss" : "";
+          html += `<tr><td>${esc(m.date)}</td><td><strong>${esc(m.opponent)}</strong></td><td style="font-size:10px;color:#666">${esc(m.competition)}</td><td class="num ${resClass}">${esc(m.result)}</td><td class="num">${m.kills}</td><td class="num">${m.aces}</td><td class="num">${m.blocks}</td><td class="num">${m.digs}</td><td class="num">${m.assists}</td><td class="num" style="${m.errors > 3 ? "color:#dc2626;font-weight:700" : ""}">${m.errors}</td><td class="num" style="font-weight:700;color:#0F8B7D">${m.pts > 0 ? "+" : ""}${m.pts}</td></tr>`;
+        }
       }
-      html += `</div>`;
+      html += `</tbody></table>`;
 
       if (awards.length > 0) {
-        html += `<h3>Awards (${awards.length})</h3><table><tr><th>Award</th><th>Month</th><th>Notes</th></tr>`;
-        for (const a of awards) html += `<tr><td>${esc(a.awardType)}</td><td>${esc(a.awardMonth)}</td><td>${esc(a.notes)}</td></tr>`;
-        html += `</table>`;
+        html += `<div class="section-title">Awards & Honours (${awards.length})</div>`;
+        html += `<table><thead><tr><th>Award Type</th><th>Month</th><th>Notes</th></tr></thead><tbody>`;
+        for (const a of awards) {
+          html += `<tr><td><span class="award-badge">${esc(a.awardType)}</span></td><td>${esc(a.awardMonth)}</td><td style="color:#555">${esc(a.notes || "—")}</td></tr>`;
+        }
+        html += `</tbody></table>`;
       }
+
+      html += `<div class="footer"><span>AFROCAT VOLLEYBALL CLUB — One Team One Dream</span><span>Generated: ${new Date().toLocaleString()}</span></div>`;
       html += `</body></html>`;
 
       res.json({ html });
@@ -4909,14 +5006,53 @@ th{background:#0d7377;color:white}
         return { ...p, matchesPlayed: stats.length, totalPoints: stats.reduce((s: number, st: any) => s + (st.pointsTotal || 0), 0) };
       }));
 
-      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Team Roster — ${esc(team.name)}</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}@media print{body{padding:0}}</style></head><body>`;
-      html += `<h1>AFROCAT VOLLEYBALL CLUB — Team Roster</h1>`;
-      html += `<h2>${esc(team.name)}</h2><p>Generated: ${new Date().toLocaleDateString()} | Total Players: ${teamPlayers.length}</p>`;
-      html += `<table><tr><th>#</th><th>Name</th><th>Position</th><th>Jersey</th><th>DOB</th><th>Height</th><th>Weight</th><th>Matches</th><th>Points</th></tr>`;
-      playersWithStats.sort((a: any, b: any) => (a.jerseyNo || 99) - (b.jerseyNo || 99)).forEach((p: any, i: number) => {
-        html += `<tr><td>${i + 1}</td><td>${esc(p.fullName)}</td><td>${esc(p.position)}</td><td>${p.jerseyNo || "—"}</td><td>${esc(p.dob)}</td><td>${p.heightCm || "—"}cm</td><td>${p.weightKg || "—"}kg</td><td>${p.matchesPlayed}</td><td>${p.totalPoints}</td></tr>`;
+      const sortedPlayers = [...playersWithStats].sort((a: any, b: any) => (a.jerseyNo || 99) - (b.jerseyNo || 99));
+      const byPosition: Record<string, any[]> = {};
+      for (const p of sortedPlayers) {
+        const pos = p.position || "Unassigned";
+        if (!byPosition[pos]) byPosition[pos] = [];
+        byPosition[pos].push(p);
+      }
+
+      const rCss = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;color:#1a1a2e;font-size:12px}.hdr{border-bottom:4px solid #0F8B7D;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}.club{font-size:20px;font-weight:900;color:#0F8B7D;letter-spacing:1px}.motto{font-size:9px;color:#888;margin-top:2px}.hdr-right{text-align:right;font-size:10px;color:#555;line-height:1.8}.rpt-title{font-size:15px;font-weight:700;color:#333;margin-bottom:4px}.kpi-row{display:flex;gap:12px;margin-bottom:22px}.kpi{background:#f0faf9;border:1px solid #b2dfdb;border-radius:10px;padding:12px 20px;text-align:center;flex:1}.kpi .val{font-size:26px;font-weight:900;color:#0F8B7D}.kpi .lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}.section-title{font-size:11px;font-weight:700;color:#0F8B7D;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F8B7D;padding-bottom:4px;margin:20px 0 10px}table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px}th{background:#0F8B7D;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:0.3px}td{padding:6px 8px;border-bottom:1px solid #e8edf0}tr:nth-child(even) td{background:#f8fbfa}.num{text-align:center}.pos-badge{display:inline-block;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:700}.footer{margin-top:24px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#9ca3af}@media print{body{padding:10px;max-width:100%}@page{margin:10mm}}`;
+
+      const genders = [...new Set(sortedPlayers.map((p: any) => p.gender).filter(Boolean))];
+      const avgAge = sortedPlayers.filter((p: any) => p.dob).length > 0
+        ? (sortedPlayers.filter((p: any) => p.dob).map((p: any) => {
+            const today = new Date(); const dob = new Date(p.dob);
+            return today.getFullYear() - dob.getFullYear();
+          }).reduce((a: number, b: number) => a + b, 0) / sortedPlayers.filter((p: any) => p.dob).length).toFixed(1)
+        : "—";
+
+      let html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Team Roster — ${esc(team.name)}</title><style>${rCss}</style></head><body>`;
+      html += `<div class="hdr"><div><div class="club">AFROCAT VOLLEYBALL CLUB</div><div class="motto">One Team One Dream — Passion Discipline Victory</div></div><div class="hdr-right"><div class="rpt-title">Official Team Roster</div><div><strong>Team:</strong> ${esc(team.name)}</div><div><strong>Generated:</strong> ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div></div></div>`;
+
+      html += `<div class="kpi-row">
+        <div class="kpi"><div class="val">${sortedPlayers.length}</div><div class="lbl">Active Players</div></div>
+        <div class="kpi"><div class="val">${Object.keys(byPosition).length}</div><div class="lbl">Positions Covered</div></div>
+        <div class="kpi"><div class="val">${avgAge}</div><div class="lbl">Avg Age</div></div>
+        <div class="kpi"><div class="val">${genders.join(" / ") || "—"}</div><div class="lbl">Gender</div></div>
+      </div>`;
+
+      html += `<div class="section-title">Full Roster — Sorted by Jersey Number</div>`;
+      html += `<table><thead><tr><th class="num">No.</th><th class="num">Jersey</th><th>Full Name</th><th>Position</th><th class="num">DOB</th><th class="num">Age</th><th class="num">Height</th><th class="num">Weight</th><th class="num">Nationality</th><th class="num">Matches</th><th class="num">Points</th></tr></thead><tbody>`;
+      sortedPlayers.forEach((p: any, i: number) => {
+        const today = new Date(); const dobDate = p.dob ? new Date(p.dob) : null;
+        const pAge = dobDate ? today.getFullYear() - dobDate.getFullYear() : "—";
+        html += `<tr><td class="num">${i + 1}</td><td class="num" style="font-weight:700">#${p.jerseyNo || "—"}</td><td><strong>${esc(p.fullName)}</strong></td><td><span class="pos-badge">${esc(p.position || "—")}</span></td><td class="num" style="font-size:10px">${esc(p.dob || "—")}</td><td class="num">${pAge}</td><td class="num">${p.heightCm ? p.heightCm + "cm" : "—"}</td><td class="num">${p.weightKg ? p.weightKg + "kg" : "—"}</td><td class="num" style="font-size:10px">${esc(p.nationality || "—")}</td><td class="num">${p.matchesPlayed}</td><td class="num" style="font-weight:700;color:#0F8B7D">${p.totalPoints}</td></tr>`;
       });
-      html += `</table></body></html>`;
+      if (sortedPlayers.length === 0) {
+        html += `<tr><td colspan="11" style="text-align:center;color:#888;padding:16px">No active players registered for this team</td></tr>`;
+      }
+      html += `</tbody></table>`;
+
+      html += `<div class="section-title">Players by Position</div>`;
+      for (const [pos, posPlayers] of Object.entries(byPosition)) {
+        html += `<div style="margin-bottom:4px;font-size:11px"><strong><span class="pos-badge">${esc(pos)}</span></strong> — ${posPlayers.map((p: any) => `#${p.jerseyNo || "?"} ${esc(p.fullName)}`).join(", ")}</div>`;
+      }
+
+      html += `<div class="footer"><span>AFROCAT VOLLEYBALL CLUB — One Team One Dream</span><span>Generated: ${new Date().toLocaleString()}</span></div>`;
+      html += `</body></html>`;
 
       res.json({ html });
     } catch (e) { next(e); }
@@ -4942,28 +5078,60 @@ th{background:#0d7377;color:white}
       const sessionIds = new Set(filtered.map(s => s.id));
       const relevantRecords = records.filter((r: any) => sessionIds.has(r.sessionId));
 
-      const playerAttendance: Record<string, { present: number; absent: number; name: string }> = {};
+      const playerAttendance: Record<string, { present: number; late: number; absent: number; name: string }> = {};
       for (const r of relevantRecords) {
-        if (!playerAttendance[r.playerId]) playerAttendance[r.playerId] = { present: 0, absent: 0, name: pMap[r.playerId]?.fullName || "Unknown" };
-        if (r.status === "PRESENT" || r.status === "LATE") playerAttendance[r.playerId].present++;
+        if (!playerAttendance[r.playerId]) playerAttendance[r.playerId] = { present: 0, late: 0, absent: 0, name: pMap[r.playerId]?.fullName || "Unknown" };
+        if (r.status === "PRESENT") playerAttendance[r.playerId].present++;
+        else if (r.status === "LATE") playerAttendance[r.playerId].late++;
         else playerAttendance[r.playerId].absent++;
       }
 
-      let html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Attendance Summary</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px}h1{color:#0F8B7D}table{width:100%;border-collapse:collapse;margin:15px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#0F8B7D;color:white}.good{color:green}.bad{color:red}@media print{body{padding:0}}</style></head><body>`;
-      html += `<h1>AFROCAT VOLLEYBALL CLUB — Attendance Summary</h1>`;
-      html += `<p><strong>Team:</strong> ${esc(team?.name || "All Teams")} | <strong>Period:</strong> ${esc(startDate || "Start")} to ${esc(endDate || "Now")} | <strong>Sessions:</strong> ${filtered.length}</p>`;
-      html += `<table><tr><th>#</th><th>Player</th><th>Present</th><th>Absent</th><th>Rate</th></tr>`;
-      const sorted = Object.entries(playerAttendance).sort((a, b) => {
-        const rateA = a[1].present / (a[1].present + a[1].absent);
-        const rateB = b[1].present / (b[1].present + b[1].absent);
+      const sortedAtt = Object.entries(playerAttendance).sort((a, b) => {
+        const totA = a[1].present + a[1].late + a[1].absent;
+        const totB = b[1].present + b[1].late + b[1].absent;
+        const rateA = totA > 0 ? (a[1].present + a[1].late) / totA : 0;
+        const rateB = totB > 0 ? (b[1].present + b[1].late) / totB : 0;
         return rateB - rateA;
       });
-      sorted.forEach(([_id, data], i) => {
-        const total = data.present + data.absent;
-        const rate = total > 0 ? ((data.present / total) * 100).toFixed(0) : "0";
-        html += `<tr><td>${i + 1}</td><td>${esc(data.name)}</td><td>${data.present}</td><td>${data.absent}</td><td class="${+rate >= 75 ? 'good' : 'bad'}">${rate}%</td></tr>`;
+
+      const totalSessions = filtered.length;
+      const avgRate = sortedAtt.length > 0
+        ? (sortedAtt.reduce((sum, [, d]) => {
+            const tot = d.present + d.late + d.absent;
+            return sum + (tot > 0 ? (d.present + d.late) / tot : 0);
+          }, 0) / sortedAtt.length * 100).toFixed(0)
+        : "0";
+      const perfect = sortedAtt.filter(([, d]) => d.absent === 0).length;
+
+      const aCss = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;color:#1a1a2e;font-size:12px}.hdr{border-bottom:4px solid #0F8B7D;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}.club{font-size:20px;font-weight:900;color:#0F8B7D;letter-spacing:1px}.motto{font-size:9px;color:#888;margin-top:2px}.hdr-right{text-align:right;font-size:10px;color:#555;line-height:1.8}.rpt-title{font-size:15px;font-weight:700;color:#333;margin-bottom:4px}.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.kpi{background:#f0faf9;border:1px solid #b2dfdb;border-radius:10px;padding:12px;text-align:center}.kpi .val{font-size:26px;font-weight:900;color:#0F8B7D}.kpi .lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}.section-title{font-size:11px;font-weight:700;color:#0F8B7D;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F8B7D;padding-bottom:4px;margin:20px 0 10px}table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px}th{background:#0F8B7D;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:0.3px}td{padding:6px 8px;border-bottom:1px solid #e8edf0}tr:nth-child(even) td{background:#f8fbfa}.num{text-align:center}.good{color:#15803d;font-weight:700}.bad{color:#dc2626;font-weight:700}.warn{color:#d97706;font-weight:700}.bar-bg{background:#e5e7eb;border-radius:4px;height:8px;width:100%;display:inline-block;vertical-align:middle;overflow:hidden}.bar-fill{height:100%;border-radius:4px;display:inline-block}.footer{margin-top:24px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#9ca3af}@media print{body{padding:10px;max-width:100%}@page{margin:10mm}}`;
+
+      let html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Attendance Summary</title><style>${aCss}</style></head><body>`;
+      html += `<div class="hdr"><div><div class="club">AFROCAT VOLLEYBALL CLUB</div><div class="motto">One Team One Dream — Passion Discipline Victory</div></div><div class="hdr-right"><div class="rpt-title">Attendance Summary Report</div><div><strong>Team:</strong> ${esc(team?.name || "All Teams")}</div><div><strong>Period:</strong> ${esc(startDate || "All time")} to ${esc(endDate || "Present")}</div><div><strong>Generated:</strong> ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div></div></div>`;
+
+      html += `<div class="kpi-row">
+        <div class="kpi"><div class="val">${totalSessions}</div><div class="lbl">Sessions Held</div></div>
+        <div class="kpi"><div class="val">${sortedAtt.length}</div><div class="lbl">Players Tracked</div></div>
+        <div class="kpi"><div class="val">${avgRate}%</div><div class="lbl">Avg Attendance Rate</div></div>
+        <div class="kpi"><div class="val">${perfect}</div><div class="lbl">Perfect Attendance</div></div>
+      </div>`;
+
+      html += `<div class="section-title">Player Attendance — Sorted by Rate (Highest First)</div>`;
+      html += `<table><thead><tr><th class="num">#</th><th>Player</th><th class="num">Present</th><th class="num">Late</th><th class="num">Absent</th><th class="num">Total</th><th class="num">Rate</th><th style="width:80px">Visual</th></tr></thead><tbody>`;
+      sortedAtt.forEach(([_id, data], i) => {
+        const total = data.present + data.late + data.absent;
+        const rate = total > 0 ? ((data.present + data.late) / total * 100) : 0;
+        const rateStr = rate.toFixed(0);
+        const cls = rate >= 90 ? "good" : rate >= 75 ? "warn" : "bad";
+        const barColor = rate >= 90 ? "#15803d" : rate >= 75 ? "#d97706" : "#dc2626";
+        html += `<tr><td class="num">${i + 1}</td><td><strong>${esc(data.name)}</strong></td><td class="num" style="color:#15803d;font-weight:600">${data.present}</td><td class="num" style="color:#d97706">${data.late}</td><td class="num" style="color:#dc2626">${data.absent}</td><td class="num">${total}</td><td class="num ${cls}">${rateStr}%</td><td><div class="bar-bg"><div class="bar-fill" style="width:${rateStr}%;background:${barColor}"></div></div></td></tr>`;
       });
-      html += `</table></body></html>`;
+      if (sortedAtt.length === 0) {
+        html += `<tr><td colspan="8" style="text-align:center;color:#888;padding:16px">No attendance records found for the selected period</td></tr>`;
+      }
+      html += `</tbody></table>`;
+
+      html += `<div class="footer"><span>AFROCAT VOLLEYBALL CLUB — One Team One Dream &bull; Attendance threshold: 75% = Acceptable, 90%+ = Excellent</span><span>Generated: ${new Date().toLocaleString()}</span></div>`;
+      html += `</body></html>`;
 
       res.json({ html });
     } catch (e) { next(e); }
