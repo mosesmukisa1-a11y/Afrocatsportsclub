@@ -956,13 +956,23 @@ export default function TouchStats() {
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-afrocat-border flex justify-end">
+                <div className="pt-3 border-t border-afrocat-border flex items-center justify-end gap-2 flex-wrap">
                   <button
                     onClick={() => window.print()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-xs hover:bg-afrocat-teal/90 cursor-pointer"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-white-10 text-afrocat-text border border-afrocat-border font-bold text-xs hover:bg-afrocat-white-5 cursor-pointer"
                     data-testid="button-print-report"
                   >
-                    <Printer className="w-4 h-4" /> Print Report
+                    <Printer className="w-4 h-4" /> Print Screen
+                  </button>
+                  <button
+                    onClick={() => {
+                      const token = localStorage.getItem("token") || "";
+                      window.open(`/api/matches/${selectedMatchId}/stats-report/print?token=${token}`, "_blank");
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal text-white font-bold text-xs hover:bg-afrocat-teal/90 cursor-pointer"
+                    data-testid="button-download-pdf"
+                  >
+                    <FileText className="w-4 h-4" /> Download Stats PDF
                   </button>
                 </div>
               </div>

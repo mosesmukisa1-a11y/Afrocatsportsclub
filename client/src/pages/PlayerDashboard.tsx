@@ -409,40 +409,107 @@ export default function PlayerDashboard() {
               </div>
 
               {activeTab === "overview" && (
-                <AcCard>
-                  <div className="p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                      <BarChart3 size={16} className="text-afrocat-gold" />
-                      <span className="font-bold text-sm text-afrocat-text">Season Overview</span>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                      {[
-                        { label: "Points", value: dash.totals?.pointsTotal ?? 0, gold: true },
-                        { label: "Kills", value: dash.totals?.kills ?? 0 },
-                        { label: "Aces", value: dash.totals?.aces ?? 0 },
-                        { label: "Blocks", value: dash.totals?.blocks ?? 0 },
-                        { label: "Digs", value: dash.totals?.digs ?? 0 },
-                        { label: "Assists", value: dash.totals?.settingAssist ?? 0 },
-                      ].map(s => (
-                        <div key={s.label} className="text-center p-3 rounded-xl bg-afrocat-white-3">
-                          <div className={`text-2xl font-bold ${s.gold ? "text-afrocat-gold" : "text-afrocat-teal"}`}>{s.value}</div>
-                          <div className="text-[10px] uppercase tracking-wider mt-1 text-afrocat-muted">{s.label}</div>
+                <div className="space-y-4">
+                  {dash.recentStats && dash.recentStats.length > 0 && (() => {
+                    const latest = dash.recentStats[0];
+                    const latestFocus = (dash.smartFocusHistory || []).filter((f: any) => f.matchId === latest.matchId);
+                    const allFocusAreas = latestFocus.flatMap((f: any) => f.focusAreas || []);
+                    const totalErrors = (latest.spikesError ?? 0) + (latest.servesError ?? 0) + (latest.receiveError ?? 0) + (latest.settingError ?? 0);
+                    return (
+                      <AcCard>
+                        <div className="p-5">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <Flame size={16} className="text-afrocat-gold" />
+                              <span className="font-bold text-sm text-afrocat-text">Latest Match Performance</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {latest.result && (
+                                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${latest.result === "W" ? "bg-afrocat-green-soft text-afrocat-green" : "bg-afrocat-red-soft text-afrocat-red"}`}>
+                                  {latest.result === "W" ? "WIN" : "LOSS"}
+                                </span>
+                              )}
+                              <span className="text-xs text-afrocat-muted">vs {latest.opponent} &bull; {latest.matchDate}</span>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 sm:grid-cols-7 gap-2 mb-4">
+                            {[
+                              { label: "Net Pts", value: latest.pointsTotal ?? 0, gold: true },
+                              { label: "Kills", value: latest.spikesKill ?? 0 },
+                              { label: "Aces", value: latest.servesAce ?? 0 },
+                              { label: "Blocks", value: (latest.blocksSolo ?? 0) + (latest.blocksAssist ?? 0) },
+                              { label: "Digs", value: latest.digs ?? 0 },
+                              { label: "Assists", value: latest.settingAssist ?? 0 },
+                              { label: "Errors", value: totalErrors, danger: totalErrors > 3 },
+                            ].map(s => (
+                              <div key={s.label} className="text-center p-2.5 rounded-xl bg-afrocat-white-3">
+                                <div className={`text-xl font-bold ${s.gold ? "text-afrocat-gold" : s.danger ? "text-afrocat-red" : "text-afrocat-teal"}`}>{s.value}</div>
+                                <div className="text-[9px] uppercase tracking-wider mt-0.5 text-afrocat-muted">{s.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {allFocusAreas.length > 0 ? (
+                            <div className="p-3 rounded-xl bg-afrocat-gold-soft border border-afrocat-gold/20">
+                              <div className="flex items-center gap-1.5 mb-2">
+                                <Target size={13} className="text-afrocat-gold" />
+                                <span className="text-xs font-bold text-afrocat-gold">Training Focus for Next Session</span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {allFocusAreas.map((area: string, i: number) => (
+                                  <span key={i} className="text-xs font-semibold px-2.5 py-1 rounded-full bg-afrocat-gold/20 text-afrocat-gold border border-afrocat-gold/30">
+                                    {area}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-3 rounded-xl bg-afrocat-green-soft border border-afrocat-green/20">
+                              <div className="flex items-center gap-1.5">
+                                <CheckCircle size={13} className="text-afrocat-green" />
+                                <span className="text-xs font-bold text-afrocat-green">No major weaknesses this match — excellent work!</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
-                    {dash.activeContract && (
-                      <div className="mt-5 p-4 rounded-xl bg-afrocat-teal-soft border border-afrocat-teal/30">
-                        <div className="flex items-center gap-2 mb-1">
-                          <FileText size={14} className="text-afrocat-teal" />
-                          <span className="font-bold text-xs text-afrocat-teal">Active Contract</span>
-                        </div>
-                        <p className="text-sm text-afrocat-text">
-                          {dash.activeContract.contractType} — {dash.activeContract.startDate} to {dash.activeContract.endDate}
-                        </p>
+                      </AcCard>
+                    );
+                  })()}
+
+                  <AcCard>
+                    <div className="p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <BarChart3 size={16} className="text-afrocat-gold" />
+                        <span className="font-bold text-sm text-afrocat-text">Season Overview</span>
                       </div>
-                    )}
-                  </div>
-                </AcCard>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                        {[
+                          { label: "Points", value: dash.totals?.pointsTotal ?? 0, gold: true },
+                          { label: "Kills", value: dash.totals?.kills ?? 0 },
+                          { label: "Aces", value: dash.totals?.aces ?? 0 },
+                          { label: "Blocks", value: dash.totals?.blocks ?? 0 },
+                          { label: "Digs", value: dash.totals?.digs ?? 0 },
+                          { label: "Assists", value: dash.totals?.settingAssist ?? 0 },
+                        ].map(s => (
+                          <div key={s.label} className="text-center p-3 rounded-xl bg-afrocat-white-3">
+                            <div className={`text-2xl font-bold ${s.gold ? "text-afrocat-gold" : "text-afrocat-teal"}`}>{s.value}</div>
+                            <div className="text-[10px] uppercase tracking-wider mt-1 text-afrocat-muted">{s.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {dash.activeContract && (
+                        <div className="mt-5 p-4 rounded-xl bg-afrocat-teal-soft border border-afrocat-teal/30">
+                          <div className="flex items-center gap-2 mb-1">
+                            <FileText size={14} className="text-afrocat-teal" />
+                            <span className="font-bold text-xs text-afrocat-teal">Active Contract</span>
+                          </div>
+                          <p className="text-sm text-afrocat-text">
+                            {dash.activeContract.contractType} — {dash.activeContract.startDate} to {dash.activeContract.endDate}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </AcCard>
+                </div>
               )}
 
               {activeTab === "focus" && (

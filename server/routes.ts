@@ -6004,16 +6004,38 @@ th{background:#0d7377;color:white}
       else if (a === "SET" && o === "MINUS") s.settingError++;
     }
 
+    const focusAreasMap = new Map<string, string[]>();
     for (const [playerId, stat] of Object.entries(playerAgg)) {
       const pointsTotal = (stat.spikesKill * 2) + (stat.servesAce * 2) + (stat.blocksSolo * 2) + stat.blocksAssist + stat.digs + stat.settingAssist - (stat.spikesError * 2) - (stat.servesError * 2) - (stat.receiveError * 2) - (stat.settingError * 2);
       await storage.upsertStat({ ...stat, matchId, playerId, pointsTotal });
       const player = await storage.getPlayer(playerId);
+      const pos = (player?.position || "").toLowerCase();
       const focusAreas: string[] = [];
-      if (stat.servesError >= 3) focusAreas.push("Serving consistency");
-      if (stat.spikesError >= 3) focusAreas.push("Attack control");
-      if (stat.receiveError >= 3) focusAreas.push("Serve reception");
-      if (stat.settingError >= 3) focusAreas.push("Setting accuracy");
-      if (player?.position?.toLowerCase().includes("middle") && (stat.blocksSolo + stat.blocksAssist) < 2) focusAreas.push("Blocking timing");
+
+      if (pos.includes("setter")) {
+        if (stat.settingAssist < 5) focusAreas.push("Setting output — create more attack opportunities");
+        if (stat.settingError >= 2) focusAreas.push("Setting decision-making");
+        if (stat.servesError >= 2) focusAreas.push("Serving consistency");
+      } else if (pos.includes("libero")) {
+        if (stat.receivePerfect < 3 && stat.receiveError >= 1) focusAreas.push("Reception quality — aim for more perfect passes");
+        if (stat.digs < 3) focusAreas.push("Defensive range — cover more court area");
+        if (stat.receiveError >= 2) focusAreas.push("Serve reception fundamentals");
+      } else if (pos.includes("outside") || pos.includes("opposite")) {
+        if (stat.spikesKill < 3 && stat.spikesError >= 2) focusAreas.push("Attack efficiency — improve angle selection");
+        if (stat.receiveError >= 2) focusAreas.push("Pass quality to support attack transitions");
+        if (stat.servesError >= 3) focusAreas.push("Serving consistency");
+      } else if (pos.includes("middle")) {
+        if ((stat.blocksSolo + stat.blocksAssist) < 2) focusAreas.push("Blocking timing and read");
+        if (stat.spikesKill < 1) focusAreas.push("Quick attack execution");
+        if (stat.servesError >= 2) focusAreas.push("Jump serve control");
+      } else {
+        if (stat.servesError >= 3) focusAreas.push("Serving consistency");
+        if (stat.spikesError >= 3) focusAreas.push("Attack control");
+        if (stat.receiveError >= 3) focusAreas.push("Serve reception");
+        if (stat.settingError >= 3) focusAreas.push("Setting accuracy");
+      }
+
+      focusAreasMap.set(playerId, focusAreas);
       if (focusAreas.length > 0) await storage.createSmartFocus({ playerId, matchId, focusAreas });
     }
 
@@ -6077,13 +6099,14 @@ th{background:#0d7377;color:white}
       const player = await storage.getPlayer(playerId);
       if (!player?.userId) continue;
       const totalErrors = stat.spikesError + stat.servesError + stat.receiveError + stat.settingError;
-      const improvements: string[] = [];
-      if (stat.servesError >= 2) improvements.push("Serving consistency");
-      if (stat.spikesError >= 2) improvements.push("Attack accuracy");
-      if (stat.receiveError >= 2) improvements.push("Reception quality");
-      const msg = `Kills: ${stat.spikesKill}, Aces: ${stat.servesAce}, Blocks: ${stat.blocksSolo}, Digs: ${stat.digs}, Errors: ${totalErrors}. ${improvements.length > 0 ? `Focus: ${improvements.join(", ")}` : "Keep up the good work!"}`;
+      const playerFocusAreas = focusAreasMap.get(playerId) || [];
+      const pts = (stat.spikesKill * 2) + (stat.servesAce * 2) + (stat.blocksSolo * 2) + stat.blocksAssist + stat.digs + stat.settingAssist - (totalErrors * 2);
+      const focusPart = playerFocusAreas.length > 0
+        ? `Training Focus: ${playerFocusAreas.join(" • ")}`
+        : "No major weaknesses — excellent performance!";
+      const msg = `vs ${match.opponent} | Kills: ${stat.spikesKill}  Aces: ${stat.servesAce}  Blocks: ${stat.blocksSolo}  Digs: ${stat.digs}  Assists: ${stat.settingAssist}  Errors: ${totalErrors}  Net Pts: ${pts > 0 ? "+" : ""}${pts}. ${focusPart} Open your Player Dashboard for full stats.`;
       try {
-        await storage.createNotification({ userId: player.userId, type: "MATCH_SELECTION", title: "Your Match Stats", message: msg, metadata: { matchId } });
+        await storage.createNotification({ userId: player.userId, type: "MATCH_SELECTION", title: "Your Match Stats Ready", message: msg, metadata: { matchId } });
       } catch (_) {}
     }
 
@@ -6214,6 +6237,197 @@ th{background:#0d7377;color:white}
       const updated = await storage.getMatch(matchId);
       res.json(updated);
     } catch (err) { next(err); }
+  });
+
+  app.get("/api/matches/:matchId/stats-report/print", requireAuth, async (req, res, next) => {
+    try {
+      const { matchId } = req.params;
+      const match = await storage.getMatch(matchId);
+      if (!match) return res.status(404).json({ message: "Match not found" });
+
+      const team = await storage.getTeam(match.teamId);
+      const allStats = await storage.getStatsByMatch(matchId);
+      const players = await storage.getPlayersByTeam(match.teamId);
+      const playerMap = new Map(players.map(p => [p.id, p]));
+
+      const esc = (s: any) => String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      const matchDate = (match as any).matchDate ? new Date((match as any).matchDate).toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" }) : "—";
+      const homeSets = (match as any).homeSetsWon ?? (match as any).setsFor ?? 0;
+      const awaySets = (match as any).awaySetsWon ?? (match as any).setsAgainst ?? 0;
+      const result = (match as any).result;
+
+      const enriched = allStats.map(s => {
+        const p = playerMap.get(s.playerId);
+        const totalErrors = (s.spikesError || 0) + (s.servesError || 0) + (s.receiveError || 0) + (s.settingError || 0);
+        return {
+          jerseyNo: p?.jerseyNo ?? "—",
+          name: p ? `${p.firstName} ${p.lastName}` : "Unknown",
+          position: p?.position ?? "—",
+          kills: s.spikesKill ?? 0,
+          aces: s.servesAce ?? 0,
+          blocks: (s.blocksSolo ?? 0) + (s.blocksAssist ?? 0),
+          digs: s.digs ?? 0,
+          assists: s.settingAssist ?? 0,
+          receive: s.receivePerfect ?? 0,
+          errors: totalErrors,
+          pts: s.pointsTotal ?? 0,
+          playerId: s.playerId,
+        };
+      }).sort((a, b) => b.pts - a.pts);
+
+      const focusMap = new Map<string, string[]>();
+      for (const s of allStats) {
+        const sf = await storage.getSmartFocusByPlayer(s.playerId);
+        const matchFocus = sf.filter((f: any) => f.matchId === matchId);
+        if (matchFocus.length > 0) {
+          const combined = matchFocus.flatMap((f: any) => f.focusAreas || []);
+          focusMap.set(s.playerId, combined);
+        }
+      }
+
+      const teamTotal = {
+        kills: enriched.reduce((s, r) => s + r.kills, 0),
+        aces: enriched.reduce((s, r) => s + r.aces, 0),
+        blocks: enriched.reduce((s, r) => s + r.blocks, 0),
+        digs: enriched.reduce((s, r) => s + r.digs, 0),
+        assists: enriched.reduce((s, r) => s + r.assists, 0),
+        errors: enriched.reduce((s, r) => s + r.errors, 0),
+        pts: enriched.reduce((s, r) => s + r.pts, 0),
+      };
+
+      const playerRows = enriched.map(r => {
+        const focus = focusMap.get(r.playerId) || [];
+        const focusHtml = focus.length > 0
+          ? `<div class="focus-tags">${focus.map(f => `<span class="focus-tag">${esc(f)}</span>`).join("")}</div>`
+          : `<div class="focus-ok">✓ Good performance</div>`;
+        return `<tr>
+          <td class="num">${esc(r.jerseyNo)}</td>
+          <td><strong>${esc(r.name)}</strong>${focusHtml}</td>
+          <td class="pos">${esc(r.position)}</td>
+          <td class="good">${r.kills}</td>
+          <td class="good">${r.aces}</td>
+          <td class="good">${r.blocks}</td>
+          <td class="good">${r.digs}</td>
+          <td>${r.assists}</td>
+          <td>${r.receive}</td>
+          <td class="${r.errors > 3 ? "bad" : r.errors > 1 ? "warn" : ""}">${r.errors}</td>
+          <td class="${r.pts > 0 ? "good" : r.pts < 0 ? "bad" : ""}">${r.pts > 0 ? "+" : ""}${r.pts}</td>
+        </tr>`;
+      }).join("");
+
+      const html = `<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<title>Match Stats Report — ${esc(team?.name || "Afrocat")} vs ${esc((match as any).opponent)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",Arial,sans-serif;background:#fff;color:#1a1a2e;padding:12mm 14mm;font-size:11px;max-width:297mm}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0F8B7D;padding-bottom:10px;margin-bottom:12px}
+  .club-name{font-size:18px;font-weight:900;color:#0F8B7D;letter-spacing:1px}
+  .club-sub{font-size:9px;color:#888;margin-top:2px}
+  .match-meta{text-align:right;font-size:10px;color:#444;line-height:1.7}
+  .score-banner{display:flex;align-items:center;justify-content:center;gap:16px;background:#0F8B7D;color:#fff;border-radius:8px;padding:10px 20px;margin:10px 0;font-weight:900}
+  .score-banner .team{font-size:14px}
+  .score-banner .sets{font-size:28px;min-width:70px;text-align:center}
+  .result-badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:900;letter-spacing:1px}
+  .win{background:#d1fae5;color:#065f46} .loss{background:#fee2e2;color:#991b1b} .draw{background:#fef3c7;color:#92400e}
+  h2{font-size:12px;font-weight:700;color:#0F8B7D;margin:14px 0 6px;border-bottom:2px solid #0F8B7D;padding-bottom:3px;text-transform:uppercase;letter-spacing:0.5px}
+  table{width:100%;border-collapse:collapse;font-size:10px;margin:4px 0}
+  th{background:#0F8B7D;color:#fff;padding:5px 6px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:0.3px}
+  th.num,th.pos,td.num,td.pos{text-align:center}
+  td{padding:5px 6px;border-bottom:1px solid #eef0f0;vertical-align:top}
+  tr:nth-child(even) td{background:#f8fbfa}
+  tfoot td{background:#0F8B7D;color:#fff;font-weight:700;padding:5px 6px}
+  .good{color:#15803d;font-weight:700;text-align:center}
+  .bad{color:#dc2626;font-weight:700;text-align:center}
+  .warn{color:#d97706;font-weight:700;text-align:center}
+  td:not(:nth-child(1)):not(:nth-child(2)):not(:nth-child(3)){text-align:center}
+  .focus-tags{display:flex;flex-wrap:wrap;gap:2px;margin-top:2px}
+  .focus-tag{background:#fef3c7;color:#92400e;font-size:7.5px;padding:1px 5px;border-radius:10px;font-weight:600}
+  .focus-ok{color:#15803d;font-size:8px;margin-top:2px}
+  .legend{display:flex;gap:14px;font-size:9px;color:#666;margin:8px 0 0}
+  .legend span{display:flex;align-items:center;gap:3px}
+  .footer{margin-top:16px;padding-top:8px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#9ca3af}
+  @media print{body{padding:8mm}@page{margin:8mm;size:A4 landscape}button{display:none!important}.no-print{display:none!important}}
+</style>
+</head><body>
+
+<div class="header">
+  <div>
+    <div class="club-name">AFROCAT VOLLEYBALL CLUB</div>
+    <div class="club-sub">One Team One Dream — Passion Discipline Victory</div>
+    <div style="margin-top:6px;font-size:10px;color:#444">
+      <strong>${esc(team?.name || "Afrocat")}</strong> &nbsp;|&nbsp; Generated: ${new Date().toLocaleString()}
+    </div>
+  </div>
+  <div class="match-meta">
+    <div><strong>${esc(team?.name || "Afrocat")} vs ${esc((match as any).opponent)}</strong></div>
+    <div>${matchDate}</div>
+    <div>${esc((match as any).venue || "")}${(match as any).competition ? " &bull; " + esc((match as any).competition) : ""}</div>
+    <div>Format: Best of ${(match as any).bestOf || 5}</div>
+    <div>
+      <span class="result-badge ${result === "W" ? "win" : result === "L" ? "loss" : "draw"}">
+        ${result === "W" ? "VICTORY" : result === "L" ? "DEFEAT" : result === "D" ? "DRAW" : "PENDING"}
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="score-banner">
+  <span class="team">${esc(team?.name || "AFROCAT")}</span>
+  <span class="sets">${homeSets} &ndash; ${awaySets}</span>
+  <span class="team">${esc((match as any).opponent)}</span>
+</div>
+
+<h2>Player Statistics</h2>
+<table>
+  <thead>
+    <tr>
+      <th class="num">#</th>
+      <th>Player &amp; Focus Areas</th>
+      <th class="pos">Pos</th>
+      <th>Kills</th><th>Aces</th><th>Blocks</th><th>Digs</th>
+      <th>Assists</th><th>Recv+</th><th>Errors</th><th>Net Pts</th>
+    </tr>
+  </thead>
+  <tbody>${playerRows}</tbody>
+  <tfoot>
+    <tr>
+      <td colspan="3">TEAM TOTALS (${enriched.length} players)</td>
+      <td>${teamTotal.kills}</td><td>${teamTotal.aces}</td><td>${teamTotal.blocks}</td>
+      <td>${teamTotal.digs}</td><td>${teamTotal.assists}</td><td>—</td>
+      <td>${teamTotal.errors}</td><td>${teamTotal.pts > 0 ? "+" : ""}${teamTotal.pts}</td>
+    </tr>
+  </tfoot>
+</table>
+
+<div class="legend">
+  <span><strong style="color:#15803d">Kills</strong> = Attack kills</span>
+  <span><strong style="color:#15803d">Aces</strong> = Service aces</span>
+  <span><strong style="color:#15803d">Blocks</strong> = Solo + assist blocks</span>
+  <span><strong style="color:#15803d">Digs</strong> = Successful digs</span>
+  <span><strong>Assists</strong> = Setting assists</span>
+  <span><strong>Recv+</strong> = Perfect receptions</span>
+  <span><strong style="color:#dc2626">Errors</strong> = Total errors</span>
+  <span><strong>Net Pts</strong> = Points impact (positive / negative)</span>
+</div>
+
+<div class="footer">
+  <span>AFROCAT VOLLEYBALL CLUB — Match Stats Report &mdash; Confidential</span>
+  <span>Match ID: ${matchId} &mdash; ${new Date().toLocaleDateString()}</span>
+</div>
+
+<div class="no-print" style="text-align:center;margin-top:16px">
+  <button onclick="window.print()" style="background:#0F8B7D;color:#fff;border:none;padding:10px 28px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+    &#128438; Save as PDF / Print
+  </button>
+</div>
+
+<script>window.onload=()=>setTimeout(()=>window.print(),500)</script>
+</body></html>`;
+
+      res.setHeader("Content-Type", "text/html");
+      res.send(html);
+    } catch (e) { next(e); }
   });
 
   app.post("/api/matches/:matchId/finalize", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
