@@ -1423,13 +1423,32 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
   app.get("/api/awards/match-mvps", requireAuth, async (_req, res, next) => {
     try {
       const allAwards = await storage.getAwards();
-      const mvps = allAwards.filter((a: any) => a.awardType === "MATCH_MVP")
-        .sort((a: any, b: any) => (b.createdAt || "").toString().localeCompare((a.createdAt || "").toString()));
+      const formalMvps = allAwards.filter((a: any) => a.awardType === "MATCH_MVP");
+      const formalMatchIds = new Set(formalMvps.map((a: any) => a.matchId).filter(Boolean));
+
       const allPlayers = await storage.getPlayers();
       const allMatches = await storage.getMatches();
       const pMap = new Map(allPlayers.map((p: any) => [p.id, p]));
       const mMap = new Map(allMatches.map((m: any) => [m.id, m]));
-      const enriched = mvps.map((a: any) => {
+
+      // Derive MVP entries from matches with player_of_match_player_id that don't have a formal award yet
+      const derivedMvps: any[] = allMatches
+        .filter((m: any) => m.playerOfMatchPlayerId && !formalMatchIds.has(m.id))
+        .map((m: any) => ({
+          id: `derived-${m.id}`,
+          playerId: m.playerOfMatchPlayerId,
+          awardType: "MATCH_MVP",
+          matchId: m.id,
+          awardMonth: m.matchDate ? m.matchDate.slice(0, 7) : null,
+          notes: "Player of the Match",
+          createdAt: m.matchDate || m.createdAt,
+          derived: true,
+        }));
+
+      const all = [...formalMvps, ...derivedMvps]
+        .sort((a: any, b: any) => (b.createdAt || "").toString().localeCompare((a.createdAt || "").toString()));
+
+      const enriched = all.map((a: any) => {
         const player = pMap.get(a.playerId);
         const match = a.matchId ? mMap.get(a.matchId) : null;
         return {
@@ -2125,6 +2144,89 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
     }
+  });
+
+  app.get("/api/awards/leaderboard", requireAuth, async (_req, res, next) => {
+    try {
+      const allPlayers = await storage.getPlayers();
+      const pMap = new Map(allPlayers.map((p: any) => [p.id, p]));
+
+      // Aggregate per-player stats from player_match_stats
+      const rows = await db.execute(sql`
+        SELECT
+          pms.player_id,
+          COUNT(DISTINCT pms.match_id)::int                AS matches_played,
+          COALESCE(SUM(pms.points_total),0)::int           AS points_total,
+          COALESCE(SUM(pms.serves_ace),0)::int             AS serves_ace,
+          COALESCE(SUM(pms.spikes_kill),0)::int            AS spikes_kill,
+          COALESCE(SUM(pms.blocks_solo + pms.blocks_assist),0)::int AS blocks_total,
+          COALESCE(SUM(pms.digs),0)::int                   AS digs,
+          COALESCE(SUM(pms.setting_assist),0)::int         AS setting_assist,
+          COALESCE(SUM(pms.receive_perfect),0)::int        AS receive_perfect,
+          COALESCE(SUM(pms.serves_error),0)::int           AS serves_error,
+          COALESCE(SUM(pms.spikes_error),0)::int           AS spikes_error
+        FROM player_match_stats pms
+        GROUP BY pms.player_id
+        ORDER BY points_total DESC
+      `);
+
+      const stats = (rows.rows as any[]).map((r: any) => {
+        const player = pMap.get(r.player_id);
+        return {
+          playerId: r.player_id,
+          playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
+          playerJersey: player?.jerseyNo || "?",
+          playerPosition: player?.position || "—",
+          playerPhotoUrl: player?.photoUrl || null,
+          teamId: player?.teamId || null,
+          matchesPlayed: Number(r.matches_played) || 0,
+          pointsTotal: Number(r.points_total) || 0,
+          servesAce: Number(r.serves_ace) || 0,
+          spikesKill: Number(r.spikes_kill) || 0,
+          blocksTotal: Number(r.blocks_total) || 0,
+          digs: Number(r.digs) || 0,
+          settingAssist: Number(r.setting_assist) || 0,
+          receivePerfect: Number(r.receive_perfect) || 0,
+          servesError: Number(r.serves_error) || 0,
+          spikesError: Number(r.spikes_error) || 0,
+        };
+      });
+
+      // Count formal awards per player
+      const allAwards = await storage.getAwards();
+      const awardCounts: Record<string, number> = {};
+      for (const a of allAwards) {
+        awardCounts[a.playerId] = (awardCounts[a.playerId] || 0) + 1;
+      }
+      // Count player_of_match appearances
+      const allMatches = await storage.getMatches();
+      const potmCounts: Record<string, number> = {};
+      for (const m of allMatches) {
+        const id = (m as any).playerOfMatchPlayerId;
+        if (id) potmCounts[id] = (potmCounts[id] || 0) + 1;
+      }
+
+      // Enrich with award counts and POTM
+      const enriched = stats.map(s => ({
+        ...s,
+        totalAwards: (awardCounts[s.playerId] || 0) + (potmCounts[s.playerId] || 0),
+        potmCount: potmCounts[s.playerId] || 0,
+      }));
+
+      // Build category leaders (top 3 per category, only players with at least 1 match)
+      const played = enriched.filter(s => s.matchesPlayed > 0);
+      const leaders = {
+        topScorers:   [...played].sort((a, b) => b.pointsTotal - a.pointsTotal).slice(0, 5),
+        topAcers:     [...played].sort((a, b) => b.servesAce - a.servesAce).slice(0, 5),
+        topKillers:   [...played].sort((a, b) => b.spikesKill - a.spikesKill).slice(0, 5),
+        topBlockers:  [...played].sort((a, b) => b.blocksTotal - a.blocksTotal).slice(0, 5),
+        topDiggers:   [...played].sort((a, b) => b.digs - a.digs).slice(0, 5),
+        topSetters:   [...played].sort((a, b) => b.settingAssist - a.settingAssist).slice(0, 5),
+        allStats: enriched,
+      };
+
+      res.json(leaders);
+    } catch (e) { next(e); }
   });
 
   // ─── COACH ASSIGNMENTS ──────────────────────────
