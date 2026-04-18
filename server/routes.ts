@@ -7553,6 +7553,132 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  app.get("/api/finance/income-statement", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const from = req.query.from as string | undefined;
+      const to = req.query.to as string | undefined;
+
+      let payments = await storage.getPlayerPayments();
+      let expenses = await storage.getPlayerExpenses();
+      let txns = await storage.getFinanceTxns();
+
+      if (from) {
+        payments = payments.filter((p: any) => p.paymentDate >= from);
+        expenses = expenses.filter((e: any) => e.expenseDate >= from);
+        txns = txns.filter((t: any) => t.txnDate >= from);
+      }
+      if (to) {
+        payments = payments.filter((p: any) => p.paymentDate <= to);
+        expenses = expenses.filter((e: any) => e.expenseDate <= to);
+        txns = txns.filter((t: any) => t.txnDate <= to);
+      }
+
+      const approvedPayments = payments.filter((p: any) => p.status === "APPROVED");
+      const approvedExpenses = expenses.filter((e: any) => e.status === "APPROVED");
+      const incomeTxns = txns.filter((t: any) => t.type === "INCOME");
+      const expenseTxns = txns.filter((t: any) => t.type === "EXPENSE");
+
+      // Income by fee type from player payments
+      const playerIncomeByType: Record<string, number> = {};
+      for (const p of approvedPayments) {
+        playerIncomeByType[p.feeType] = (playerIncomeByType[p.feeType] || 0) + Number(p.amount);
+      }
+
+      // Other income by category from txns
+      const otherIncomeByCategory: Record<string, number> = {};
+      for (const t of incomeTxns) {
+        const cat = t.category || "Other";
+        otherIncomeByCategory[cat] = (otherIncomeByCategory[cat] || 0) + Number(t.amount);
+      }
+
+      // Player expenses by reason
+      const playerExpenseByReason: Record<string, number> = {};
+      for (const e of approvedExpenses) {
+        playerExpenseByReason[e.reason] = (playerExpenseByReason[e.reason] || 0) + Number(e.amount);
+      }
+
+      // Other expenses by category from txns
+      const otherExpenseByCategory: Record<string, number> = {};
+      for (const t of expenseTxns) {
+        const cat = t.category || "Other";
+        otherExpenseByCategory[cat] = (otherExpenseByCategory[cat] || 0) + Number(t.amount);
+      }
+
+      const totalPlayerIncome = Object.values(playerIncomeByType).reduce((a, b) => a + b, 0);
+      const totalOtherIncome = Object.values(otherIncomeByCategory).reduce((a, b) => a + b, 0);
+      const totalIncome = totalPlayerIncome + totalOtherIncome;
+
+      const totalPlayerExpenses = Object.values(playerExpenseByReason).reduce((a, b) => a + b, 0);
+      const totalOtherExpenses = Object.values(otherExpenseByCategory).reduce((a, b) => a + b, 0);
+      const totalExpenses = totalPlayerExpenses + totalOtherExpenses;
+
+      res.json({
+        period: { from: from || null, to: to || null },
+        income: {
+          playerFees: Object.entries(playerIncomeByType).map(([type, amount]) => ({ type, amount })).sort((a, b) => b.amount - a.amount),
+          otherIncome: Object.entries(otherIncomeByCategory).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount),
+          totalPlayerIncome,
+          totalOtherIncome,
+          totalIncome,
+        },
+        expenses: {
+          playerExpenses: Object.entries(playerExpenseByReason).map(([reason, amount]) => ({ reason, amount })).sort((a, b) => b.amount - a.amount),
+          otherExpenses: Object.entries(otherExpenseByCategory).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount),
+          totalPlayerExpenses,
+          totalOtherExpenses,
+          totalExpenses,
+        },
+        netSurplus: totalIncome - totalExpenses,
+      });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/finance/balance-sheet", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const payments = await storage.getPlayerPayments();
+      const expenses = await storage.getPlayerExpenses();
+      const txns = await storage.getFinanceTxns();
+
+      const approvedPayments = payments.filter((p: any) => p.status === "APPROVED");
+      const approvedExpenses = expenses.filter((e: any) => e.status === "APPROVED");
+      const pendingPayments = payments.filter((p: any) => p.status === "PENDING_APPROVAL");
+      const incomeTxns = txns.filter((t: any) => t.type === "INCOME");
+      const expenseTxns = txns.filter((t: any) => t.type === "EXPENSE");
+
+      const totalCashFromFees = approvedPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+      const totalOtherIncome = incomeTxns.reduce((s: number, t: any) => s + Number(t.amount), 0);
+      const totalCash = totalCashFromFees + totalOtherIncome;
+
+      const totalOutstandingReceivables = pendingPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+
+      const totalPlayerExpenses = approvedExpenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
+      const totalOtherExpenses = expenseTxns.reduce((s: number, t: any) => s + Number(t.amount), 0);
+      const totalLiabilities = totalPlayerExpenses + totalOtherExpenses;
+
+      const netEquity = totalCash - totalLiabilities;
+
+      res.json({
+        assets: {
+          cashAndBank: totalCash,
+          cashFromFees: totalCashFromFees,
+          otherIncome: totalOtherIncome,
+          outstandingReceivables: totalOutstandingReceivables,
+          totalAssets: totalCash + totalOutstandingReceivables,
+        },
+        liabilities: {
+          playerExpenses: totalPlayerExpenses,
+          otherExpenses: totalOtherExpenses,
+          totalLiabilities,
+        },
+        equity: {
+          retainedSurplus: netEquity,
+          totalEquity: netEquity,
+        },
+        balanceCheck: (totalCash + totalOutstandingReceivables) - (totalLiabilities + netEquity),
+      });
+    } catch (e) { next(e); }
+  });
+
   // ─── COACH: MY TEAMS + TRENDS ──────────
   app.get("/api/coach/my-teams", requireAuth, async (req, res, next) => {
     try {

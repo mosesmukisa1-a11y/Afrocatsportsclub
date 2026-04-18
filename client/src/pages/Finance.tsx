@@ -7,15 +7,29 @@ import { useAuth } from "@/lib/auth";
 import { useState } from "react";
 import {
   DollarSign, Plus, Check, X, Settings, Users, FileText,
-  ArrowUpRight, ArrowDownRight, Trash2, Eye, ChevronDown, ChevronUp
+  ArrowUpRight, ArrowDownRight, Trash2, TrendingUp, Scale,
+  BarChart3, Receipt
 } from "lucide-react";
 
-type Tab = "summary" | "payments" | "expenses" | "players" | "config" | "ledger";
+type Tab = "summary" | "payments" | "expenses" | "players" | "config" | "ledger" | "income-statement" | "balance-sheet";
 
 const FEE_TYPES = ["MEMBERSHIP", "DEVELOPMENT", "RESOURCE", "LEAGUE_AFFILIATION", "OTHER"];
 const PAID_BY_OPTIONS = ["PLAYER", "CLUB", "SPONSOR", "OTHER"];
 const EXPENSE_REASONS = ["TRANSPORT", "TRACK_SUIT", "JERSEY", "SHOES", "TRIP", "MEDICAL", "OTHER"];
 const EXPENSE_PAID_BY = ["CLUB", "COACH", "ADMIN", "SPONSOR", "OTHER"];
+
+const INCOME_CATEGORIES = [
+  "Sponsorship", "Tournament Entry Fees", "Events / Fundraising", "Merchandise Sales",
+  "Donations", "Grants", "Gate Takings", "Facility Hire", "Other"
+];
+const EXPENSE_CATEGORIES = [
+  "Venue Hire", "Equipment", "Uniforms", "Travel & Transport", "Medical Supplies",
+  "Administrative", "Utilities", "Referee Fees", "Tournament Fees",
+  "Marketing", "Catering", "Other"
+];
+
+const fmt = (n: number) => `N$${Number(n || 0).toLocaleString()}`;
+const inputCls = "w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal";
 
 export default function Finance() {
   const { toast } = useToast();
@@ -27,12 +41,14 @@ export default function Finance() {
   const [activeTab, setActiveTab] = useState<Tab>("summary");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
+  const [showLedgerForm, setShowLedgerForm] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
-  const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(null);
 
   const [payForm, setPayForm] = useState({ playerId: "", feeType: "MEMBERSHIP", amount: "", paidBy: "PLAYER", paidByName: "", reference: "", paymentDate: "" });
   const [expForm, setExpForm] = useState({ playerId: "", amount: "", paidBy: "CLUB", paidByName: "", reason: "TRANSPORT", notes: "", expenseDate: "" });
   const [feeForm, setFeeForm] = useState<Record<string, string>>({});
+  const [ledgerForm, setLedgerForm] = useState({ type: "INCOME", category: "Sponsorship", amount: "", description: "", reference: "", txnDate: "" });
+  const [stmtPeriod, setStmtPeriod] = useState({ from: "", to: "" });
 
   const { data: players = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
   const { data: txns = [] } = useQuery({ queryKey: ["/api/finance"], queryFn: api.getFinanceTxns });
@@ -41,6 +57,26 @@ export default function Finance() {
   const { data: feeConfig = {} } = useQuery({ queryKey: ["/api/finance/fee-config"], queryFn: api.getFeeConfig });
   const { data: summary } = useQuery({ queryKey: ["/api/finance/summary"], queryFn: () => api.getFinanceSummary(), enabled: !!canManage });
   const { data: playerFinance } = useQuery({ queryKey: ["/api/finance/player", selectedPlayerId], queryFn: () => api.getPlayerFinance(selectedPlayerId), enabled: !!selectedPlayerId });
+
+  const [stmtFrom, setStmtFrom] = useState("");
+  const [stmtTo, setStmtTo] = useState("");
+  const [stmtFetch, setStmtFetch] = useState({ from: "", to: "" });
+
+  const { data: incomeStatement } = useQuery({
+    queryKey: ["/api/finance/income-statement", stmtFetch.from, stmtFetch.to],
+    queryFn: () => api.getIncomeStatement(stmtFetch.from || undefined, stmtFetch.to || undefined),
+    enabled: activeTab === "income-statement" && !!canManage,
+  });
+
+  const { data: balanceSheet } = useQuery({
+    queryKey: ["/api/finance/balance-sheet"],
+    queryFn: api.getBalanceSheet,
+    enabled: activeTab === "balance-sheet" && !!canManage,
+  });
+
+  const sortedPlayers = [...players].sort((a: any, b: any) =>
+    `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())
+  );
 
   const createPaymentMut = useMutation({
     mutationFn: (data: any) => api.createFinancePayment(data),
@@ -91,12 +127,25 @@ export default function Finance() {
 
   const createTxnMut = useMutation({
     mutationFn: (data: any) => api.createFinanceTxn(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/finance"] }); toast({ title: "Transaction Added" }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/finance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/finance/income-statement"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/finance/balance-sheet"] });
+      toast({ title: "Transaction Recorded" });
+      setShowLedgerForm(false);
+      setLedgerForm({ type: "INCOME", category: "Sponsorship", amount: "", description: "", reference: "", txnDate: "" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const deleteTxnMut = useMutation({
     mutationFn: (id: string) => api.deleteFinanceTxn(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/finance"] }); toast({ title: "Deleted" }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/finance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/finance/income-statement"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/finance/balance-sheet"] });
+      toast({ title: "Deleted" });
+    },
   });
 
   const tabs: { id: Tab; label: string; icon: any; show: boolean }[] = [
@@ -104,8 +153,10 @@ export default function Finance() {
     { id: "payments", label: "Payments", icon: ArrowUpRight, show: true },
     { id: "expenses", label: "Expenses", icon: ArrowDownRight, show: true },
     { id: "players", label: "Player Finance", icon: Users, show: true },
+    { id: "ledger", label: "Ledger", icon: Receipt, show: !!canManage },
+    { id: "income-statement", label: "Income Statement", icon: TrendingUp, show: !!canManage },
+    { id: "balance-sheet", label: "Balance Sheet", icon: Scale, show: !!canManage },
     { id: "config", label: "Fee Config", icon: Settings, show: !!canManage },
-    { id: "ledger", label: "General Ledger", icon: FileText, show: !!canManage },
   ];
 
   const statusBadge = (status: string) => {
@@ -113,6 +164,13 @@ export default function Finance() {
     if (status === "REJECTED") return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400">REJECTED</span>;
     return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-400">PENDING</span>;
   };
+
+  const SectionRow = ({ label, amount, indent = false, bold = false, isTotal = false }: { label: string; amount: number; indent?: boolean; bold?: boolean; isTotal?: boolean }) => (
+    <div className={`flex justify-between items-center py-2 ${isTotal ? "border-t border-afrocat-border mt-1" : "border-b border-afrocat-border/40"} ${indent ? "pl-6" : ""}`}>
+      <span className={`text-sm ${bold || isTotal ? "font-bold text-afrocat-text" : "text-afrocat-muted"}`}>{label}</span>
+      <span className={`text-sm font-bold ${isTotal ? "text-base" : ""} ${amount >= 0 ? "text-afrocat-text" : "text-red-400"}`}>{fmt(Math.abs(amount))}</span>
+    </div>
+  );
 
   return (
     <Layout>
@@ -124,7 +182,7 @@ export default function Finance() {
             </div>
             <div>
               <h1 className="text-xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-finance-title">Finance</h1>
-              <p className="text-xs text-afrocat-muted">Fees, payments, expenses, approvals & player value</p>
+              <p className="text-xs text-afrocat-muted">Fees, payments, expenses, reports & financial statements</p>
             </div>
           </div>
         </div>
@@ -150,19 +208,19 @@ export default function Finance() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="afrocat-card p-4 text-center">
-                <div className="text-2xl font-display font-bold text-green-400">N${summary?.totalReceived || 0}</div>
+                <div className="text-2xl font-display font-bold text-green-400" data-testid="text-total-received">{fmt(summary?.totalReceived || 0)}</div>
                 <div className="text-[10px] text-afrocat-muted uppercase font-bold">Received</div>
               </div>
               <div className="afrocat-card p-4 text-center">
-                <div className="text-2xl font-display font-bold text-red-400">N${summary?.totalExpenses || 0}</div>
+                <div className="text-2xl font-display font-bold text-red-400" data-testid="text-total-expenses">{fmt(summary?.totalExpenses || 0)}</div>
                 <div className="text-[10px] text-afrocat-muted uppercase font-bold">Expenses</div>
               </div>
               <div className="afrocat-card p-4 text-center">
-                <div className={`text-2xl font-display font-bold ${(summary?.netPosition || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>N${summary?.netPosition || 0}</div>
+                <div className={`text-2xl font-display font-bold ${(summary?.netPosition || 0) >= 0 ? "text-green-400" : "text-red-400"}`} data-testid="text-net-position">{fmt(summary?.netPosition || 0)}</div>
                 <div className="text-[10px] text-afrocat-muted uppercase font-bold">Net</div>
               </div>
               <div className="afrocat-card p-4 text-center">
-                <div className="text-2xl font-display font-bold text-yellow-400">N${summary?.pendingPayments || 0}</div>
+                <div className="text-2xl font-display font-bold text-yellow-400">{fmt(summary?.pendingPayments || 0)}</div>
                 <div className="text-[10px] text-afrocat-muted uppercase font-bold">Pending</div>
               </div>
             </div>
@@ -170,22 +228,17 @@ export default function Finance() {
             <div className="afrocat-card p-5">
               <h3 className="font-display font-bold text-sm text-afrocat-text mb-3">Current Fee Schedule</h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
-                  <div className="text-xs text-afrocat-muted">Non-Working Membership</div>
-                  <div className="text-lg font-bold text-afrocat-text">N${feeConfig.membershipFeeNonWorking || "400"}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
-                  <div className="text-xs text-afrocat-muted">Working Membership</div>
-                  <div className="text-lg font-bold text-afrocat-text">N${feeConfig.membershipFeeWorking || "800"}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
-                  <div className="text-xs text-afrocat-muted">Development Fee</div>
-                  <div className="text-lg font-bold text-afrocat-text">N${feeConfig.developmentFee || "2500"}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
-                  <div className="text-xs text-afrocat-muted">Resource Fee</div>
-                  <div className="text-lg font-bold text-afrocat-text">N${feeConfig.resourceFee || "1500"}</div>
-                </div>
+                {[
+                  { label: "Non-Working Membership", key: "membershipFeeNonWorking", def: "400" },
+                  { label: "Working Membership", key: "membershipFeeWorking", def: "800" },
+                  { label: "Development Fee", key: "developmentFee", def: "2500" },
+                  { label: "Resource Fee", key: "resourceFee", def: "1500" },
+                ].map(f => (
+                  <div key={f.key} className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
+                    <div className="text-xs text-afrocat-muted">{f.label}</div>
+                    <div className="text-lg font-bold text-afrocat-text">{fmt(feeConfig[f.key] || f.def)}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -210,7 +263,7 @@ export default function Finance() {
                     {p.reference && <div className="text-[10px] text-afrocat-muted">Ref: {p.reference}</div>}
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-bold text-afrocat-text">N${p.amount}</div>
+                    <div className="text-sm font-bold text-afrocat-text">{fmt(p.amount)}</div>
                     {statusBadge(p.status)}
                   </div>
                   {canApprove && p.status === "PENDING_APPROVAL" && (
@@ -229,30 +282,25 @@ export default function Finance() {
                   <h3 className="font-display font-bold text-lg text-afrocat-text">Record Payment</h3>
                   <Select value={payForm.playerId} onValueChange={(v) => setPayForm({ ...payForm, playerId: v })}>
                     <SelectTrigger data-testid="select-payment-player"><SelectValue placeholder="Select Player" /></SelectTrigger>
-                    <SelectContent>{[...players].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}</SelectContent>
+                    <SelectContent>{sortedPlayers.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}</SelectContent>
                   </Select>
                   <Select value={payForm.feeType} onValueChange={(v) => setPayForm({ ...payForm, feeType: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{FEE_TYPES.map((t) => <SelectItem key={t} value={t}>{t.replace(/_/g, " ")}</SelectItem>)}</SelectContent>
                   </Select>
-                  <input type="number" placeholder="Amount (N$)" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal" data-testid="input-payment-amount" />
+                  <input type="number" placeholder="Amount (N$)" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} className={inputCls} data-testid="input-payment-amount" />
                   <Select value={payForm.paidBy} onValueChange={(v) => setPayForm({ ...payForm, paidBy: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{PAID_BY_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                   </Select>
                   {payForm.paidBy !== "PLAYER" && (
-                    <input type="text" placeholder="Paid by name" value={payForm.paidByName} onChange={(e) => setPayForm({ ...payForm, paidByName: e.target.value })}
-                      className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal" />
+                    <input type="text" placeholder="Paid by name" value={payForm.paidByName} onChange={(e) => setPayForm({ ...payForm, paidByName: e.target.value })} className={inputCls} />
                   )}
-                  <input type="text" placeholder="Reference" value={payForm.reference} onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal" />
-                  <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm({ ...payForm, paymentDate: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal" data-testid="input-payment-date" />
+                  <input type="text" placeholder="Reference" value={payForm.reference} onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })} className={inputCls} />
+                  <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm({ ...payForm, paymentDate: e.target.value })} className={inputCls} data-testid="input-payment-date" />
                   <div className="flex justify-end gap-3 pt-2">
                     <button onClick={() => setShowPaymentForm(false)} className="px-4 py-2 rounded-xl bg-afrocat-white-5 text-afrocat-muted font-bold text-sm cursor-pointer">Cancel</button>
-                    <button onClick={() => createPaymentMut.mutate(payForm)} disabled={createPaymentMut.isPending}
-                      className="px-4 py-2 rounded-xl bg-afrocat-teal text-white font-bold text-sm cursor-pointer disabled:opacity-50" data-testid="button-submit-payment">
+                    <button onClick={() => createPaymentMut.mutate(payForm)} disabled={createPaymentMut.isPending} className="px-4 py-2 rounded-xl bg-afrocat-teal text-white font-bold text-sm cursor-pointer disabled:opacity-50" data-testid="button-submit-payment">
                       {createPaymentMut.isPending ? "Saving..." : "Submit"}
                     </button>
                   </div>
@@ -283,7 +331,7 @@ export default function Finance() {
                     {e.notes && <div className="text-[10px] text-afrocat-muted">{e.notes}</div>}
                   </div>
                   <div className="text-right">
-                    <div className="text-sm font-bold text-afrocat-text">N${e.amount}</div>
+                    <div className="text-sm font-bold text-afrocat-text">{fmt(e.amount)}</div>
                     {statusBadge(e.status)}
                   </div>
                   {canApprove && e.status === "PENDING_APPROVAL" && (
@@ -302,26 +350,22 @@ export default function Finance() {
                   <h3 className="font-display font-bold text-lg text-afrocat-text">Log Player Expense</h3>
                   <Select value={expForm.playerId} onValueChange={(v) => setExpForm({ ...expForm, playerId: v })}>
                     <SelectTrigger data-testid="select-expense-player"><SelectValue placeholder="Select Player" /></SelectTrigger>
-                    <SelectContent>{[...players].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}</SelectContent>
+                    <SelectContent>{sortedPlayers.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName}</SelectItem>)}</SelectContent>
                   </Select>
                   <Select value={expForm.reason} onValueChange={(v) => setExpForm({ ...expForm, reason: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{EXPENSE_REASONS.map((r) => <SelectItem key={r} value={r}>{r.replace(/_/g, " ")}</SelectItem>)}</SelectContent>
                   </Select>
-                  <input type="number" placeholder="Amount (N$)" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal" data-testid="input-expense-amount" />
+                  <input type="number" placeholder="Amount (N$)" value={expForm.amount} onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} className={inputCls} data-testid="input-expense-amount" />
                   <Select value={expForm.paidBy} onValueChange={(v) => setExpForm({ ...expForm, paidBy: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>{EXPENSE_PAID_BY.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                   </Select>
-                  <input type="text" placeholder="Notes" value={expForm.notes} onChange={(e) => setExpForm({ ...expForm, notes: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal" />
-                  <input type="date" value={expForm.expenseDate} onChange={(e) => setExpForm({ ...expForm, expenseDate: e.target.value })}
-                    className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal" data-testid="input-expense-date" />
+                  <input type="text" placeholder="Notes" value={expForm.notes} onChange={(e) => setExpForm({ ...expForm, notes: e.target.value })} className={inputCls} />
+                  <input type="date" value={expForm.expenseDate} onChange={(e) => setExpForm({ ...expForm, expenseDate: e.target.value })} className={inputCls} data-testid="input-expense-date" />
                   <div className="flex justify-end gap-3 pt-2">
                     <button onClick={() => setShowExpenseForm(false)} className="px-4 py-2 rounded-xl bg-afrocat-white-5 text-afrocat-muted font-bold text-sm cursor-pointer">Cancel</button>
-                    <button onClick={() => createExpenseMut.mutate(expForm)} disabled={createExpenseMut.isPending}
-                      className="px-4 py-2 rounded-xl bg-afrocat-teal text-white font-bold text-sm cursor-pointer disabled:opacity-50" data-testid="button-submit-expense">
+                    <button onClick={() => createExpenseMut.mutate(expForm)} disabled={createExpenseMut.isPending} className="px-4 py-2 rounded-xl bg-afrocat-teal text-white font-bold text-sm cursor-pointer disabled:opacity-50" data-testid="button-submit-expense">
                       {createExpenseMut.isPending ? "Saving..." : "Submit"}
                     </button>
                   </div>
@@ -336,7 +380,7 @@ export default function Finance() {
             <div className="afrocat-card p-4">
               <Select value={selectedPlayerId} onValueChange={setSelectedPlayerId}>
                 <SelectTrigger data-testid="select-player-finance"><SelectValue placeholder="Select a player to view finances" /></SelectTrigger>
-                <SelectContent>{[...players].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName} (#{p.jerseyNo})</SelectItem>)}</SelectContent>
+                <SelectContent>{sortedPlayers.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName} (#{p.jerseyNo})</SelectItem>)}</SelectContent>
               </Select>
             </div>
 
@@ -345,38 +389,356 @@ export default function Finance() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="afrocat-card p-4 text-center">
                     <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Total Due</div>
-                    <div className="text-xl font-display font-bold text-afrocat-text">N${playerFinance.fees?.total || 0}</div>
+                    <div className="text-xl font-display font-bold text-afrocat-text">{fmt(playerFinance.fees?.total || 0)}</div>
                   </div>
                   <div className="afrocat-card p-4 text-center">
                     <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Paid by Player</div>
-                    <div className="text-xl font-display font-bold text-green-400">N${playerFinance.totalPaidByPlayer ?? 0}</div>
+                    <div className="text-xl font-display font-bold text-green-400">{fmt(playerFinance.totalPaidByPlayer ?? 0)}</div>
                   </div>
                   <div className="afrocat-card p-4 text-center">
                     <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Outstanding</div>
-                    <div className="text-xl font-display font-bold text-red-400">N${playerFinance.outstanding ?? 0}</div>
+                    <div className="text-xl font-display font-bold text-red-400">{fmt(playerFinance.outstanding ?? 0)}</div>
                   </div>
-                  <div className="afrocat-card p-4 text-center border-2 border-afrocat-gold/30">
-                    <div className="text-xs text-afrocat-gold uppercase font-bold mb-1">Player Value</div>
-                    <div className="text-xl font-display font-bold text-afrocat-gold">N${playerFinance.playerValue ?? 0}</div>
+                  <div className="afrocat-card p-4 text-center">
+                    <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Club Value</div>
+                    <div className="text-xl font-display font-bold text-afrocat-teal">{fmt(playerFinance.clubValue ?? 0)}</div>
                   </div>
                 </div>
-
-                <div className="afrocat-card p-5">
-                  <h3 className="font-display font-bold text-sm text-afrocat-text mb-3">Fee Breakdown</h3>
-                  <div className="space-y-2">
-                    {Object.entries(playerFinance.fees || {}).filter(([k]) => k !== "total").map(([key, val]) => (
-                      <div key={key} className="flex items-center justify-between p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
-                        <span className="text-xs font-bold text-afrocat-muted uppercase">{key.replace(/([A-Z])/g, " $1").trim()}</span>
-                        <span className="text-sm font-bold text-afrocat-text">N${String(val)}</span>
+                {(playerFinance.payments || []).length > 0 && (
+                  <div className="afrocat-card p-4 space-y-2">
+                    <h4 className="font-bold text-sm text-afrocat-text mb-2">Payment History</h4>
+                    {(playerFinance.payments || []).map((p: any) => (
+                      <div key={p.id} className="flex justify-between items-center py-1.5 border-b border-afrocat-border/40 last:border-0">
+                        <div>
+                          <div className="text-xs font-medium text-afrocat-text">{p.feeType?.replace(/_/g, " ")} — {p.paymentDate}</div>
+                          <div className="text-[10px] text-afrocat-muted">Paid by {p.paidBy}{p.paidByName ? ` (${p.paidByName})` : ""}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs font-bold text-afrocat-text">{fmt(p.amount)}</div>
+                          {statusBadge(p.status)}
+                        </div>
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "ledger" && canManage && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-afrocat-muted">Record income from other sources (sponsorships, events, donations) and general club expenses.</p>
+              <button onClick={() => setShowLedgerForm(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-afrocat-teal text-white font-bold text-sm cursor-pointer" data-testid="button-add-txn">
+                <Plus className="w-4 h-4" /> Add Entry
+              </button>
+            </div>
+
+            <div className="afrocat-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-afrocat-border bg-afrocat-white-3">
+                      <th className="text-left p-3 text-xs font-bold text-afrocat-muted uppercase">Date</th>
+                      <th className="text-left p-3 text-xs font-bold text-afrocat-muted uppercase">Type</th>
+                      <th className="text-left p-3 text-xs font-bold text-afrocat-muted uppercase">Category</th>
+                      <th className="text-left p-3 text-xs font-bold text-afrocat-muted uppercase">Description</th>
+                      <th className="text-right p-3 text-xs font-bold text-afrocat-muted uppercase">Amount</th>
+                      <th className="p-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {txns.map((t: any) => (
+                      <tr key={t.id} className="border-b border-afrocat-border" data-testid={`txn-row-${t.id}`}>
+                        <td className="p-3 text-xs text-afrocat-text">{t.txnDate}</td>
+                        <td className="p-3">
+                          {t.type === "INCOME"
+                            ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400">INCOME</span>
+                            : <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">EXPENSE</span>}
+                        </td>
+                        <td className="p-3 text-xs text-afrocat-text">{t.category}</td>
+                        <td className="p-3 text-xs text-afrocat-text">{t.description}</td>
+                        <td className="p-3 text-right text-xs font-bold text-afrocat-text">{fmt(t.amount)}</td>
+                        <td className="p-3">
+                          <button onClick={() => deleteTxnMut.mutate(t.id)} className="p-1.5 rounded-lg hover:bg-afrocat-red-soft text-afrocat-muted hover:text-afrocat-red cursor-pointer" data-testid={`button-delete-txn-${t.id}`}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {txns.length === 0 && <div className="p-8 text-center text-afrocat-muted text-sm">No entries yet. Add income or expense entries above.</div>}
+              </div>
+            </div>
+
+            {showLedgerForm && (
+              <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                <div className="bg-afrocat-card border border-afrocat-border rounded-2xl w-full max-w-md p-6 space-y-4">
+                  <h3 className="font-display font-bold text-lg text-afrocat-text">Add Income / Expense Entry</h3>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {["INCOME", "EXPENSE"].map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setLedgerForm({ ...ledgerForm, type: t, category: t === "INCOME" ? "Sponsorship" : "Venue Hire" })}
+                        className={`py-2 rounded-xl font-bold text-sm cursor-pointer transition-all ${ledgerForm.type === t
+                          ? t === "INCOME" ? "bg-green-500/20 text-green-400 border border-green-500/40" : "bg-red-500/20 text-red-400 border border-red-500/40"
+                          : "bg-afrocat-white-5 text-afrocat-muted border border-afrocat-border"}`}
+                        data-testid={`button-txn-type-${t.toLowerCase()}`}
+                      >
+                        {t === "INCOME" ? "Income" : "Expense"}
+                      </button>
+                    ))}
+                  </div>
+
+                  <Select value={ledgerForm.category} onValueChange={(v) => setLedgerForm({ ...ledgerForm, category: v })}>
+                    <SelectTrigger data-testid="select-txn-category"><SelectValue placeholder="Category" /></SelectTrigger>
+                    <SelectContent>
+                      {(ledgerForm.type === "INCOME" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <input
+                    type="number"
+                    placeholder="Amount (N$)"
+                    value={ledgerForm.amount}
+                    onChange={(e) => setLedgerForm({ ...ledgerForm, amount: e.target.value })}
+                    className={inputCls}
+                    data-testid="input-txn-amount"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description"
+                    value={ledgerForm.description}
+                    onChange={(e) => setLedgerForm({ ...ledgerForm, description: e.target.value })}
+                    className={inputCls}
+                    data-testid="input-txn-description"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Reference (optional)"
+                    value={ledgerForm.reference}
+                    onChange={(e) => setLedgerForm({ ...ledgerForm, reference: e.target.value })}
+                    className={inputCls}
+                  />
+                  <div>
+                    <label className="text-xs text-afrocat-muted block mb-1">Transaction Date</label>
+                    <input
+                      type="date"
+                      value={ledgerForm.txnDate}
+                      onChange={(e) => setLedgerForm({ ...ledgerForm, txnDate: e.target.value })}
+                      className={inputCls}
+                      data-testid="input-txn-date"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button onClick={() => setShowLedgerForm(false)} className="px-4 py-2 rounded-xl bg-afrocat-white-5 text-afrocat-muted font-bold text-sm cursor-pointer">Cancel</button>
+                    <button
+                      onClick={() => createTxnMut.mutate(ledgerForm)}
+                      disabled={createTxnMut.isPending || !ledgerForm.amount || !ledgerForm.txnDate}
+                      className="px-4 py-2 rounded-xl bg-afrocat-teal text-white font-bold text-sm cursor-pointer disabled:opacity-50"
+                      data-testid="button-submit-txn"
+                    >
+                      {createTxnMut.isPending ? "Saving..." : "Save Entry"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "income-statement" && canManage && (
+          <div className="space-y-4">
+            <div className="afrocat-card p-4">
+              <p className="text-xs font-bold text-afrocat-muted uppercase mb-3">Filter Period</p>
+              <div className="flex flex-col sm:flex-row gap-3 items-end">
+                <div className="flex-1">
+                  <label className="text-xs text-afrocat-muted block mb-1">From</label>
+                  <input type="date" value={stmtFrom} onChange={e => setStmtFrom(e.target.value)} className={inputCls} data-testid="input-stmt-from" />
+                </div>
+                <div className="flex-1">
+                  <label className="text-xs text-afrocat-muted block mb-1">To</label>
+                  <input type="date" value={stmtTo} onChange={e => setStmtTo(e.target.value)} className={inputCls} data-testid="input-stmt-to" />
+                </div>
+                <button
+                  onClick={() => setStmtFetch({ from: stmtFrom, to: stmtTo })}
+                  className="px-5 py-2.5 rounded-xl bg-afrocat-teal text-white font-bold text-sm cursor-pointer"
+                  data-testid="button-generate-statement"
+                >
+                  Generate
+                </button>
+              </div>
+            </div>
+
+            {incomeStatement && (
+              <div className="afrocat-card p-6 space-y-6">
+                <div className="flex items-center justify-between border-b border-afrocat-border pb-4">
+                  <div>
+                    <h2 className="font-display font-bold text-lg text-afrocat-text flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-afrocat-teal" /> Income Statement
+                    </h2>
+                    <p className="text-xs text-afrocat-muted mt-0.5">
+                      {incomeStatement.period?.from || "All time"}{incomeStatement.period?.to ? ` to ${incomeStatement.period.to}` : ""}
+                    </p>
+                  </div>
+                  <BarChart3 className="w-8 h-8 text-afrocat-teal opacity-40" />
                 </div>
 
-                <div className="afrocat-card p-5">
-                  <h3 className="font-display font-bold text-sm text-afrocat-text mb-3">Club Contribution: N${(playerFinance.clubExpenses ?? 0) + (playerFinance.totalPaidByOthers ?? 0)}</h3>
-                  <p className="text-xs text-afrocat-muted">Includes approved expenses and payments where paidBy ≠ PLAYER</p>
+                <div>
+                  <h3 className="text-sm font-bold text-green-400 mb-2 uppercase tracking-wider">Income</h3>
+                  {incomeStatement.income?.playerFees?.length > 0 && (
+                    <>
+                      <p className="text-[10px] uppercase text-afrocat-muted font-bold mb-1">Player Fees</p>
+                      {incomeStatement.income.playerFees.map((f: any) => (
+                        <SectionRow key={f.type} label={f.type.replace(/_/g, " ")} amount={f.amount} indent />
+                      ))}
+                      <SectionRow label="Total Player Fees" amount={incomeStatement.income.totalPlayerIncome} bold />
+                    </>
+                  )}
+                  {incomeStatement.income?.otherIncome?.length > 0 && (
+                    <>
+                      <p className="text-[10px] uppercase text-afrocat-muted font-bold mb-1 mt-3">Other Income</p>
+                      {incomeStatement.income.otherIncome.map((f: any) => (
+                        <SectionRow key={f.category} label={f.category} amount={f.amount} indent />
+                      ))}
+                      <SectionRow label="Total Other Income" amount={incomeStatement.income.totalOtherIncome} bold />
+                    </>
+                  )}
+                  <div className="mt-2 p-3 rounded-xl bg-green-500/10 border border-green-500/20">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-green-400">TOTAL INCOME</span>
+                      <span className="font-black text-green-400 text-lg" data-testid="text-total-income">{fmt(incomeStatement.income?.totalIncome || 0)}</span>
+                    </div>
+                  </div>
                 </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-red-400 mb-2 uppercase tracking-wider">Expenses</h3>
+                  {incomeStatement.expenses?.playerExpenses?.length > 0 && (
+                    <>
+                      <p className="text-[10px] uppercase text-afrocat-muted font-bold mb-1">Player Expenses</p>
+                      {incomeStatement.expenses.playerExpenses.map((e: any) => (
+                        <SectionRow key={e.reason} label={e.reason.replace(/_/g, " ")} amount={e.amount} indent />
+                      ))}
+                      <SectionRow label="Total Player Expenses" amount={incomeStatement.expenses.totalPlayerExpenses} bold />
+                    </>
+                  )}
+                  {incomeStatement.expenses?.otherExpenses?.length > 0 && (
+                    <>
+                      <p className="text-[10px] uppercase text-afrocat-muted font-bold mb-1 mt-3">Other Expenses</p>
+                      {incomeStatement.expenses.otherExpenses.map((e: any) => (
+                        <SectionRow key={e.category} label={e.category} amount={e.amount} indent />
+                      ))}
+                      <SectionRow label="Total Other Expenses" amount={incomeStatement.expenses.totalOtherExpenses} bold />
+                    </>
+                  )}
+                  <div className="mt-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-red-400">TOTAL EXPENSES</span>
+                      <span className="font-black text-red-400 text-lg" data-testid="text-total-expenses-stmt">{fmt(incomeStatement.expenses?.totalExpenses || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`p-4 rounded-xl border-2 ${(incomeStatement.netSurplus || 0) >= 0 ? "bg-green-500/10 border-green-500/40" : "bg-red-500/10 border-red-500/40"}`}>
+                  <div className="flex justify-between items-center">
+                    <span className={`font-black text-base ${(incomeStatement.netSurplus || 0) >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {(incomeStatement.netSurplus || 0) >= 0 ? "NET SURPLUS" : "NET DEFICIT"}
+                    </span>
+                    <span className={`font-black text-2xl ${(incomeStatement.netSurplus || 0) >= 0 ? "text-green-400" : "text-red-400"}`} data-testid="text-net-surplus">
+                      {fmt(Math.abs(incomeStatement.netSurplus || 0))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!incomeStatement && (
+              <div className="afrocat-card p-10 text-center space-y-2">
+                <TrendingUp className="w-10 h-10 text-afrocat-muted mx-auto opacity-40" />
+                <p className="text-afrocat-muted text-sm">Select a period and click Generate to view the Income Statement.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "balance-sheet" && canManage && (
+          <div className="space-y-4">
+            {balanceSheet ? (
+              <div className="afrocat-card p-6 space-y-6">
+                <div className="flex items-center justify-between border-b border-afrocat-border pb-4">
+                  <div>
+                    <h2 className="font-display font-bold text-lg text-afrocat-text flex items-center gap-2">
+                      <Scale className="w-5 h-5 text-afrocat-teal" /> Balance Sheet
+                    </h2>
+                    <p className="text-xs text-afrocat-muted mt-0.5">As at today — all-time cumulative position</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-afrocat-teal mb-2 uppercase tracking-wider">Assets</h3>
+                  <SectionRow label="Cash from Player Fees" amount={balanceSheet.assets?.cashFromFees || 0} indent />
+                  <SectionRow label="Other Income Received" amount={balanceSheet.assets?.otherIncome || 0} indent />
+                  <SectionRow label="Cash & Bank Balance" amount={balanceSheet.assets?.cashAndBank || 0} bold />
+                  <SectionRow label="Outstanding Receivables (pending payments)" amount={balanceSheet.assets?.outstandingReceivables || 0} indent />
+                  <div className="mt-2 p-3 rounded-xl bg-afrocat-teal-soft border border-afrocat-teal/20">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-afrocat-teal">TOTAL ASSETS</span>
+                      <span className="font-black text-afrocat-teal text-lg" data-testid="text-total-assets">{fmt(balanceSheet.assets?.totalAssets || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-red-400 mb-2 uppercase tracking-wider">Liabilities</h3>
+                  <SectionRow label="Player Expenses (approved)" amount={balanceSheet.liabilities?.playerExpenses || 0} indent />
+                  <SectionRow label="Other Expenses (ledger)" amount={balanceSheet.liabilities?.otherExpenses || 0} indent />
+                  <div className="mt-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-red-400">TOTAL LIABILITIES</span>
+                      <span className="font-black text-red-400 text-lg" data-testid="text-total-liabilities">{fmt(balanceSheet.liabilities?.totalLiabilities || 0)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-bold text-afrocat-gold mb-2 uppercase tracking-wider">Equity / Retained Surplus</h3>
+                  <div className={`p-4 rounded-xl border-2 ${(balanceSheet.equity?.retainedSurplus || 0) >= 0 ? "bg-afrocat-gold-soft border-afrocat-gold/30" : "bg-red-500/10 border-red-500/40"}`}>
+                    <div className="flex justify-between items-center">
+                      <span className={`font-black text-base ${(balanceSheet.equity?.retainedSurplus || 0) >= 0 ? "text-afrocat-gold" : "text-red-400"}`}>
+                        RETAINED SURPLUS
+                      </span>
+                      <span className={`font-black text-2xl ${(balanceSheet.equity?.retainedSurplus || 0) >= 0 ? "text-afrocat-gold" : "text-red-400"}`} data-testid="text-retained-surplus">
+                        {fmt(Math.abs(balanceSheet.equity?.retainedSurplus || 0))}
+                      </span>
+                    </div>
+                    <p className="text-xs text-afrocat-muted mt-1">Total Assets − Total Liabilities</p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-afrocat-muted font-bold">Liabilities + Equity</span>
+                    <span className="text-afrocat-text font-bold">
+                      {fmt((balanceSheet.liabilities?.totalLiabilities || 0) + (balanceSheet.equity?.retainedSurplus || 0))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs mt-1">
+                    <span className="text-afrocat-muted font-bold">Total Assets</span>
+                    <span className="text-afrocat-teal font-bold">{fmt(balanceSheet.assets?.totalAssets || 0)}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="afrocat-card p-10 text-center space-y-2">
+                <Scale className="w-10 h-10 text-afrocat-muted mx-auto opacity-40" />
+                <p className="text-afrocat-muted text-sm">Loading balance sheet...</p>
               </div>
             )}
           </div>
@@ -398,7 +760,7 @@ export default function Finance() {
                   type="number"
                   value={feeForm[f.key] ?? feeConfig[f.key] ?? f.default}
                   onChange={(e) => setFeeForm({ ...feeForm, [f.key]: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal"
+                  className={inputCls}
                   data-testid={`input-fee-${f.key}`}
                 />
               </div>
@@ -411,40 +773,6 @@ export default function Finance() {
             >
               {saveFeeConfigMut.isPending ? "Saving..." : "Save Fee Config"}
             </button>
-          </div>
-        )}
-
-        {activeTab === "ledger" && canManage && (
-          <div className="space-y-4">
-            <div className="afrocat-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-afrocat-border bg-afrocat-white-3">
-                      <th className="text-left p-3 text-xs font-bold text-afrocat-muted uppercase">Date</th>
-                      <th className="text-left p-3 text-xs font-bold text-afrocat-muted uppercase">Type</th>
-                      <th className="text-left p-3 text-xs font-bold text-afrocat-muted uppercase">Category</th>
-                      <th className="text-left p-3 text-xs font-bold text-afrocat-muted uppercase">Description</th>
-                      <th className="text-right p-3 text-xs font-bold text-afrocat-muted uppercase">Amount</th>
-                      <th className="p-3"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {txns.map((t: any) => (
-                      <tr key={t.id} className="border-b border-afrocat-border">
-                        <td className="p-3 text-xs text-afrocat-text">{t.txnDate}</td>
-                        <td className="p-3">{t.type === "INCOME" ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400">INCOME</span> : <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">EXPENSE</span>}</td>
-                        <td className="p-3 text-xs text-afrocat-text">{t.category}</td>
-                        <td className="p-3 text-xs text-afrocat-text">{t.description}</td>
-                        <td className="p-3 text-right text-xs font-bold text-afrocat-text">N${t.amount}</td>
-                        <td className="p-3"><button onClick={() => deleteTxnMut.mutate(t.id)} className="p-1.5 rounded-lg hover:bg-afrocat-red-soft text-afrocat-muted hover:text-afrocat-red cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {txns.length === 0 && <div className="p-8 text-center text-afrocat-muted text-sm">No general ledger transactions.</div>}
-              </div>
-            </div>
           </div>
         )}
       </div>

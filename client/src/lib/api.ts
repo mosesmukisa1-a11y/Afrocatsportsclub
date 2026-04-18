@@ -423,6 +423,8 @@ export const api = {
   getPlayerFinance: (playerId: string) => apiFetch<any>(`/finance/player/${playerId}`),
   getPlayerExitStatement: (playerId: string) => apiFetch<any>(`/finance/player/${playerId}/exit-statement`),
   getFinanceSummary: (from?: string, to?: string) => apiFetch<any>(`/finance/summary${from || to ? `?${from ? `from=${from}` : ""}${to ? `&to=${to}` : ""}` : ""}`),
+  getIncomeStatement: (from?: string, to?: string) => apiFetch<any>(`/finance/income-statement${from || to ? `?${from ? `from=${from}` : ""}${to ? `&to=${to}` : ""}` : ""}`),
+  getBalanceSheet: () => apiFetch<any>("/finance/balance-sheet"),
   getMyOutstandingFees: () => apiFetch<any>("/finance/my-outstanding"),
 
   getCoachMyTeams: () => apiFetch<any[]>("/coach/my-teams"),
