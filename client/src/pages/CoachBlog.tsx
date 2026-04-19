@@ -10,7 +10,7 @@ import {
   BookOpen, Plus, Pin, Tag, Calendar, User, MessageSquare,
   Send, ArrowLeft, Trash2, Edit, X, Check, Layout as LayoutIcon, Circle, Move, Save,
   RotateCcw, ChevronRight, Info, Layers, Zap, Shield, Hand, Target, RefreshCw,
-  Maximize2, Minimize2
+  Maximize2, Minimize2, Megaphone, Users as UsersIcon
 } from "lucide-react";
 
 const CATEGORIES = [
@@ -1728,14 +1728,17 @@ export default function CoachBlog() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const canWrite = user?.isSuperAdmin || ["ADMIN", "MANAGER", "COACH"].includes(user?.role || "");
+  const isAdmin = user?.isSuperAdmin || ["ADMIN", "MANAGER"].includes(user?.role || "");
 
-  const [topTab, setTopTab] = useState<"posts" | "tactics">("posts");
+  const [topTab, setTopTab] = useState<"posts" | "tactics" | "notices">("posts");
   const [view, setView] = useState<"list" | "detail" | "compose">("list");
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
   const [form, setForm] = useState({ title: "", body: "", category: "GENERAL", tags: "", pinned: false });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
+  const [showNoticeForm, setShowNoticeForm] = useState(false);
+  const [noticeForm, setNoticeForm] = useState({ title: "", body: "", audience: "ALL", teamId: "" });
 
   const { data: posts = [], isLoading } = useQuery({
     queryKey: ["/api/coach-blog"],
@@ -1746,6 +1749,32 @@ export default function CoachBlog() {
     queryKey: ["/api/coach-blog", selectedPostId],
     queryFn: () => api.getCoachBlogPost(selectedPostId!),
     enabled: !!selectedPostId && view === "detail",
+  });
+
+  const { data: notices = [], isLoading: noticesLoading } = useQuery({
+    queryKey: ["/api/notices"],
+    queryFn: api.getNotices,
+    enabled: topTab === "notices",
+  });
+
+  const { data: noticeTeams = [] } = useQuery({
+    queryKey: ["/api/teams"],
+    queryFn: api.getTeams,
+    enabled: topTab === "notices" && isAdmin,
+  });
+
+  const createNoticeMut = useMutation({
+    mutationFn: () => api.createNotice({
+      ...noticeForm,
+      teamId: noticeForm.audience === "TEAM" ? noticeForm.teamId : undefined,
+    }),
+    onSuccess: () => {
+      toast({ title: "Notice posted" });
+      setNoticeForm({ title: "", body: "", audience: "ALL", teamId: "" });
+      setShowNoticeForm(false);
+      qc.invalidateQueries({ queryKey: ["/api/notices"] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
   const filteredPosts = filterCategory === "ALL"
@@ -2078,24 +2107,131 @@ export default function CoachBlog() {
                 <Plus className="h-4 w-4 mr-2" /> Write Post
               </Button>
             )}
+            {isAdmin && topTab === "notices" && (
+              <Button
+                onClick={() => setShowNoticeForm(v => !v)}
+                data-testid="button-new-notice"
+                className="bg-afrocat-teal hover:bg-afrocat-teal/90 text-white"
+              >
+                <Plus className="h-4 w-4 mr-2" /> Post Notice
+              </Button>
+            )}
           </div>
         </div>
 
-        <div className="flex gap-2 border-b border-afrocat-border pb-2">
+        <div className="flex gap-2 border-b border-afrocat-border pb-2 overflow-x-auto">
           <button onClick={() => setTopTab("posts")}
-            className={`px-4 py-2 rounded-t-lg text-sm font-bold cursor-pointer transition-colors ${topTab === "posts" ? "bg-afrocat-teal text-white" : "text-afrocat-muted hover:text-afrocat-text"}`}
+            className={`px-4 py-2 rounded-t-lg text-sm font-bold cursor-pointer transition-colors whitespace-nowrap ${topTab === "posts" ? "bg-afrocat-teal text-white" : "text-afrocat-muted hover:text-afrocat-text"}`}
             data-testid="tab-posts">
             <BookOpen className="inline h-4 w-4 mr-1" /> Blog Posts
           </button>
           <button onClick={() => setTopTab("tactics")}
-            className={`px-4 py-2 rounded-t-lg text-sm font-bold cursor-pointer transition-colors ${topTab === "tactics" ? "bg-afrocat-teal text-white" : "text-afrocat-muted hover:text-afrocat-text"}`}
+            className={`px-4 py-2 rounded-t-lg text-sm font-bold cursor-pointer transition-colors whitespace-nowrap ${topTab === "tactics" ? "bg-afrocat-teal text-white" : "text-afrocat-muted hover:text-afrocat-text"}`}
             data-testid="tab-tactics">
             <LayoutIcon className="inline h-4 w-4 mr-1" /> Tactic Board
+          </button>
+          <button onClick={() => setTopTab("notices")}
+            className={`px-4 py-2 rounded-t-lg text-sm font-bold cursor-pointer transition-colors whitespace-nowrap ${topTab === "notices" ? "bg-afrocat-teal text-white" : "text-afrocat-muted hover:text-afrocat-text"}`}
+            data-testid="tab-notices">
+            <Megaphone className="inline h-4 w-4 mr-1" /> Notices
           </button>
         </div>
 
         {topTab === "tactics" ? (
           <TacticBoardSection />
+        ) : topTab === "notices" ? (
+          <div className="space-y-4">
+            {showNoticeForm && isAdmin && (
+              <div className="afrocat-card p-5 space-y-4" data-testid="form-new-notice">
+                <h3 className="text-lg font-display font-bold text-afrocat-text">New Notice</h3>
+                <input
+                  value={noticeForm.title}
+                  onChange={e => setNoticeForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="Notice title"
+                  className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm"
+                  data-testid="input-notice-title"
+                />
+                <textarea
+                  value={noticeForm.body}
+                  onChange={e => setNoticeForm(f => ({ ...f, body: e.target.value }))}
+                  placeholder="Notice message..."
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-text text-sm resize-none"
+                  data-testid="input-notice-body"
+                />
+                <div className="flex gap-4 items-end flex-wrap">
+                  <div className="flex-1 min-w-[140px]">
+                    <label className="text-xs text-afrocat-muted mb-1 block">Audience</label>
+                    <Select value={noticeForm.audience} onValueChange={v => setNoticeForm(f => ({ ...f, audience: v }))}>
+                      <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="select-notice-audience">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All Members</SelectItem>
+                        <SelectItem value="TEAM">Specific Team</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {noticeForm.audience === "TEAM" && (
+                    <div className="flex-1 min-w-[140px]">
+                      <label className="text-xs text-afrocat-muted mb-1 block">Team</label>
+                      <Select value={noticeForm.teamId} onValueChange={v => setNoticeForm(f => ({ ...f, teamId: v }))}>
+                        <SelectTrigger className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
+                          <SelectValue placeholder="Select team" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {noticeTeams.map((t: any) => (
+                            <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => createNoticeMut.mutate()}
+                    disabled={!noticeForm.title || !noticeForm.body || createNoticeMut.isPending || (noticeForm.audience === "TEAM" && !noticeForm.teamId)}
+                    data-testid="button-submit-notice"
+                    className="bg-afrocat-teal hover:bg-afrocat-teal/90 text-white"
+                  >
+                    {createNoticeMut.isPending ? "Posting…" : "Post Notice"}
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowNoticeForm(false)} className="border-afrocat-border text-afrocat-text">Cancel</Button>
+                </div>
+              </div>
+            )}
+            {noticesLoading ? (
+              <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-afrocat-teal" /></div>
+            ) : notices.length === 0 ? (
+              <div className="afrocat-card p-10 text-center">
+                <Megaphone className="h-12 w-12 mx-auto mb-3 text-afrocat-muted opacity-30" />
+                <p className="text-afrocat-muted text-sm">No notices yet{isAdmin ? " — post one above" : ""}.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {notices.map((n: any) => (
+                  <div key={n.id} className="afrocat-card p-5" data-testid={`notice-${n.id}`}>
+                    <div className="flex items-start justify-between mb-2 gap-3">
+                      <h3 className="text-base font-display font-bold text-afrocat-text" data-testid={`text-notice-title-${n.id}`}>{n.title}</h3>
+                      <div className="flex items-center gap-2 text-xs text-afrocat-muted shrink-0">
+                        {n.audience === "TEAM" && (
+                          <span className="px-2 py-0.5 rounded-full bg-afrocat-teal-soft text-afrocat-teal text-[10px] font-bold">
+                            <UsersIcon className="h-3 w-3 inline mr-0.5" />Team
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(n.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-afrocat-muted whitespace-pre-wrap">{n.body}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         ) : (
         <div className="space-y-4">
         <div className="flex items-center gap-2 overflow-x-auto pb-1" data-testid="blog-category-filter">

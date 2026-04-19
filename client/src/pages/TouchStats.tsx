@@ -8,7 +8,8 @@ import {
   Zap, Target, Shield, Hand, ArrowUpCircle, CircleDot,
   Undo2, Lock, Unlock, User, Trophy, Upload, CheckCircle2,
   Plus, Minus, Maximize, Minimize, Clock,
-  FileText, ChevronDown, ChevronUp, Printer, Star
+  FileText, ChevronDown, ChevronUp, Printer, Star,
+  RotateCw, Users as UsersIcon
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -114,6 +115,14 @@ export default function TouchStats() {
   const [fullscreen, setFullscreen] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [elapsedTime, setElapsedTime] = useState("");
+
+  const [subsUsedPerSet, setSubsUsedPerSet] = useState<Record<number, number>>({});
+  const [timeoutsUsedPerSet, setTimeoutsUsedPerSet] = useState<Record<number, number>>({});
+  const [rotationOrder, setRotationOrder] = useState<string[]>([]);
+  const [showFivbPanel, setShowFivbPanel] = useState(false);
+  const [showSubForm, setShowSubForm] = useState(false);
+  const [subOutId, setSubOutId] = useState<string>("");
+  const [subInId, setSubInId] = useState<string>("");
 
   const selectedMatch = matches.find((m: any) => m.id === selectedMatchId);
   const [syncResetKey, setSyncResetKey] = useState(0);
@@ -414,6 +423,61 @@ export default function TouchStats() {
     }
   }, []);
 
+  useEffect(() => {
+    if (players.length > 0 && selectedMatchId) {
+      const starters = [...players].filter((p: any) => !p.isLibero).slice(0, 6);
+      setRotationOrder(starters.map((p: any) => p.id));
+      setSubsUsedPerSet({});
+      setTimeoutsUsedPerSet({});
+      setShowSubForm(false);
+      setSubOutId("");
+      setSubInId("");
+    }
+  }, [selectedMatchId, players.length]);
+
+  useEffect(() => {
+    setShowSubForm(false);
+    setSubOutId("");
+    setSubInId("");
+  }, [currentSet]);
+
+  function makeSubstitution() {
+    if (!subOutId || !subInId) return;
+    const outPlayer = players.find((p: any) => p.id === subOutId);
+    const inPlayer = players.find((p: any) => p.id === subInId);
+    const currSubs = subsUsedPerSet[currentSet] || 0;
+    const isLiberoSwap = outPlayer?.isLibero || inPlayer?.isLibero;
+    if (!isLiberoSwap && currSubs >= 6) {
+      toast({ title: "Substitution limit reached", description: "FIVB allows max 6 substitutions per set (libero swaps excluded).", variant: "destructive" });
+      return;
+    }
+    setRotationOrder(prev => prev.map(id => id === subOutId ? subInId : id));
+    if (!isLiberoSwap) {
+      setSubsUsedPerSet(prev => ({ ...prev, [currentSet]: (prev[currentSet] || 0) + 1 }));
+    }
+    setShowSubForm(false);
+    setSubOutId("");
+    setSubInId("");
+    toast({
+      title: isLiberoSwap ? "Libero swap done" : `Substitution ${(subsUsedPerSet[currentSet] || 0) + 1}/6`,
+      description: `#${outPlayer?.jerseyNo} ${outPlayer?.firstName} → #${inPlayer?.jerseyNo} ${inPlayer?.firstName}`,
+    });
+  }
+
+  function callTimeout() {
+    const currTimeouts = timeoutsUsedPerSet[currentSet] || 0;
+    if (currTimeouts >= 2) {
+      toast({ title: "Timeout limit reached", description: "FIVB allows max 2 timeouts per set per team.", variant: "destructive" });
+      return;
+    }
+    setTimeoutsUsedPerSet(prev => ({ ...prev, [currentSet]: (prev[currentSet] || 0) + 1 }));
+    toast({ title: `Timeout called — Set ${currentSet}`, description: `${currTimeouts + 1}/2 timeouts used this set.` });
+  }
+
+  function rotateClockwise() {
+    setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(-1), ...prev.slice(0, -1)] : prev);
+  }
+
   const currentActionDetails = selectedAction ? (OUTCOME_DETAILS[selectedAction] || []) : [];
 
   const neededToWin = bestOf === 5 ? 3 : 2;
@@ -622,6 +686,183 @@ export default function TouchStats() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {selectedMatchId && matchData && !matchComplete && (
+          <div className="afrocat-card p-4" data-testid="fivb-compliance-panel">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-afrocat-teal">FIVB Match Tools — Set {currentSet}</span>
+              <button
+                onClick={() => setShowFivbPanel(v => !v)}
+                className="text-[10px] text-afrocat-muted hover:text-afrocat-text flex items-center gap-1 cursor-pointer"
+                data-testid="button-toggle-fivb-panel"
+              >
+                {showFivbPanel ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                {showFivbPanel ? "Hide Rotation" : "Show Rotation"}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-bold ${
+                (subsUsedPerSet[currentSet] || 0) >= 6
+                  ? "bg-afrocat-red-soft border-afrocat-red/30 text-afrocat-red"
+                  : (subsUsedPerSet[currentSet] || 0) >= 5
+                    ? "bg-afrocat-gold-soft border-afrocat-gold/30 text-afrocat-gold"
+                    : "bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
+              }`} data-testid="badge-subs-used">
+                <UsersIcon size={13} className="shrink-0" />
+                Subs: {subsUsedPerSet[currentSet] || 0}/6
+                {!isLocked && (subsUsedPerSet[currentSet] || 0) < 6 && (
+                  <button
+                    onClick={() => setShowSubForm(v => !v)}
+                    className="ml-1.5 underline text-afrocat-teal cursor-pointer"
+                    data-testid="button-open-sub-form"
+                  >{showSubForm ? "cancel" : "sub"}</button>
+                )}
+              </div>
+
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-bold ${
+                (timeoutsUsedPerSet[currentSet] || 0) >= 2
+                  ? "bg-afrocat-red-soft border-afrocat-red/30 text-afrocat-red"
+                  : "bg-afrocat-white-5 border-afrocat-border text-afrocat-text"
+              }`} data-testid="badge-timeouts-used">
+                <Clock size={13} className="shrink-0" />
+                Timeouts: {timeoutsUsedPerSet[currentSet] || 0}/2
+                {!isLocked && (timeoutsUsedPerSet[currentSet] || 0) < 2 && (
+                  <button
+                    onClick={callTimeout}
+                    className="ml-1.5 underline text-afrocat-teal cursor-pointer"
+                    data-testid="button-call-timeout"
+                  >call</button>
+                )}
+              </div>
+            </div>
+
+            {showSubForm && !isLocked && (
+              <div className="mt-3 p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border space-y-3">
+                <div className="text-xs font-bold text-afrocat-muted uppercase tracking-wider">Make Substitution</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-afrocat-muted block mb-1">Player Out (in rotation)</label>
+                    <select
+                      value={subOutId}
+                      onChange={e => setSubOutId(e.target.value)}
+                      className="w-full bg-afrocat-bg border border-afrocat-border text-afrocat-text text-xs rounded-lg px-2 py-1.5"
+                      data-testid="select-sub-out"
+                    >
+                      <option value="">Select…</option>
+                      {rotationOrder.filter(Boolean).map(pid => {
+                        const p = players.find((pl: any) => pl.id === pid);
+                        return p ? (
+                          <option key={pid} value={pid}>
+                            #{p.jerseyNo} {p.firstName} {p.lastName}{p.isLibero ? " (L)" : ""}
+                          </option>
+                        ) : null;
+                      })}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-afrocat-muted block mb-1">Player In (from bench)</label>
+                    <select
+                      value={subInId}
+                      onChange={e => setSubInId(e.target.value)}
+                      className="w-full bg-afrocat-bg border border-afrocat-border text-afrocat-text text-xs rounded-lg px-2 py-1.5"
+                      data-testid="select-sub-in"
+                    >
+                      <option value="">Select…</option>
+                      {players.filter((p: any) => !rotationOrder.includes(p.id)).map((p: any) => (
+                        <option key={p.id} value={p.id}>
+                          #{p.jerseyNo} {p.firstName} {p.lastName}{p.isLibero ? " (L)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={makeSubstitution}
+                    disabled={!subOutId || !subInId}
+                    className="bg-afrocat-teal text-white text-xs font-bold px-4 py-1.5 rounded-lg cursor-pointer hover:bg-afrocat-teal/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                    data-testid="button-confirm-sub"
+                  >Confirm Sub</button>
+                  <button
+                    onClick={() => { setShowSubForm(false); setSubOutId(""); setSubInId(""); }}
+                    className="text-xs text-afrocat-muted px-3 py-1.5 rounded-lg cursor-pointer hover:text-afrocat-text border border-afrocat-border"
+                  >Cancel</button>
+                </div>
+              </div>
+            )}
+
+            {showFivbPanel && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-afrocat-muted uppercase tracking-wider">Court Rotation (P1 = Server)</span>
+                  {!isLocked && (
+                    <button
+                      onClick={rotateClockwise}
+                      className="flex items-center gap-1 text-[10px] font-bold text-afrocat-teal hover:text-afrocat-teal/80 cursor-pointer px-2 py-1 rounded bg-afrocat-teal-soft"
+                      data-testid="button-rotate-clockwise"
+                    >
+                      <RotateCw size={11} /> Rotate (side-out)
+                    </button>
+                  )}
+                </div>
+                <div className="text-[9px] text-center text-afrocat-muted tracking-widest opacity-50">— NET —</div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[4, 3, 2].map(pos => {
+                    const pid = rotationOrder[pos - 1];
+                    const p = players.find((pl: any) => pl.id === pid);
+                    return (
+                      <div key={pos} className="p-2 rounded-lg border bg-afrocat-teal-soft border-afrocat-teal/20 text-center" data-testid={`rotation-pos-${pos}`}>
+                        <div className="text-[9px] font-bold text-afrocat-teal">P{pos}</div>
+                        {p ? (
+                          <>
+                            <div className="text-sm font-black text-afrocat-text leading-none mt-0.5">#{p.jerseyNo}</div>
+                            <div className="text-[9px] text-afrocat-muted truncate mt-0.5">{p.firstName}</div>
+                            {p.isLibero && <div className="text-[8px] font-bold text-afrocat-gold">LIB</div>}
+                          </>
+                        ) : (
+                          <div className="text-[10px] text-afrocat-muted mt-1">—</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[5, 6, 1].map(pos => {
+                    const pid = rotationOrder[pos - 1];
+                    const p = players.find((pl: any) => pl.id === pid);
+                    const isServer = pos === 1;
+                    return (
+                      <div key={pos} className={`p-2 rounded-lg border text-center ${isServer ? "bg-afrocat-gold-soft border-afrocat-gold/40" : "bg-afrocat-white-5 border-afrocat-border"}`} data-testid={`rotation-pos-${pos}`}>
+                        <div className={`text-[9px] font-bold ${isServer ? "text-afrocat-gold" : "text-afrocat-muted"}`}>{isServer ? "P1 ⟳" : `P${pos}`}</div>
+                        {p ? (
+                          <>
+                            <div className="text-sm font-black text-afrocat-text leading-none mt-0.5">#{p.jerseyNo}</div>
+                            <div className="text-[9px] text-afrocat-muted truncate mt-0.5">{p.firstName}</div>
+                            {p.isLibero && <div className="text-[8px] font-bold text-afrocat-gold">LIB</div>}
+                          </>
+                        ) : (
+                          <div className="text-[10px] text-afrocat-muted mt-1">—</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="text-[9px] text-center text-afrocat-muted tracking-widest opacity-50">— SERVICE ZONE —</div>
+                {!isLocked && players.length >= 6 && rotationOrder.length < 6 && (
+                  <button
+                    onClick={() => {
+                      const nonLibero = [...players].filter((p: any) => !p.isLibero).slice(0, 6);
+                      setRotationOrder(nonLibero.map((p: any) => p.id));
+                    }}
+                    className="w-full text-xs text-afrocat-muted border border-dashed border-afrocat-border rounded-lg py-2 hover:text-afrocat-teal cursor-pointer"
+                    data-testid="button-auto-fill-rotation"
+                  >Auto-fill rotation from squad</button>
+                )}
+              </div>
+            )}
           </div>
         )}
 

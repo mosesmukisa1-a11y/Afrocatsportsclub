@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/Layout";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { openHtmlAsPdf } from "@/lib/utils";
+import { generateMatchReportHTML } from "@/lib/matchReport";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -124,9 +125,23 @@ export default function ReportTemplates() {
     onSuccess: handleSuccess("financial"), onError: handleError,
   });
 
+  const qc = useQueryClient();
+  const matchReportMut = useMutation({
+    mutationFn: () => api.generateMatchReport(matchId, selectedMatch?.teamId),
+    onSuccess: (result: any) => {
+      qc.invalidateQueries({ queryKey: ["/api/match-documents"] });
+      setLastGenerated("match");
+      toast({ title: "Match report generated!", description: "Opening PDF…" });
+      if (result?.data) {
+        openHtmlAsPdf(generateMatchReportHTML(result.data));
+      }
+    },
+    onError: handleError,
+  });
+
   const isGenerating =
     seasonMut.isPending || playerMut.isPending || rosterMut.isPending ||
-    attendanceMut.isPending || financialMut.isPending;
+    attendanceMut.isPending || financialMut.isPending || matchReportMut.isPending;
 
   const visibleTabs = tabs.filter(t => {
     if (!t.roles) return true;
@@ -258,7 +273,15 @@ export default function ReportTemplates() {
                 disabled={!matchId || !selectedMatch?.statsEntered}
                 className="bg-afrocat-teal hover:bg-afrocat-teal/80 text-white flex items-center gap-2"
               >
-                <Download size={15} /> Download Stats PDF
+                <Download size={15} /> Stats PDF
+              </Button>
+              <Button
+                data-testid="button-generate-full-match-report"
+                onClick={() => matchReportMut.mutate()}
+                disabled={!matchId || !selectedMatch?.statsEntered || matchReportMut.isPending}
+                className="bg-afrocat-gold hover:bg-afrocat-gold/80 text-white flex items-center gap-2"
+              >
+                <Star size={15} /> {matchReportMut.isPending ? "Generating…" : "Full Match Report PDF"}
               </Button>
               <Button
                 data-testid="button-generate-match-activity"
@@ -267,7 +290,7 @@ export default function ReportTemplates() {
                 disabled={!matchId}
                 className="border-afrocat-border text-afrocat-text hover:bg-afrocat-white-5 flex items-center gap-2"
               >
-                <FileText size={15} /> Full Activity Report
+                <FileText size={15} /> Activity Report
               </Button>
             </div>
             {matchId && !selectedMatch?.statsEntered && (

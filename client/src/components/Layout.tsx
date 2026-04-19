@@ -6,7 +6,7 @@ import {
   LogOut, ShieldAlert, Award, Menu, X, Star,
   ScrollText, FolderOpen, UserCircle, UserCheck,
   BarChart3, MessageCircle, Gamepad2, FileSpreadsheet,
-  Microscope, Gauge, ChevronDown, RefreshCw, Megaphone, Mail, BookOpen, Image, Mic, Wrench, FileDown
+  Gauge, ChevronDown, RefreshCw, Mail, BookOpen, Image, Mic, Wrench, FileDown
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { MobileNav } from "./MobileNav";
@@ -19,7 +19,6 @@ const allNavItems = [
   { icon: Users, label: "Players", href: "/players", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL"] },
   { icon: Trophy, label: "Matches", href: "/matches", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: ClipboardList, label: "Enter Stats", href: "/stats", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
-  { icon: Microscope, label: "Dev Stats", href: "/dev-stats", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: Gauge, label: "Coach Dashboard", href: "/coach-dashboard", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: CalendarCheck, label: "Attendance", href: "/attendance", roles: ["ADMIN","MANAGER","COACH"] },
   { icon: DollarSign, label: "Finance", href: "/finance", roles: ["ADMIN","MANAGER","FINANCE"] },
@@ -28,7 +27,6 @@ const allNavItems = [
   { icon: Star, label: "Coaches", href: "/coaches", roles: ["ADMIN","MANAGER"] },
   { icon: ScrollText, label: "Contracts", href: "/contracts", roles: ["ADMIN","MANAGER","COACH"] },
   { icon: FolderOpen, label: "Documents", href: "/documents", roles: ["ADMIN","MANAGER","COACH"] },
-  { icon: FileText, label: "Reports", href: "/reports", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN"] },
   { icon: Users, label: "Player Stats", href: "/player-dashboard", roles: ["ADMIN","MANAGER","COACH","PLAYER"] },
   { icon: ScrollText, label: "My Contract", href: "/my-contract", roles: ["PLAYER"] },
   { icon: FileText, label: "Club Contract", href: "/club-contract", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
@@ -36,7 +34,6 @@ const allNavItems = [
   { icon: Mic, label: "Interviews", href: "/interviews", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
   { icon: BarChart3, label: "Compare Stats", href: "/stats-comparison", roles: ["ADMIN","MANAGER","COACH","STATISTICIAN","PLAYER"] },
   { icon: BookOpen, label: "Coach's Corner", href: "/coach-blog", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
-  { icon: Megaphone, label: "Notice Board", href: "/notices", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
   { icon: MessageCircle, label: "Chat", href: "/chat", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","PLAYER"] },
   { icon: Mail, label: "Send Email", href: "/email-compose", roles: ["ADMIN","MANAGER"] },
   { icon: ShieldAlert, label: "Officials", href: "/officials", roles: ["ADMIN","MANAGER"] },

@@ -41,7 +41,6 @@ import StatsComparison from "@/pages/StatsComparison";
 import Chat from "@/pages/Chat";
 import MatchSimulation from "@/pages/MatchSimulation";
 import ReportTemplates from "@/pages/ReportTemplates";
-import NoticeBoard from "@/pages/NoticeBoard";
 import EmailCompose from "@/pages/EmailCompose";
 import CoachBlog from "@/pages/CoachBlog";
 import Media from "@/pages/Media";
@@ -85,7 +84,7 @@ function Router() {
       <Route path="/coaches">{() => <ProtectedRoute component={Coaches} />}</Route>
       <Route path="/contracts">{() => <ProtectedRoute component={Contracts} />}</Route>
       <Route path="/documents">{() => <ProtectedRoute component={Documents} />}</Route>
-      <Route path="/reports">{() => <ProtectedRoute component={Reports} />}</Route>
+      <Route path="/reports">{() => <Redirect to="/report-templates" />}</Route>
       <Route path="/player-dashboard">{() => <ProtectedRoute component={PlayerDashboard} />}</Route>
       <Route path="/my-contract">{() => <ProtectedRoute component={MyContract} />}</Route>
       <Route path="/club-contract">{() => <ProtectedRoute component={ClubContract} />}</Route>
@@ -95,7 +94,7 @@ function Router() {
       <Route path="/chat">{() => <ProtectedRoute component={Chat} />}</Route>
       <Route path="/match-simulation">{() => <ProtectedRoute component={MatchSimulation} />}</Route>
       <Route path="/report-templates">{() => <ProtectedRoute component={ReportTemplates} />}</Route>
-      <Route path="/notices">{() => <ProtectedRoute component={NoticeBoard} />}</Route>
+      <Route path="/notices">{() => <Redirect to="/coach-blog" />}</Route>
       <Route path="/email-compose">{() => <ProtectedRoute component={EmailCompose} />}</Route>
       <Route path="/coach-blog">{() => <ProtectedRoute component={CoachBlog} />}</Route>
       <Route path="/media-gallery">{() => <ProtectedRoute component={Media} />}</Route>
