@@ -3423,6 +3423,21 @@ th{background:#0d7377;color:white}
       const players = await storage.getPlayersByTeam(teamId);
       const playerMap = new Map(players.map(p => [p.id, p]));
 
+      // Count attack attempts per player from raw events (for efficiency calculation)
+      const matchEvents = await storage.getMatchEvents(matchId);
+      const attackAttemptsMap: Record<string, number> = {};
+      const setScoresMap: Record<number, { home: number; away: number }> = {};
+      for (const ev of matchEvents) {
+        if (ev.action === "ATTACK") attackAttemptsMap[ev.playerId] = (attackAttemptsMap[ev.playerId] || 0) + 1;
+        const sn = (ev as any).setNumber || 1;
+        if (!setScoresMap[sn]) setScoresMap[sn] = { home: 0, away: 0 };
+        if ((ev as any).pointWonByTeamId === teamId) setScoresMap[sn].home++;
+        else if ((ev as any).pointWonByTeamId === "OPPONENT") setScoresMap[sn].away++;
+      }
+      const setScores = Object.entries(setScoresMap)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([sn, sc]) => ({ setNumber: Number(sn), home: sc.home, away: sc.away, won: sc.home > sc.away }));
+
       const assignments = await storage.getCoachAssignmentsByTeam(teamId);
       const headCoach = assignments.find(a => a.assignmentRole === "HEAD_COACH" && a.active);
       let coachName = "";
@@ -3433,11 +3448,15 @@ th{background:#0d7377;color:white}
 
       const enrichedStats = stats.map(s => {
         const player = playerMap.get(s.playerId);
+        const attackAtt = attackAttemptsMap[s.playerId] || 0;
+        const attackEff = attackAtt > 0 ? Math.round(((s.spikesKill || 0) - (s.spikesError || 0)) / attackAtt * 100) : null;
         return {
           ...s,
           playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
           jerseyNo: player?.jerseyNo ?? 0,
           position: player?.position ?? "",
+          attackAtt,
+          attackEff,
         };
       }).sort((a, b) => (b.pointsTotal || 0) - (a.pointsTotal || 0));
 
@@ -3454,7 +3473,13 @@ th{background:#0d7377;color:white}
         settingAssist: enrichedStats.reduce((sum, s) => sum + (s.settingAssist || 0), 0),
         settingError: enrichedStats.reduce((sum, s) => sum + (s.settingError || 0), 0),
         pointsTotal: enrichedStats.reduce((sum, s) => sum + (s.pointsTotal || 0), 0),
+        attackAtt: enrichedStats.reduce((sum, s) => sum + (s.attackAtt || 0), 0),
       };
+      // Team attack efficiency
+      const teamAttackEff = teamTotals.attackAtt > 0
+        ? Math.round((teamTotals.spikesKill - teamTotals.spikesError) / teamTotals.attackAtt * 100)
+        : null;
+      (teamTotals as any).attackEff = teamAttackEff;
 
       const topPerformers = enrichedStats.slice(0, 5);
 
@@ -3489,6 +3514,7 @@ th{background:#0d7377;color:white}
         setsAgainst: match.setsAgainst,
         coachName,
         teamTotals,
+        setScores,
         topPerformers: topPerformers.map(s => ({
           jerseyNo: s.jerseyNo,
           name: s.playerName,
@@ -3499,6 +3525,10 @@ th{background:#0d7377;color:white}
           blocks: (s.blocksSolo || 0) + (s.blocksAssist || 0),
           digs: s.digs || 0,
           settingAssist: s.settingAssist || 0,
+          receivePerfect: s.receivePerfect || 0,
+          totalErrors: (s.spikesError || 0) + (s.servesError || 0) + (s.receiveError || 0) + (s.settingError || 0),
+          attackAtt: s.attackAtt || 0,
+          attackEff: s.attackEff,
         })),
         errorLeaders: errorStats.map(s => ({
           jerseyNo: s.jerseyNo,
@@ -3521,6 +3551,10 @@ th{background:#0d7377;color:white}
           blocks: (s.blocksSolo || 0) + (s.blocksAssist || 0),
           digs: s.digs || 0,
           settingAssist: s.settingAssist || 0,
+          receivePerfect: s.receivePerfect || 0,
+          totalErrors: (s.spikesError || 0) + (s.servesError || 0) + (s.receiveError || 0) + (s.settingError || 0),
+          attackAtt: s.attackAtt || 0,
+          attackEff: s.attackEff,
         })),
       };
 
@@ -6083,20 +6117,36 @@ th{background:#0d7377;color:white}
         }
       }
 
-      // Per-player stats aggregation from events
+      // Per-player stats aggregation from events — aligned with finalizeMatchInternal formula
       const stats: Record<string, any> = {};
       for (const ev of events) {
         const pid = ev.playerId;
-        if (!stats[pid]) stats[pid] = { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0, errors: 0, total: 0 };
+        if (!stats[pid]) stats[pid] = { kills: 0, aces: 0, blocks: 0, blockTouches: 0, digs: 0, assists: 0, recvPerfect: 0, attackErr: 0, serveErr: 0, receiveErr: 0, settingErr: 0, attackAtt: 0, total: 0 };
         const s = stats[pid];
-        const a = ev.action; const o = ev.outcome; const od = (ev as any).outcomeDetail || "";
-        if (a === "ATTACK" && od === "KILL") s.kills++;
-        else if (a === "SERVE" && od === "ACE") s.aces++;
-        else if (a === "BLOCK" && od === "STUFF") s.blocks++;
-        else if (a === "DIG" && o === "PLUS") s.digs++;
-        else if (a === "SET" && o === "PLUS") s.assists++;
-        if (o === "MINUS") s.errors++;
-        s.total = s.kills + s.aces + s.blocks - s.errors;
+        const a = ev.action; const o = ev.outcome;
+        if (a === "ATTACK") {
+          s.attackAtt++;
+          if (o === "PLUS") s.kills++;
+          else if (o === "MINUS") s.attackErr++;
+        } else if (a === "SERVE") {
+          if (o === "PLUS") s.aces++;
+          else if (o === "MINUS") s.serveErr++;
+        } else if (a === "BLOCK") {
+          if (o === "PLUS") s.blocks++;
+          else if (o === "ZERO") s.blockTouches++;
+        } else if (a === "DIG" && o === "PLUS") {
+          s.digs++;
+        } else if (a === "SET") {
+          if (o === "PLUS") s.assists++;
+          else if (o === "MINUS") s.settingErr++;
+        } else if (a === "RECEIVE") {
+          if (o === "PLUS") s.recvPerfect++;
+          else if (o === "MINUS") s.receiveErr++;
+        }
+        // Net Pts = (Kills + Aces + Block kills) − (Attack + Serve + Receive + Setting errors)
+        const totalErrors = s.attackErr + s.serveErr + s.receiveErr + s.settingErr;
+        s.total = s.kills + s.aces + s.blocks - totalErrors;
+        s.errors = totalErrors;
       }
 
       // Set breakdown
@@ -6190,15 +6240,18 @@ th{background:#0d7377;color:white}
       if (statRows.length > 0) {
         html += `<h2>Player Statistics</h2>
 <table>
-  <tr><th>#</th><th>Player</th><th>Position</th><th class="good">Kills</th><th class="good">Aces</th><th class="good">Blocks</th><th class="good">Digs</th><th>Assists</th><th class="bad">Errors</th><th>Net Pts</th></tr>`;
+  <tr><th>#</th><th>Player</th><th>Pos</th><th class="good">Kills</th><th class="good">Aces</th><th class="good">Blocks</th><th>Digs</th><th>Assists</th><th>Recv+</th><th>Atk Att</th><th>Atk Eff%</th><th class="bad">Errors</th><th>Net Pts</th></tr>`;
         statRows.forEach((r: any) => {
           const p = r.player;
+          const atkEff = r.attackAtt > 0 ? Math.round((r.kills - r.attackErr) / r.attackAtt * 100) : null;
           html += `<tr>
             <td>${p.jerseyNo || "—"}</td>
             <td><strong>${esc(p.firstName)} ${esc(p.lastName)}</strong></td>
             <td>${esc(p.position || "—")}</td>
             <td class="good">${r.kills}</td><td class="good">${r.aces}</td><td class="good">${r.blocks}</td>
-            <td class="good">${r.digs}</td><td>${r.assists}</td>
+            <td>${r.digs}</td><td>${r.assists}</td><td>${r.recvPerfect}</td>
+            <td class="neutral">${r.attackAtt}</td>
+            <td class="${atkEff !== null && atkEff >= 40 ? "good" : atkEff !== null && atkEff < 20 ? "bad" : "neutral"}">${atkEff !== null ? atkEff + "%" : "—"}</td>
             <td class="${r.errors > 2 ? "bad" : "neutral"}">${r.errors}</td>
             <td class="${r.total > 0 ? "good" : r.total < 0 ? "bad" : "neutral"}">${r.total > 0 ? "+" : ""}${r.total}</td>
           </tr>`;
@@ -6326,7 +6379,12 @@ th{background:#0d7377;color:white}
 
     const focusAreasMap = new Map<string, string[]>();
     for (const [playerId, stat] of Object.entries(playerAgg)) {
-      const pointsTotal = (stat.spikesKill * 2) + (stat.servesAce * 2) + (stat.blocksSolo * 2) + stat.blocksAssist + stat.digs + stat.settingAssist - (stat.spikesError * 2) - (stat.servesError * 2) - (stat.receiveError * 2) - (stat.settingError * 2);
+      // Standard FIVB net-points formula: direct rally-winning actions minus direct faults
+      // Kill / Ace / Solo Block each win a rally point (+1 each)
+      // Attack error / Serve error / Receive error / Setting error give opponent a rally point (-1 each)
+      // Digs, setting assists, block assists, receive perfects are support stats shown in their own columns
+      const pointsTotal = stat.spikesKill + stat.servesAce + stat.blocksSolo
+        - stat.spikesError - stat.servesError - stat.receiveError - stat.settingError;
       await storage.upsertStat({ ...stat, matchId, playerId, pointsTotal });
       const player = await storage.getPlayer(playerId);
       const pos = (player?.position || "").toLowerCase();
@@ -6751,14 +6809,14 @@ th{background:#0d7377;color:white}
 </table>
 
 <div class="legend">
-  <span><strong style="color:#15803d">Kills</strong> = Attack kills</span>
-  <span><strong style="color:#15803d">Aces</strong> = Service aces</span>
-  <span><strong style="color:#15803d">Blocks</strong> = Solo + assist blocks</span>
-  <span><strong style="color:#15803d">Digs</strong> = Successful digs</span>
+  <span><strong style="color:#15803d">Kills</strong> = Attack kills (direct point)</span>
+  <span><strong style="color:#15803d">Aces</strong> = Service aces (direct point)</span>
+  <span><strong style="color:#15803d">Blocks</strong> = Solo + block touches</span>
+  <span><strong style="color:#15803d">Digs</strong> = Successful defensive digs</span>
   <span><strong>Assists</strong> = Setting assists</span>
   <span><strong>Recv+</strong> = Perfect receptions</span>
-  <span><strong style="color:#dc2626">Errors</strong> = Total errors</span>
-  <span><strong>Net Pts</strong> = Points impact (positive / negative)</span>
+  <span><strong style="color:#dc2626">Errors</strong> = Attack + Serve + Receive + Setting errors</span>
+  <span><strong>Net Pts</strong> = (Kills + Aces + Block kills) − (Attack + Serve + Receive + Setting errors)</span>
 </div>
 
 <div class="footer">
