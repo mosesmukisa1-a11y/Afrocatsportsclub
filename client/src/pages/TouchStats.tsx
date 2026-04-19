@@ -128,10 +128,15 @@ export default function TouchStats() {
   const [syncResetKey, setSyncResetKey] = useState(0);
 
   const eligibleMatches = useMemo(() => {
-    return matches.filter((m: any) => {
-      if (m.status === "CANCELLED") return false;
-      return true;
-    });
+    return matches
+      .filter((m: any) => {
+        if (m.status === "CANCELLED") return false;
+        if (m.status === "COMPLETED") return false;
+        return true;
+      })
+      .sort((a: any, b: any) =>
+        new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime()
+      );
   }, [matches]);
 
   const handleMatchChange = useCallback((matchId: string) => {

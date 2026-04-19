@@ -80,8 +80,8 @@ export function Layout({ children }: { children: ReactNode }) {
   });
 
   return (
-    <div className="min-h-screen bg-afrocat-bg text-afrocat-text flex flex-col md:flex-row">
-      <div className="md:hidden flex items-center justify-between p-4 border-b border-afrocat-border bg-afrocat-card">
+    <div className="h-screen overflow-hidden bg-afrocat-bg text-afrocat-text flex flex-col">
+      <div className="shrink-0 md:hidden flex items-center justify-between p-4 border-b border-afrocat-border bg-afrocat-card">
         <div className="flex items-center gap-2">
           <img src={logo} alt="Afrocat Logo" className="w-8 h-8 object-contain" />
           <span className="font-display font-bold text-afrocat-text">Afrocat Portal</span>
@@ -98,8 +98,16 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </div>
 
+      <div className="flex-1 flex overflow-hidden relative">
+        {mobileOpen && (
+          <div
+            className="md:hidden absolute inset-0 z-30 bg-black/50"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+
       <aside
-        className={`${mobileOpen ? 'block' : 'hidden'} md:block w-full md:w-64 border-r border-afrocat-border bg-afrocat-card flex flex-col`}
+        className={`${mobileOpen ? 'flex absolute inset-y-0 left-0 z-40 w-72' : 'hidden'} md:relative md:flex md:w-64 md:z-auto shrink-0 border-r border-afrocat-border bg-afrocat-card flex-col overflow-hidden`}
       >
         <div className="hidden md:flex p-6 items-center gap-3 border-b border-afrocat-border">
           <img src={logo} alt="Afrocat Logo" className="w-12 h-12 object-contain" />
@@ -198,11 +206,12 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-afrocat-glow">
+      <main className="flex-1 overflow-y-auto min-w-0 bg-afrocat-glow">
         <div className="p-6 md:p-10 max-w-7xl mx-auto pb-20 md:pb-0">
           {children}
         </div>
       </main>
+      </div>
 
       {user && <MobileNav onMorePress={() => setMobileOpen(true)} />}
     </div>
