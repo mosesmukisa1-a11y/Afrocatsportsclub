@@ -9,6 +9,9 @@ import {
   CarouselNext,
 } from "@/components/ui/carousel";
 import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
+import {
   Users, Trophy, DollarSign, Activity, ArrowUpRight, ArrowDownRight,
   Target, AlertTriangle, Zap, TrendingUp, Calendar, Award,
   User, Shield, Heart, CheckCircle, Clock, XCircle, AlertCircle,
@@ -122,7 +125,7 @@ export default function Dashboard() {
   });
 
   const recentMedia = (approvedMedia || [])
-    .filter((m: any) => m.fileUrl)
+    .filter((m: any) => (m.imageUrl || m.url))
     .slice(0, 10);
 
   const [mediaApi, setMediaApi] = useState<any>(null);
@@ -444,21 +447,26 @@ export default function Dashboard() {
                   {recentMedia.map((media: any) => (
                     <CarouselItem key={media.id} className="basis-full md:basis-1/2 lg:basis-1/3">
                       <div className="relative aspect-video rounded-xl overflow-hidden bg-afrocat-white-5 border border-afrocat-border" data-testid={`media-slide-${media.id}`}>
-                        {(media.mediaType || "IMAGE") === "VIDEO" ? (
-                          <video
-                            src={media.fileUrl}
-                            className="w-full h-full object-cover"
-                            muted
-                            playsInline
-                          />
-                        ) : (
-                          <img
-                            src={media.fileUrl}
-                            alt={media.title || "Club media"}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                        )}
+                        {(() => {
+                          const mediaSrc = media.imageUrl || media.url || "";
+                          const isVid = /\.(mp4|webm|mov|avi)$/i.test(mediaSrc);
+                          return isVid ? (
+                            <video
+                              src={mediaSrc}
+                              className="w-full h-full object-cover"
+                              muted
+                              playsInline
+                            />
+                          ) : (
+                            <img
+                              src={mediaSrc}
+                              alt={media.title || "Club media"}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          );
+                        })()}
                         {media.title && (
                           <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-2">
                             <p className="text-white text-xs font-medium truncate" data-testid={`text-media-title-${media.id}`}>{media.title}</p>
@@ -733,6 +741,46 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {coachDash && (coachDash.topPerformers || []).length > 0 && (
+              <div className="afrocat-card p-5" data-testid="card-performance-chart">
+                <h3 className="flex items-center gap-2 text-base font-bold text-afrocat-text mb-4">
+                  <Zap className="h-4 w-4 text-afrocat-gold" /> Top Performers — Points Chart
+                </h3>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={(coachDash.topPerformers || []).slice(0, 8).map((p: any) => ({ name: (p.name || "").split(" ")[0], pts: p.pointsTotal || 0, kills: p.spikesKill || 0, aces: p.servesAce || 0 }))} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                    <XAxis dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ background: "#1a1f2e", border: "1px solid #2d3550", borderRadius: 10, color: "#e2e8f0", fontSize: 12 }} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <Legend wrapperStyle={{ fontSize: 11, color: "#9ca3af" }} />
+                    <Bar dataKey="pts" name="Points" fill="#f6ad55" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="kills" name="Kills" fill="#38b2ac" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="aces" name="Aces" fill="#68d391" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {coachTrainingSummary.length > 0 && (
+              <div className="afrocat-card p-5" data-testid="card-attendance-chart">
+                <h3 className="flex items-center gap-2 text-base font-bold text-afrocat-text mb-4">
+                  <Calendar className="h-4 w-4 text-afrocat-teal" /> Attendance Trends
+                </h3>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={coachTrainingSummary.map((s: any) => ({ name: s.session?.sessionDate ? new Date(s.session.sessionDate).toLocaleDateString("en", { month: "short", day: "numeric" }) : "—", Present: s.present || 0, Late: s.late || 0, Absent: s.absent || 0 }))} margin={{ top: 4, right: 8, left: -10, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                    <XAxis dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={{ background: "#1a1f2e", border: "1px solid #2d3550", borderRadius: 10, color: "#e2e8f0", fontSize: 12 }} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+                    <Legend wrapperStyle={{ fontSize: 11, color: "#9ca3af" }} />
+                    <Bar dataKey="Present" fill="#68d391" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Late" fill="#f6ad55" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Absent" fill="#fc8181" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             )}
           </>
