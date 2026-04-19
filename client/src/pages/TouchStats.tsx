@@ -128,12 +128,9 @@ export default function TouchStats() {
   const [syncResetKey, setSyncResetKey] = useState(0);
 
   const eligibleMatches = useMemo(() => {
+    const ACTIVE_STATUSES = ["SCHEDULED", "UPCOMING", "LIVE"];
     return matches
-      .filter((m: any) => {
-        if (m.status === "CANCELLED") return false;
-        if (m.status === "COMPLETED") return false;
-        return true;
-      })
+      .filter((m: any) => ACTIVE_STATUSES.includes(m.status))
       .sort((a: any, b: any) =>
         new Date(a.matchDate).getTime() - new Date(b.matchDate).getTime()
       );
