@@ -152,6 +152,7 @@ export interface IStorage {
   searchUsers(query: string): Promise<User[]>;
   getAllUsers(): Promise<User[]>;
   getUserByResetToken(tokenHash: string): Promise<User | undefined>;
+  getUsersPendingPasswordReset(): Promise<User[]>;
   createPasswordResetAudit(audit: InsertPasswordResetAudit): Promise<PasswordResetAudit>;
   getPasswordResetAudits(targetUserId?: string): Promise<PasswordResetAudit[]>;
   getShopItems(publicOnly?: boolean): Promise<ShopItem[]>;
@@ -718,6 +719,11 @@ export class DatabaseStorage implements IStorage {
   async getUserByResetToken(tokenHash: string) {
     const [user] = await db.select().from(schema.users).where(eq(schema.users.passwordResetTokenHash, tokenHash));
     return user;
+  }
+  async getUsersPendingPasswordReset() {
+    return db.select().from(schema.users)
+      .where(eq(schema.users.passwordResetRequested, true))
+      .orderBy(schema.users.passwordResetRequestedAt);
   }
   async createPasswordResetAudit(audit: InsertPasswordResetAudit) {
     const [created] = await db.insert(schema.passwordResetAudits).values(audit).returning();

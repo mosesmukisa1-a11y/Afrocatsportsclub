@@ -51,6 +51,8 @@ export const users = pgTable("users", {
   passwordResetTokenHash: text("password_reset_token_hash"),
   passwordResetTokenExp: timestamp("password_reset_token_exp"),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
+  passwordResetRequested: boolean("password_reset_requested").notNull().default(false),
+  passwordResetRequestedAt: timestamp("password_reset_requested_at"),
   isSuperAdmin: boolean("is_super_admin").notNull().default(false),
   roles: text("roles").array().default(sql`ARRAY[]::text[]`),
   lastPasswordResetAt: timestamp("last_password_reset_at"),

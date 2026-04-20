@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { api } from "@/lib/api";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, ArrowLeft, Copy, Check, KeyRound, ExternalLink } from "lucide-react";
+import { Mail, ArrowLeft, KeyRound, Clock, CheckCircle2 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
 export default function ForgotPassword() {
@@ -14,8 +14,6 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [resetLink, setResetLink] = useState("");
-  const [copied, setCopied] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,22 +23,13 @@ export default function ForgotPassword() {
     }
     setLoading(true);
     try {
-      const result = await api.forgotPassword(email);
+      await api.forgotPassword(email);
       setSubmitted(true);
-      if (result.resetLink) {
-        setResetLink(result.resetLink);
-      }
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(resetLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   if (submitted) {
@@ -53,39 +42,27 @@ export default function ForgotPassword() {
           </div>
 
           <div className="afrocat-card overflow-hidden">
-            <div className="pt-8 pb-6 px-6 text-center">
-              <div className="mx-auto w-14 h-14 rounded-full bg-afrocat-teal-soft flex items-center justify-center mb-4">
-                <Mail className="h-7 w-7 text-afrocat-teal" />
+            <div className="pt-10 pb-6 px-6 text-center">
+              <div className="mx-auto w-16 h-16 rounded-full bg-afrocat-teal-soft flex items-center justify-center mb-5">
+                <CheckCircle2 className="h-8 w-8 text-afrocat-teal" />
               </div>
-              <h3 className="text-xl font-display font-bold text-afrocat-text" data-testid="text-forgot-success">Check Your Email</h3>
-              <p className="text-sm text-afrocat-muted mt-2">
-                If an account exists for <span className="text-afrocat-text font-medium">{email}</span>, a password reset link has been generated.
+              <h3 className="text-xl font-display font-bold text-afrocat-text" data-testid="text-forgot-success">
+                Request Submitted
+              </h3>
+              <p className="text-sm text-afrocat-muted mt-3 leading-relaxed">
+                Your password reset request for <span className="text-afrocat-text font-medium">{email}</span> has been submitted.
               </p>
-            </div>
-
-            {resetLink && (
-              <div className="px-6 pb-6 space-y-3">
-                <div className="p-3 rounded-lg bg-afrocat-gold-soft border border-afrocat-gold/20">
-                  <p className="text-xs text-afrocat-gold font-medium mb-2">Your reset link (expires in 1 hour):</p>
-                  <div className="flex gap-2">
-                    <Input readOnly value={resetLink} className="text-xs bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-reset-link" />
-                    <Button variant="outline" size="sm" onClick={handleCopy} className="border-afrocat-border shrink-0" data-testid="button-copy-reset-link">
-                      {copied ? <Check className="h-4 w-4 text-afrocat-green" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
+              <div className="mt-4 p-4 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-left space-y-2">
+                <div className="flex items-start gap-3">
+                  <Clock className="h-4 w-4 text-afrocat-gold mt-0.5 shrink-0" />
+                  <p className="text-xs text-afrocat-muted">An admin will review and approve your request. Once approved, you will receive a reset link.</p>
                 </div>
-                <Button
-                  className="w-full bg-afrocat-teal hover:bg-afrocat-teal-dark text-white font-semibold"
-                  onClick={() => {
-                    const url = new URL(resetLink);
-                    setLocation(url.pathname + url.search);
-                  }}
-                  data-testid="button-go-reset"
-                >
-                  <KeyRound className="h-4 w-4 mr-2" /> Reset Password Now
-                </Button>
+                <div className="flex items-start gap-3">
+                  <Mail className="h-4 w-4 text-afrocat-teal mt-0.5 shrink-0" />
+                  <p className="text-xs text-afrocat-muted">If you have access to your club admin, ask them to check the User Management page.</p>
+                </div>
               </div>
-            )}
+            </div>
 
             <div className="border-t border-afrocat-border px-6 py-4 bg-afrocat-white-3 rounded-b-[18px]">
               <button
@@ -116,7 +93,7 @@ export default function ForgotPassword() {
               <KeyRound className="w-6 h-6 text-afrocat-teal" />
             </div>
             <h3 className="text-2xl font-display font-bold text-afrocat-text">Forgot Password?</h3>
-            <p className="text-sm text-afrocat-muted mt-1">Enter your email address and we'll generate a reset link for you.</p>
+            <p className="text-sm text-afrocat-muted mt-1">Enter your email address to submit a reset request. An admin will approve it.</p>
           </div>
           <div className="px-6 pb-8">
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -139,7 +116,7 @@ export default function ForgotPassword() {
                 disabled={loading}
                 data-testid="button-forgot-submit"
               >
-                {loading ? "Sending..." : "Send Reset Link"}
+                {loading ? "Submitting..." : "Submit Reset Request"}
               </Button>
             </form>
           </div>

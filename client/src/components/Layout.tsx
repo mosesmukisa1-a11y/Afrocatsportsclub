@@ -6,7 +6,7 @@ import {
   LogOut, ShieldAlert, Award, Menu, X, Star,
   ScrollText, FolderOpen, UserCircle, UserCheck,
   BarChart3, MessageCircle, Gamepad2, FileSpreadsheet,
-  Gauge, ChevronDown, RefreshCw, Mail, BookOpen, Image, Mic, Wrench, FileDown
+  Gauge, ChevronDown, RefreshCw, Mail, BookOpen, Image, Mic, Wrench, FileDown, KeyRound
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { MobileNav } from "./MobileNav";
@@ -44,6 +44,7 @@ const allNavItems = [
   { icon: FileDown, label: "Member Extract", href: "/admin/member-extract", roles: ["ADMIN","MANAGER"] },
   { icon: ShieldAlert, label: "User Management", href: "/admin/users", roles: ["ADMIN"] },
   { icon: Wrench, label: "System Check", href: "/admin/system-check", roles: ["ADMIN"] },
+  { icon: KeyRound, label: "Change Password", href: "/change-password", roles: ["ADMIN","MANAGER","COACH","CAPTAIN","STATISTICIAN","FINANCE","MEDICAL","PLAYER"] },
 ];
 
 const ROLE_COLORS: Record<string, { bg: string; text: string }> = {

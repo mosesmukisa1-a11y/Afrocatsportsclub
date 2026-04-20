@@ -413,38 +413,129 @@ export async function registerRoutes(
     }
   });
 
-  // ─── FORGOT PASSWORD (public, email-based) ────────
+  // ─── REQUEST PASSWORD RESET (user-initiated, queues for admin approval) ────
   app.post("/api/auth/forgot-password", async (req, res, next) => {
     try {
       const body = z.object({ email: z.string().email() }).parse(req.body);
       const user = await storage.getUserByEmail(body.email);
       if (!user) {
-        return res.json({ message: "If an account with that email exists, a password reset link has been generated." });
+        return res.json({ message: "If an account exists for that email, your reset request has been submitted." });
       }
 
-      const rawToken = crypto.randomBytes(32).toString("hex");
-      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-      const tokenExp = new Date(Date.now() + 60 * 60 * 1000);
-
       await storage.updateUser(user.id, {
-        passwordResetTokenHash: tokenHash,
-        passwordResetTokenExp: tokenExp,
+        passwordResetRequested: true,
+        passwordResetRequestedAt: new Date(),
       } as any);
 
-      const host = req.headers.host || "localhost:5000";
-      const protocol = req.headers["x-forwarded-proto"] || "http";
-      const frontendUrl = `${protocol}://${host}`;
-      const resetLink = `${frontendUrl}/reset-password?token=${rawToken}&email=${encodeURIComponent(user.email)}`;
+      // Notify all admins of the pending request
+      const admins = await storage.getUsersByRole("ADMIN");
+      for (const admin of admins) {
+        try {
+          await storage.createNotification({
+            userId: admin.id,
+            type: "SYSTEM",
+            title: "Password Reset Request",
+            message: `${user.fullName} has requested a password reset. Go to User Management to approve.`,
+            isRead: false,
+          } as any);
+        } catch { /* non-fatal */ }
+      }
 
       return res.json({
-        message: "If an account with that email exists, a password reset link has been generated.",
-        resetLink,
-        expiresIn: "1 hour",
+        message: "Your password reset request has been submitted. An admin will approve it shortly.",
+        requested: true,
       });
     } catch (e: any) {
       if (e?.name === "ZodError") return res.status(400).json({ message: "Validation error", details: e.errors });
       next(e);
     }
+  });
+
+  // ─── ADMIN: GET PENDING PASSWORD RESET REQUESTS ──────────────────────
+  app.get("/api/admin/password-reset-requests", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const pending = await storage.getUsersPendingPasswordReset();
+      return res.json(pending.map(u => ({
+        id: u.id,
+        fullName: u.fullName,
+        email: u.email,
+        role: u.role,
+        passwordResetRequestedAt: u.passwordResetRequestedAt,
+      })));
+    } catch (e) { next(e); }
+  });
+
+  // ─── ADMIN: APPROVE PASSWORD RESET REQUEST ──────────────────────
+  app.post("/api/admin/users/:userId/approve-reset", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const targetUser = await storage.getUser(req.params.userId);
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      const rawToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+      const tokenExp = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+
+      await storage.updateUser(targetUser.id, {
+        passwordResetTokenHash: tokenHash,
+        passwordResetTokenExp: tokenExp,
+        passwordResetRequested: false,
+        passwordResetRequestedAt: null,
+      } as any);
+
+      const host = req.headers.host || "localhost:5000";
+      const protocol = req.headers["x-forwarded-proto"] || "http";
+      const frontendUrl = `${protocol}://${host}`;
+      const resetLink = `${frontendUrl}/reset-password?token=${rawToken}&email=${encodeURIComponent(targetUser.email)}`;
+
+      // Notify the user that their request was approved
+      try {
+        await storage.createNotification({
+          userId: targetUser.id,
+          type: "SYSTEM",
+          title: "Password Reset Approved",
+          message: "Your password reset request has been approved. Check with admin for your reset link.",
+          isRead: false,
+        } as any);
+      } catch { /* non-fatal */ }
+
+      await storage.createPasswordResetAudit({
+        adminUserId: req.user!.userId,
+        targetUserId: targetUser.id,
+        resetMethod: "ONE_TIME_LINK",
+        notes: "Admin approved user-initiated reset request",
+      });
+
+      return res.json({
+        message: "Reset request approved. Share this link with the user.",
+        resetLink,
+        expiresIn: "24 hours",
+      });
+    } catch (e) { next(e); }
+  });
+
+  // ─── ADMIN: REJECT PASSWORD RESET REQUEST ──────────────────────
+  app.post("/api/admin/users/:userId/reject-reset", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const targetUser = await storage.getUser(req.params.userId);
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+      await storage.updateUser(targetUser.id, {
+        passwordResetRequested: false,
+        passwordResetRequestedAt: null,
+      } as any);
+
+      try {
+        await storage.createNotification({
+          userId: targetUser.id,
+          type: "SYSTEM",
+          title: "Password Reset Request Declined",
+          message: "Your password reset request was declined. Contact your admin if you need help accessing your account.",
+          isRead: false,
+        } as any);
+      } catch { /* non-fatal */ }
+
+      return res.json({ message: "Reset request rejected." });
+    } catch (e) { next(e); }
   });
 
   // ─── RESET PASSWORD (public, token-based) ────────

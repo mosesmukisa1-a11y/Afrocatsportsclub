@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Search, KeyRound, Shield, Copy, Check, Users, Loader2, UserCog, Crown, Trash2, AlertTriangle } from "lucide-react";
+import { Search, KeyRound, Shield, Copy, Check, Users, Loader2, UserCog, Crown, Trash2, AlertTriangle, Clock, CheckCircle2, XCircle, Bell } from "lucide-react";
 
 const ALL_ROLES = ["ADMIN", "MANAGER", "COACH", "CAPTAIN", "STATISTICIAN", "FINANCE", "MEDICAL", "PLAYER"] as const;
 
@@ -34,6 +34,34 @@ export default function AdminUsers() {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["/api/admin/users", debouncedQuery],
     queryFn: () => api.getAdminUsers(debouncedQuery || undefined),
+  });
+
+  const { data: pendingResets = [], isLoading: pendingLoading } = useQuery({
+    queryKey: ["/api/admin/password-reset-requests"],
+    queryFn: () => api.getPendingPasswordResets(),
+    refetchInterval: 30000,
+  });
+
+  const [approveLink, setApproveLink] = useState<{ link: string; name: string } | null>(null);
+
+  const approveMut = useMutation({
+    mutationFn: (userId: string) => api.approvePasswordReset(userId),
+    onSuccess: (result, userId) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/password-reset-requests"] });
+      const user = (pendingResets as any[]).find((u: any) => u.id === userId);
+      setApproveLink({ link: result.resetLink, name: user?.fullName || "User" });
+      toast({ title: "Reset approved", description: "Reset link generated — copy it and share with the user." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const rejectMut = useMutation({
+    mutationFn: (userId: string) => api.rejectPasswordReset(userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/password-reset-requests"] });
+      toast({ title: "Request rejected", description: "The user has been notified." });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const resetMut = useMutation({
@@ -144,6 +172,102 @@ export default function AdminUsers() {
           </h1>
           <p className="text-afrocat-muted mt-1">Manage users, assign roles, and reset passwords</p>
         </div>
+
+        {/* ── PENDING PASSWORD RESET REQUESTS ── */}
+        {(pendingLoading || (pendingResets as any[]).length > 0) && (
+          <div className="afrocat-card overflow-hidden">
+            <div className="bg-afrocat-gold-soft border-b border-afrocat-gold/20 px-6 py-4 rounded-t-[18px] flex items-center justify-between">
+              <h3 className="text-lg font-display font-semibold text-afrocat-gold flex items-center gap-2">
+                <Bell className="h-5 w-5" /> Password Reset Requests
+                {(pendingResets as any[]).length > 0 && (
+                  <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-afrocat-gold text-white font-bold">{(pendingResets as any[]).length}</span>
+                )}
+              </h3>
+              <p className="text-xs text-afrocat-gold/80">Approve or reject user-initiated password reset requests</p>
+            </div>
+            <div className="p-4 space-y-2">
+              {pendingLoading ? (
+                <div className="py-4 text-center"><Loader2 className="h-5 w-5 animate-spin mx-auto text-afrocat-muted" /></div>
+              ) : (
+                (pendingResets as any[]).map((u: any) => (
+                  <div key={u.id} className="flex items-center justify-between p-4 border border-afrocat-gold/20 rounded-lg bg-afrocat-gold/5" data-testid={`row-reset-request-${u.id}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-afrocat-gold shrink-0" />
+                        <span className="font-semibold text-sm text-afrocat-text">{u.fullName}</span>
+                        <span className="text-xs text-afrocat-muted">({u.role})</span>
+                      </div>
+                      <p className="text-xs text-afrocat-muted mt-0.5 ml-6">{u.email}</p>
+                      {u.passwordResetRequestedAt && (
+                        <p className="text-[11px] text-afrocat-gold/70 mt-0.5 ml-6">
+                          Requested {new Date(u.passwordResetRequestedAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      <Button
+                        size="sm"
+                        onClick={() => approveMut.mutate(u.id)}
+                        disabled={approveMut.isPending}
+                        className="bg-afrocat-green hover:bg-afrocat-green/80 text-white text-xs"
+                        data-testid={`button-approve-reset-${u.id}`}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => rejectMut.mutate(u.id)}
+                        disabled={rejectMut.isPending}
+                        className="border-afrocat-red/30 text-afrocat-red hover:bg-afrocat-red-soft text-xs"
+                        data-testid={`button-reject-reset-${u.id}`}
+                      >
+                        <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── APPROVE LINK DIALOG ── */}
+        <Dialog open={!!approveLink} onOpenChange={(open) => { if (!open) setApproveLink(null); }}>
+          <DialogContent className="max-w-md bg-afrocat-card border-afrocat-border text-afrocat-text">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-afrocat-green">
+                <CheckCircle2 className="h-5 w-5" /> Reset Link Generated
+              </DialogTitle>
+            </DialogHeader>
+            {approveLink && (
+              <div className="space-y-4">
+                <div className="p-3 bg-afrocat-white-5 rounded-lg">
+                  <p className="text-sm text-afrocat-muted">Reset link for <span className="text-afrocat-text font-semibold">{approveLink.name}</span>:</p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-afrocat-text text-sm">One-Time Reset Link (expires in 24 hours)</Label>
+                  <div className="flex gap-2">
+                    <Input readOnly value={approveLink.link} className="text-xs bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-approved-reset-link" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => { await navigator.clipboard.writeText(approveLink.link); toast({ title: "Copied!" }); }}
+                      className="border-afrocat-border shrink-0"
+                      data-testid="button-copy-approved-link"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-afrocat-gold">Share this link securely with the user. It will expire in 24 hours and can only be used once.</p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button onClick={() => setApproveLink(null)} data-testid="button-close-approve-dialog">Done</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="afrocat-card">
           <div className="bg-afrocat-white-5 border-b border-afrocat-border px-6 py-4 rounded-t-[18px]">

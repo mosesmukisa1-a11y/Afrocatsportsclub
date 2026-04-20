@@ -64,6 +64,11 @@ export const api = {
   getAdminUsers: (query?: string) => apiFetch<any[]>(`/admin/users${query ? `?query=${encodeURIComponent(query)}` : ""}`),
   adminResetPassword: (userId: string, data: { method: "TEMP_PASSWORD" | "ONE_TIME_LINK"; tempPassword?: string }) =>
     apiFetch<any>(`/admin/users/${userId}/reset-password`, { method: "POST", body: JSON.stringify(data) }),
+  getPendingPasswordResets: () => apiFetch<any[]>("/admin/password-reset-requests"),
+  approvePasswordReset: (userId: string) =>
+    apiFetch<any>(`/admin/users/${userId}/approve-reset`, { method: "POST" }),
+  rejectPasswordReset: (userId: string) =>
+    apiFetch<any>(`/admin/users/${userId}/reject-reset`, { method: "POST" }),
 
   getTeams: () => apiFetch<any[]>("/teams"),
   createTeam: (data: any) => apiFetch<any>("/teams", { method: "POST", body: JSON.stringify(data) }),
