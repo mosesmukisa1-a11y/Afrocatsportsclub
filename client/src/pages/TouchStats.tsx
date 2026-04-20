@@ -282,7 +282,7 @@ export default function TouchStats() {
     },
     onSuccess: (result: any, { side }) => {
       if (side === "AFROCAT" && servingTeam === "away") {
-        setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(-1), ...prev.slice(0, -1)] : prev);
+        setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(1), prev[0]] : prev);
         setServingTeam("home");
         toast({ title: "Side Out — Rotated!", description: "Lineup rotated. P1 is now serving." });
       } else if (side === "OPP" && servingTeam === "home") {
@@ -403,7 +403,7 @@ export default function TouchStats() {
     });
 
     if (pointSide === "home" && servingTeam === "away") {
-      setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(-1), ...prev.slice(0, -1)] : prev);
+      setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(1), prev[0]] : prev);
       setServingTeam("home");
     } else if (pointSide === "away" && servingTeam === "home") {
       setServingTeam("away");
@@ -500,7 +500,7 @@ export default function TouchStats() {
   }
 
   function rotateClockwise() {
-    setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(-1), ...prev.slice(0, -1)] : prev);
+    setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(1), prev[0]] : prev);
   }
 
   const currentActionDetails = selectedAction ? (OUTCOME_DETAILS[selectedAction] || []) : [];
