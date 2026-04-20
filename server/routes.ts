@@ -4823,7 +4823,7 @@ th{background:#0d7377;color:white}
         const player = await storage.getPlayer(playerId);
         if (player) {
           playerDob = player.dob || null;
-          playerName = player.fullName || "";
+          playerName = `${player.firstName || ""} ${player.lastName || ""}`.trim();
           if (player.teamId) {
             const team = await storage.getTeam(player.teamId);
             if (team) playerTeamName = team.name;
@@ -5021,7 +5021,7 @@ th{background:#0d7377;color:white}
 
         return {
           id: player.id,
-          fullName: player.fullName,
+          fullName: `${player.firstName} ${player.lastName}`,
           firstName: player.firstName,
           lastName: player.lastName,
           photoUrl: player.photoUrl,
@@ -5068,7 +5068,7 @@ th{background:#0d7377;color:white}
         const mp = stats.length || 1;
         return {
           id: p.id,
-          fullName: p.fullName,
+          fullName: `${p.firstName} ${p.lastName}`,
           firstName: p.firstName,
           lastName: p.lastName,
           photoUrl: p.photoUrl,
@@ -5124,6 +5124,9 @@ th{background:#0d7377;color:white}
       const allPlayers = await storage.getPlayers();
       const pMap: Record<string, any> = {};
       for (const p of allPlayers) pMap[p.id] = p;
+      const allTeams = await storage.getTeams();
+      const teamMap: Record<string, string> = {};
+      for (const t of allTeams) teamMap[t.id] = t.name;
 
       const winRate = played.length > 0 ? ((wins / played.length) * 100).toFixed(0) : "0";
       const teamTotals = Object.values(playerTotals).reduce((acc: any, t: any) => {
@@ -5165,9 +5168,10 @@ th{background:#0d7377;color:white}
       html += `<table><thead><tr><th class="num">#</th><th>Player</th><th>Team</th><th class="num">Matches</th><th class="num">Points</th><th class="num">Kills</th><th class="num">Aces</th><th class="num">Blocks</th><th class="num">Digs</th><th class="num">Assists</th><th class="num">Avg Pts</th></tr></thead><tbody>`;
       topPerformers.forEach((t: any, i: number) => {
         const p = pMap[t.playerId];
-        const pTeam = p?.teamId ? (allPlayers.find((ap: any) => ap.id === p.id && ap.teamId) as any)?.teamId : null;
+        const pName = p ? `${p.firstName} ${p.lastName}` : "Unknown";
+        const pTeamName = p?.teamId ? (teamMap[p.teamId] || "—") : "—";
         const avg = t.matches > 0 ? (t.points / t.matches).toFixed(1) : "—";
-        html += `<tr><td class="num">${i + 1}</td><td><strong>${esc(p?.fullName || "Unknown")}</strong>${p?.position ? ` <span style="font-size:9px;color:#888">(${esc(p.position)})</span>` : ""}</td><td style="font-size:10px;color:#666">${esc(p?.teamId ? (Object.values(pMap).find((op: any) => op.id !== p.id)?.name || "") : "")}</td><td class="num">${t.matches}</td><td class="num" style="font-weight:700;color:#0F8B7D">${t.points}</td><td class="num">${t.kills}</td><td class="num">${t.aces}</td><td class="num">${t.blocks}</td><td class="num">${t.digs}</td><td class="num">${t.assists}</td><td class="num" style="color:#555">${avg}</td></tr>`;
+        html += `<tr><td class="num">${i + 1}</td><td><strong>${esc(pName)}</strong>${p?.position ? ` <span style="font-size:9px;color:#888">(${esc(p.position)})</span>` : ""}</td><td style="font-size:10px;color:#666">${esc(pTeamName)}</td><td class="num">${t.matches}</td><td class="num" style="font-weight:700;color:#0F8B7D">${t.points}</td><td class="num">${t.kills}</td><td class="num">${t.aces}</td><td class="num">${t.blocks}</td><td class="num">${t.digs}</td><td class="num">${t.assists}</td><td class="num" style="color:#555">${avg}</td></tr>`;
       });
       if (topPerformers.length === 0) html += `<tr><td colspan="11" style="text-align:center;color:#888;padding:16px">No statistics recorded yet</td></tr>`;
       html += `</tbody></table>`;
@@ -5224,13 +5228,14 @@ th{background:#0d7377;color:white}
 
       const pCss = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;color:#1a1a2e;font-size:12px}.hdr{border-bottom:4px solid #0F8B7D;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}.club{font-size:20px;font-weight:900;color:#0F8B7D;letter-spacing:1px}.motto{font-size:9px;color:#888;margin-top:2px}.hdr-right{text-align:right;font-size:10px;color:#555;line-height:1.8}.rpt-title{font-size:15px;font-weight:700;color:#333;margin-bottom:4px}.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;border:1px solid #e0e0e0;border-radius:10px;padding:16px}.profile-row{display:flex;flex-direction:column;gap:8px}.pf-item{display:flex;gap:8px;font-size:11px}.pf-label{color:#888;min-width:100px;font-size:10px}.pf-val{font-weight:600;color:#1a1a2e}.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}.kpi{background:#f0faf9;border:1px solid #b2dfdb;border-radius:10px;padding:12px;text-align:center}.kpi .val{font-size:26px;font-weight:900;color:#0F8B7D}.kpi .lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}.section-title{font-size:11px;font-weight:700;color:#0F8B7D;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F8B7D;padding-bottom:4px;margin:20px 0 10px}table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px}th{background:#0F8B7D;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:0.3px}td{padding:6px 8px;border-bottom:1px solid #e8edf0}tr:nth-child(even) td{background:#f8fbfa}.num{text-align:center}.win{color:#15803d;font-weight:700}.loss{color:#dc2626;font-weight:700}.award-badge{display:inline-block;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700;margin-right:4px}.footer{margin-top:24px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#9ca3af}@media print{body{padding:10px;max-width:100%}@page{margin:10mm}}`;
 
-      let html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Player Report — ${esc(player.fullName)}</title><style>${pCss}</style></head><body>`;
+      const playerFullName = `${player.firstName} ${player.lastName}`;
+      let html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Player Report — ${esc(playerFullName)}</title><style>${pCss}</style></head><body>`;
 
       html += `<div class="hdr"><div><div class="club">AFROCAT VOLLEYBALL CLUB</div><div class="motto">One Team One Dream — Passion Discipline Victory</div></div><div class="hdr-right"><div class="rpt-title">Player Report</div><div><strong>Generated:</strong> ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div></div></div>`;
 
       html += `<div class="profile-grid">
         <div class="profile-row">
-          <div class="pf-item"><span class="pf-label">Full Name</span><span class="pf-val" style="font-size:15px;color:#0F8B7D">${esc(player.fullName)}</span></div>
+          <div class="pf-item"><span class="pf-label">Full Name</span><span class="pf-val" style="font-size:15px;color:#0F8B7D">${esc(playerFullName)}</span></div>
           <div class="pf-item"><span class="pf-label">Position</span><span class="pf-val">${esc(player.position || "—")}</span></div>
           <div class="pf-item"><span class="pf-label">Jersey Number</span><span class="pf-val">#${player.jerseyNo || "—"}</span></div>
           <div class="pf-item"><span class="pf-label">Team</span><span class="pf-val">${esc(team?.name || "Unassigned")}</span></div>
@@ -5333,7 +5338,7 @@ th{background:#0d7377;color:white}
       sortedPlayers.forEach((p: any, i: number) => {
         const today = new Date(); const dobDate = p.dob ? new Date(p.dob) : null;
         const pAge = dobDate ? today.getFullYear() - dobDate.getFullYear() : "—";
-        html += `<tr><td class="num">${i + 1}</td><td class="num" style="font-weight:700">#${p.jerseyNo || "—"}</td><td><strong>${esc(p.fullName)}</strong></td><td><span class="pos-badge">${esc(p.position || "—")}</span></td><td class="num" style="font-size:10px">${esc(p.dob || "—")}</td><td class="num">${pAge}</td><td class="num">${p.heightCm ? p.heightCm + "cm" : "—"}</td><td class="num">${p.weightKg ? p.weightKg + "kg" : "—"}</td><td class="num" style="font-size:10px">${esc(p.nationality || "—")}</td><td class="num">${p.matchesPlayed}</td><td class="num" style="font-weight:700;color:#0F8B7D">${p.totalPoints}</td></tr>`;
+        html += `<tr><td class="num">${i + 1}</td><td class="num" style="font-weight:700">#${p.jerseyNo || "—"}</td><td><strong>${esc(`${p.firstName} ${p.lastName}`)}</strong></td><td><span class="pos-badge">${esc(p.position || "—")}</span></td><td class="num" style="font-size:10px">${esc(p.dob || "—")}</td><td class="num">${pAge}</td><td class="num">${p.heightCm ? p.heightCm + "cm" : "—"}</td><td class="num">${p.weightKg ? p.weightKg + "kg" : "—"}</td><td class="num" style="font-size:10px">${esc(p.nationality || "—")}</td><td class="num">${p.matchesPlayed}</td><td class="num" style="font-weight:700;color:#0F8B7D">${p.totalPoints}</td></tr>`;
       });
       if (sortedPlayers.length === 0) {
         html += `<tr><td colspan="11" style="text-align:center;color:#888;padding:16px">No active players registered for this team</td></tr>`;
@@ -5342,7 +5347,7 @@ th{background:#0d7377;color:white}
 
       html += `<div class="section-title">Players by Position</div>`;
       for (const [pos, posPlayers] of Object.entries(byPosition)) {
-        html += `<div style="margin-bottom:4px;font-size:11px"><strong><span class="pos-badge">${esc(pos)}</span></strong> — ${posPlayers.map((p: any) => `#${p.jerseyNo || "?"} ${esc(p.fullName)}`).join(", ")}</div>`;
+        html += `<div style="margin-bottom:4px;font-size:11px"><strong><span class="pos-badge">${esc(pos)}</span></strong> — ${posPlayers.map((p: any) => `#${p.jerseyNo || "?"} ${esc(`${p.firstName} ${p.lastName}`)}`).join(", ")}</div>`;
       }
 
       html += `<div class="footer"><span>AFROCAT VOLLEYBALL CLUB — One Team One Dream</span><span>Generated: ${new Date().toLocaleString()}</span></div>`;
@@ -5374,7 +5379,7 @@ th{background:#0d7377;color:white}
 
       const playerAttendance: Record<string, { present: number; late: number; absent: number; name: string }> = {};
       for (const r of relevantRecords) {
-        if (!playerAttendance[r.playerId]) playerAttendance[r.playerId] = { present: 0, late: 0, absent: 0, name: pMap[r.playerId]?.fullName || "Unknown" };
+        if (!playerAttendance[r.playerId]) { const pp = pMap[r.playerId]; playerAttendance[r.playerId] = { present: 0, late: 0, absent: 0, name: pp ? `${pp.firstName} ${pp.lastName}` : "Unknown" }; }
         if (r.status === "PRESENT") playerAttendance[r.playerId].present++;
         else if (r.status === "LATE") playerAttendance[r.playerId].late++;
         else playerAttendance[r.playerId].absent++;
@@ -5566,7 +5571,7 @@ th{background:#0d7377;color:white}
 
       res.json({
         id: player.id,
-        fullName: player.fullName,
+        fullName: `${player.firstName} ${player.lastName}`,
         firstName: player.firstName,
         lastName: player.lastName,
         photoUrl: player.photoUrl,
