@@ -1115,7 +1115,7 @@ export default function TouchStats() {
                     data-testid="select-inline-headcoach"
                   >
                     <option value="">No coach assigned — select one</option>
-                    {(staffUsers as any[]).filter((u: any) => u.role === "COACH").map((u: any) => (
+                    {(staffUsers as any[]).filter((u: any) => u.isCoach).map((u: any) => (
                       <option key={u.id} value={u.id}>{u.fullName}</option>
                     ))}
                   </select>

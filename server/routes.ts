@@ -1590,15 +1590,26 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
   });
 
   // ─── STAFF-ELIGIBLE USERS (for match staff dropdown) ────────────────────
-  app.get("/api/staff-eligible-users", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (_req, res, next) => {
+  app.get("/api/staff-eligible-users", requireAuth, async (_req, res, next) => {
     try {
       const users = await storage.getAllUsers();
-      const eligible = users.map((u: any) => ({
-        id: u.id,
-        fullName: u.fullName,
-        role: u.role,
-        roles: u.roles,
-      }));
+      const isCoach = (u: any) =>
+        u.role === "COACH" || (Array.isArray(u.roles) && u.roles.includes("COACH"));
+      const isMedic = (u: any) =>
+        u.role === "MEDICAL" || (Array.isArray(u.roles) && u.roles.includes("MEDICAL"));
+      const isManager = (u: any) =>
+        u.role === "MANAGER" || (Array.isArray(u.roles) && u.roles.includes("MANAGER")) || u.role === "ADMIN";
+      const eligible = users
+        .filter((u: any) => u.accountStatus === "APPROVED" || u.accountStatus === "ACTIVE" || !u.accountStatus || u.isSuperAdmin)
+        .map((u: any) => ({
+          id: u.id,
+          fullName: u.fullName,
+          role: u.role,
+          roles: u.roles || [],
+          isCoach: isCoach(u),
+          isMedic: isMedic(u),
+          isManager: isManager(u),
+        }));
       res.json(eligible);
     } catch (e) { next(e); }
   });

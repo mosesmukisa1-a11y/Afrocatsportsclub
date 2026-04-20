@@ -713,8 +713,8 @@ export default function Matches() {
                 <Label className="text-afrocat-muted text-xs uppercase">Head Coach *</Label>
                 <select value={staffForm.headCoachUserId} onChange={e => setStaffForm({ ...staffForm, headCoachUserId: e.target.value })} required className="w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border text-afrocat-text" data-testid="select-staff-headcoach">
                   <option value="">Select Head Coach</option>
-                  {allUsers.filter((u: any) => u.role === "COACH" || u.roles?.includes("COACH") || u.role === "ADMIN").map((u: any) => (
-                    <option key={u.id} value={u.id}>{u.fullName} ({u.role})</option>
+                  {allUsers.filter((u: any) => u.isCoach).map((u: any) => (
+                    <option key={u.id} value={u.id}>{u.fullName}</option>
                   ))}
                 </select>
               </div>
@@ -722,7 +722,7 @@ export default function Matches() {
                 <Label className="text-afrocat-muted text-xs uppercase">Assistant Coach</Label>
                 <select value={staffForm.assistantCoachUserId} onChange={e => setStaffForm({ ...staffForm, assistantCoachUserId: e.target.value })} className="w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border text-afrocat-text" data-testid="select-staff-assistant">
                   <option value="">None</option>
-                  {allUsers.filter((u: any) => u.role === "COACH" || u.roles?.includes("COACH") || u.role === "ADMIN").map((u: any) => (
+                  {allUsers.filter((u: any) => u.isCoach).map((u: any) => (
                     <option key={u.id} value={u.id}>{u.fullName}</option>
                   ))}
                 </select>
@@ -731,7 +731,7 @@ export default function Matches() {
                 <Label className="text-afrocat-muted text-xs uppercase">Medic</Label>
                 <select value={staffForm.medicUserId} onChange={e => setStaffForm({ ...staffForm, medicUserId: e.target.value })} className="w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border text-afrocat-text" data-testid="select-staff-medic">
                   <option value="">None</option>
-                  {allUsers.filter((u: any) => u.role === "MEDICAL" || u.roles?.includes("MEDICAL") || u.role === "ADMIN").map((u: any) => (
+                  {allUsers.filter((u: any) => u.isMedic).map((u: any) => (
                     <option key={u.id} value={u.id}>{u.fullName}</option>
                   ))}
                 </select>
@@ -740,7 +740,7 @@ export default function Matches() {
                 <Label className="text-afrocat-muted text-xs uppercase">Team Manager</Label>
                 <select value={staffForm.teamManagerUserId} onChange={e => setStaffForm({ ...staffForm, teamManagerUserId: e.target.value })} className="w-full px-3 py-2 rounded-md bg-afrocat-white-5 border border-afrocat-border text-afrocat-text" data-testid="select-staff-manager">
                   <option value="">None</option>
-                  {allUsers.filter((u: any) => u.role === "MANAGER" || u.roles?.includes("MANAGER") || u.role === "ADMIN").map((u: any) => (
+                  {allUsers.filter((u: any) => u.isManager).map((u: any) => (
                     <option key={u.id} value={u.id}>{u.fullName}</option>
                   ))}
                 </select>
