@@ -124,7 +124,8 @@ export default function TouchStats() {
   const [subOutId, setSubOutId] = useState<string>("");
   const [subInId, setSubInId] = useState<string>("");
   const [lineupConfirmed, setLineupConfirmed] = useState(false);
-  const [lineupDraft, setLineupDraft] = useState<string[]>([]);
+  const [lineupDraft, setLineupDraft] = useState<(string | null)[]>([null, null, null, null, null, null]);
+  const [activePos, setActivePos] = useState<number | null>(1);
   const [servingTeam, setServingTeam] = useState<"home" | "away">("home");
 
   const selectedMatch = matches.find((m: any) => m.id === selectedMatchId);
@@ -147,7 +148,8 @@ export default function TouchStats() {
     setSyncResetKey(k => k + 1);
     setShowReport(false);
     setLineupConfirmed(false);
-    setLineupDraft([]);
+    setLineupDraft([null, null, null, null, null, null]);
+    setActivePos(1);
     setServingTeam("home");
     setRotationOrder([]);
     const match = matches.find((m: any) => m.id === matchId);
@@ -915,96 +917,175 @@ export default function TouchStats() {
               <div>
                 <h3 className="text-sm font-bold text-afrocat-text uppercase tracking-wider">Set Starting Lineup</h3>
                 <p className="text-[11px] text-afrocat-muted mt-0.5">
-                  Select exactly 6 players in rotation order — Position 1 serves first.
+                  {activePos !== null
+                    ? `Tap a player below to fill Position ${activePos}${activePos === 1 ? " (first server)" : ""}`
+                    : "Tap a position on the court to edit it"}
                 </p>
               </div>
-              <div className="text-right">
-                <span className={`text-2xl font-black ${lineupDraft.length === 6 ? "text-afrocat-teal" : "text-afrocat-muted"}`}>
-                  {lineupDraft.length}/6
-                </span>
+              <span className={`text-2xl font-black ${lineupDraft.filter(Boolean).length === 6 ? "text-afrocat-teal" : "text-afrocat-muted"}`}>
+                {lineupDraft.filter(Boolean).length}/6
+              </span>
+            </div>
+
+            {/* Court diagram — always visible */}
+            <div className="rounded-2xl border border-afrocat-border bg-afrocat-white-3 p-3 space-y-1.5">
+              <div className="text-[9px] text-center font-bold text-afrocat-muted tracking-widest opacity-60 mb-1">— NET (OPPONENT SIDE) —</div>
+              {/* Front row: P4, P3, P2 */}
+              <div className="grid grid-cols-3 gap-2">
+                {[4, 3, 2].map(pos => {
+                  const pid = lineupDraft[pos - 1];
+                  const p = pid ? players.find((pl: any) => pl.id === pid) : null;
+                  const isActive = activePos === pos;
+                  return (
+                    <button
+                      key={pos}
+                      onClick={() => {
+                        if (pid) {
+                          setLineupDraft(prev => { const d = [...prev]; d[pos - 1] = null; return d; });
+                          setActivePos(pos);
+                        } else {
+                          setActivePos(pos);
+                        }
+                      }}
+                      className={`relative rounded-xl border-2 p-2 text-center transition-all cursor-pointer min-h-[72px] flex flex-col items-center justify-center ${
+                        isActive
+                          ? "border-afrocat-teal ring-2 ring-afrocat-teal/40 bg-afrocat-teal-soft"
+                          : pid
+                            ? "border-afrocat-teal/40 bg-afrocat-white-5 hover:border-afrocat-teal/60"
+                            : "border-dashed border-afrocat-border bg-afrocat-white-3 hover:border-afrocat-teal/40"
+                      }`}
+                      data-testid={`court-pos-${pos}`}
+                    >
+                      <div className="text-[9px] font-bold text-afrocat-teal mb-1">P{pos}</div>
+                      {p ? (
+                        <>
+                          {p.photoUrl
+                            ? <img src={p.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-afrocat-teal/30 mb-1" />
+                            : <div className="w-8 h-8 rounded-full bg-afrocat-white-5 border border-afrocat-teal/30 flex items-center justify-center text-[10px] font-bold text-afrocat-muted mb-1">{getInitials(p.firstName, p.lastName)}</div>
+                          }
+                          <div className="text-[10px] font-bold text-afrocat-text leading-tight">#{p.jerseyNo}</div>
+                          <div className="text-[9px] text-afrocat-muted truncate w-full text-center">{p.firstName}</div>
+                        </>
+                      ) : (
+                        <div className={`text-xl font-black ${isActive ? "text-afrocat-teal" : "text-afrocat-border"}`}>+</div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
+              {/* Back row: P5, P6, P1 */}
+              <div className="grid grid-cols-3 gap-2">
+                {[5, 6, 1].map(pos => {
+                  const pid = lineupDraft[pos - 1];
+                  const p = pid ? players.find((pl: any) => pl.id === pid) : null;
+                  const isActive = activePos === pos;
+                  const isServer = pos === 1;
+                  return (
+                    <button
+                      key={pos}
+                      onClick={() => {
+                        if (pid) {
+                          setLineupDraft(prev => { const d = [...prev]; d[pos - 1] = null; return d; });
+                          setActivePos(pos);
+                        } else {
+                          setActivePos(pos);
+                        }
+                      }}
+                      className={`relative rounded-xl border-2 p-2 text-center transition-all cursor-pointer min-h-[72px] flex flex-col items-center justify-center ${
+                        isActive
+                          ? isServer
+                            ? "border-afrocat-gold ring-2 ring-afrocat-gold/40 bg-afrocat-gold-soft"
+                            : "border-afrocat-teal ring-2 ring-afrocat-teal/40 bg-afrocat-teal-soft"
+                          : isServer
+                            ? pid ? "border-afrocat-gold/60 bg-afrocat-gold-soft hover:border-afrocat-gold" : "border-dashed border-afrocat-gold/40 bg-afrocat-gold-soft/30 hover:border-afrocat-gold/60"
+                            : pid ? "border-afrocat-teal/40 bg-afrocat-white-5 hover:border-afrocat-teal/60" : "border-dashed border-afrocat-border bg-afrocat-white-3 hover:border-afrocat-teal/40"
+                      }`}
+                      data-testid={`court-pos-${pos}`}
+                    >
+                      <div className={`text-[9px] font-bold mb-1 ${isServer ? "text-afrocat-gold" : "text-afrocat-teal"}`}>
+                        {isServer ? "P1 ⟳ SERVE" : `P${pos}`}
+                      </div>
+                      {p ? (
+                        <>
+                          {p.photoUrl
+                            ? <img src={p.photoUrl} alt="" className={`w-8 h-8 rounded-full object-cover border mb-1 ${isServer ? "border-afrocat-gold/50" : "border-afrocat-teal/30"}`} />
+                            : <div className={`w-8 h-8 rounded-full bg-afrocat-white-5 border flex items-center justify-center text-[10px] font-bold mb-1 ${isServer ? "border-afrocat-gold/50 text-afrocat-gold" : "border-afrocat-teal/30 text-afrocat-muted"}`}>{getInitials(p.firstName, p.lastName)}</div>
+                          }
+                          <div className="text-[10px] font-bold text-afrocat-text leading-tight">#{p.jerseyNo}</div>
+                          <div className="text-[9px] text-afrocat-muted truncate w-full text-center">{p.firstName}</div>
+                        </>
+                      ) : (
+                        <div className={`text-xl font-black ${isActive ? (isServer ? "text-afrocat-gold" : "text-afrocat-teal") : "text-afrocat-border"}`}>+</div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-[9px] text-center font-bold text-afrocat-muted tracking-widest opacity-60 mt-1">— SERVICE ZONE (YOUR SIDE) —</div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-              {[...players].sort((a: any, b: any) => (a.jerseyNo ?? 99) - (b.jerseyNo ?? 99)).map((p: any) => {
-                const posIdx = lineupDraft.indexOf(p.id);
-                const selected = posIdx !== -1;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      if (selected) {
-                        setLineupDraft(prev => prev.filter(id => id !== p.id));
-                      } else if (lineupDraft.length < 6) {
-                        setLineupDraft(prev => [...prev, p.id]);
-                      }
-                    }}
-                    className={`relative p-2.5 rounded-xl border-2 text-center transition-all cursor-pointer ${
-                      selected
-                        ? "border-afrocat-teal bg-afrocat-teal-soft"
-                        : "border-afrocat-border bg-afrocat-white-3 hover:border-afrocat-teal/40"
-                    } ${!selected && lineupDraft.length >= 6 ? "opacity-40 cursor-not-allowed" : ""}`}
-                    data-testid={`lineup-player-${p.id}`}
-                  >
-                    {selected && (
-                      <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-afrocat-teal text-white text-[10px] font-black flex items-center justify-center border-2 border-afrocat-card z-10">
-                        {posIdx + 1}
-                      </div>
-                    )}
-                    {p.photoUrl ? (
-                      <img src={p.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover mx-auto mb-1 border-2 border-afrocat-teal/20" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-afrocat-white-5 flex items-center justify-center text-xs font-bold text-afrocat-muted mx-auto mb-1 border-2 border-afrocat-teal/20">
-                        {getInitials(p.firstName, p.lastName)}
-                      </div>
-                    )}
-                    <div className="text-[10px] font-bold text-afrocat-text truncate">#{p.jerseyNo} {p.firstName}</div>
-                    <div className="text-[9px] text-afrocat-muted truncate">{p.position || (p.isLibero ? "Libero" : "-")}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            {lineupDraft.length === 6 && (
-              <div className="bg-afrocat-white-3 rounded-xl p-3 border border-afrocat-border">
-                <div className="text-[10px] font-bold text-afrocat-muted uppercase tracking-wider mb-2">Rotation Preview — P1 Serves First</div>
-                <div className="grid grid-cols-3 gap-1 mb-1">
-                  {[4, 3, 2].map(pos => {
-                    const p = players.find((pl: any) => pl.id === lineupDraft[pos - 1]);
-                    return (
-                      <div key={pos} className="text-center p-1.5 rounded-lg bg-afrocat-white-5 border border-afrocat-border">
-                        <div className="text-[9px] font-bold text-afrocat-teal">P{pos}</div>
-                        <div className="text-[10px] font-bold text-afrocat-text truncate">{p ? `#${p.jerseyNo} ${p.firstName}` : "—"}</div>
-                      </div>
-                    );
-                  })}
+            {/* Player pool — shows when a position is active */}
+            {activePos !== null && (
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold text-afrocat-muted uppercase tracking-wider">
+                  {lineupDraft.filter(Boolean).length === 6 ? "All positions filled" : `Assign to P${activePos} — tap a player:`}
                 </div>
-                <div className="text-[8px] text-center text-afrocat-muted tracking-widest opacity-50 mb-1">— NET —</div>
-                <div className="grid grid-cols-3 gap-1">
-                  {[5, 6, 1].map(pos => {
-                    const p = players.find((pl: any) => pl.id === lineupDraft[pos - 1]);
-                    const isServer = pos === 1;
-                    return (
-                      <div key={pos} className={`text-center p-1.5 rounded-lg border ${isServer ? "bg-afrocat-gold-soft border-afrocat-gold/40" : "bg-afrocat-white-5 border-afrocat-border"}`}>
-                        <div className={`text-[9px] font-bold ${isServer ? "text-afrocat-gold" : "text-afrocat-teal"}`}>{isServer ? "P1 ⟳" : `P${pos}`}</div>
-                        <div className="text-[10px] font-bold text-afrocat-text truncate">{p ? `#${p.jerseyNo} ${p.firstName}` : "—"}</div>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {[...players]
+                    .filter((p: any) => !lineupDraft.includes(p.id))
+                    .sort((a: any, b: any) => (a.jerseyNo ?? 99) - (b.jerseyNo ?? 99))
+                    .map((p: any) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setLineupDraft(prev => {
+                            const d = [...prev];
+                            d[activePos - 1] = p.id;
+                            return d;
+                          });
+                          const nextEmpty = [1, 2, 3, 4, 5, 6].find(pos => {
+                            if (pos === activePos) return false;
+                            const afterDraft = [...lineupDraft];
+                            afterDraft[activePos - 1] = p.id;
+                            return !afterDraft[pos - 1];
+                          });
+                          setActivePos(nextEmpty ?? null);
+                        }}
+                        className="flex items-center gap-2 p-2 rounded-xl border border-afrocat-border bg-afrocat-white-3 hover:border-afrocat-teal hover:bg-afrocat-teal-soft transition-all cursor-pointer text-left"
+                        data-testid={`pool-player-${p.id}`}
+                      >
+                        {p.photoUrl
+                          ? <img src={p.photoUrl} alt="" className="w-9 h-9 rounded-full object-cover shrink-0 border border-afrocat-teal/20" />
+                          : <div className="w-9 h-9 rounded-full bg-afrocat-white-5 border border-afrocat-teal/20 flex items-center justify-center text-xs font-bold text-afrocat-muted shrink-0">{getInitials(p.firstName, p.lastName)}</div>
+                        }
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-bold text-afrocat-text truncate">#{p.jerseyNo} {p.firstName}</div>
+                          <div className="text-[9px] text-afrocat-muted truncate">{p.isLibero ? "Libero" : (p.position || "—")}</div>
+                        </div>
+                      </button>
+                    ))
+                  }
+                  {lineupDraft.filter(Boolean).length === 6 && (
+                    <div className="col-span-full text-center text-xs text-afrocat-muted py-2">
+                      All 6 players assigned. Confirm or tap a position to swap.
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
                 onClick={() => {
-                  if (lineupDraft.length !== 6) return;
-                  setRotationOrder(lineupDraft);
+                  const draft = lineupDraft as (string | null)[];
+                  if (draft.some(id => !id)) return;
+                  const order = draft as string[];
+                  setRotationOrder(order);
                   setLineupConfirmed(true);
                   setShowFivbPanel(true);
-                  toast({ title: "Lineup Confirmed!", description: "Position 1 is serving first. Rotation will auto-advance on side-outs." });
+                  toast({ title: "Lineup Confirmed!", description: "Position 1 serves first. Rotation auto-advances on side-outs." });
                 }}
-                disabled={lineupDraft.length !== 6}
+                disabled={lineupDraft.filter(Boolean).length !== 6}
                 className="flex-1 bg-afrocat-teal text-white font-bold text-sm py-2.5 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer hover:bg-afrocat-teal/80 transition-colors"
                 data-testid="button-confirm-lineup"
               >
@@ -1013,11 +1094,13 @@ export default function TouchStats() {
               <button
                 onClick={() => {
                   const nonLibero = [...players].filter((p: any) => !p.isLibero).slice(0, 6);
-                  const draft = nonLibero.map((p: any) => p.id);
+                  const draft: (string | null)[] = [null, null, null, null, null, null];
+                  nonLibero.forEach((p: any, i: number) => { draft[i] = p.id; });
                   setLineupDraft(draft);
-                  setRotationOrder(draft);
+                  setRotationOrder(draft.filter(Boolean) as string[]);
                   setLineupConfirmed(true);
                   setShowFivbPanel(true);
+                  setActivePos(null);
                   toast({ title: "Auto-filled Lineup", description: "First 6 non-libero players set as starters." });
                 }}
                 className="px-4 py-2.5 rounded-xl border border-afrocat-border text-xs text-afrocat-muted hover:text-afrocat-teal cursor-pointer"
