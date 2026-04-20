@@ -98,6 +98,7 @@ export interface IStorage {
   createAward(award: InsertAward): Promise<Award>;
   getCoachAssignments(): Promise<CoachAssignment[]>;
   getCoachAssignmentsByTeam(teamId: string): Promise<CoachAssignment[]>;
+  getCoachAssignmentsByCoach(coachUserId: string): Promise<CoachAssignment[]>;
   getActiveHeadCoachForTeam(teamId: string, matchDate: string): Promise<CoachAssignment | undefined>;
   createCoachAssignment(ca: InsertCoachAssignment): Promise<CoachAssignment>;
   updateCoachAssignment(id: string, data: Partial<InsertCoachAssignment>): Promise<CoachAssignment | undefined>;
@@ -463,6 +464,11 @@ export class DatabaseStorage implements IStorage {
   }
   async getCoachAssignmentsByTeam(teamId: string) {
     return db.select().from(schema.coachAssignments).where(eq(schema.coachAssignments.teamId, teamId));
+  }
+  async getCoachAssignmentsByCoach(coachUserId: string) {
+    return db.select().from(schema.coachAssignments)
+      .where(eq(schema.coachAssignments.coachUserId, coachUserId))
+      .orderBy(desc(schema.coachAssignments.startDate));
   }
   async getActiveHeadCoachForTeam(teamId: string, matchDate: string) {
     const results = await db.select().from(schema.coachAssignments)

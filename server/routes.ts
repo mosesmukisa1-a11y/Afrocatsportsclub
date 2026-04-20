@@ -66,11 +66,13 @@ function computeStars(winRate: number): number {
 async function recomputeCoachPerformance(teamId: string, matchDate: string) {
   const assignment = await storage.getActiveHeadCoachForTeam(teamId, matchDate);
   if (!assignment) return;
+  await recomputeCoachPerformanceByCoach(assignment.coachUserId);
+}
 
-  const allAssignments = await storage.getCoachAssignmentsByTeam(teamId);
-  const headAssignments = allAssignments.filter(
-    a => a.coachUserId === assignment.coachUserId && a.assignmentRole === "HEAD_COACH"
-  );
+async function recomputeCoachPerformanceByCoach(coachUserId: string) {
+  // Look at ALL head-coach assignments for this coach across ALL teams
+  const allAssignments = await storage.getCoachAssignmentsByCoach(coachUserId);
+  const headAssignments = allAssignments.filter(a => a.assignmentRole === "HEAD_COACH");
 
   let totalMatches = 0;
   let totalWins = 0;
@@ -89,13 +91,7 @@ async function recomputeCoachPerformance(teamId: string, matchDate: string) {
   const winRate = totalMatches > 0 ? totalWins / totalMatches : 0;
   const stars = computeStars(winRate);
 
-  await storage.upsertCoachPerformance({
-    coachUserId: assignment.coachUserId,
-    matches: totalMatches,
-    wins: totalWins,
-    winRate,
-    stars,
-  });
+  await storage.upsertCoachPerformance({ coachUserId, matches: totalMatches, wins: totalWins, winRate, stars });
 }
 
 export async function registerRoutes(
@@ -2276,6 +2272,107 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         return res.json({ coachUserId: req.params.id, matches: 0, wins: 0, winRate: 0, stars: 0, provisional: true });
       }
       res.json({ ...snap, provisional: snap.matches < 5 });
+    } catch (e) { next(e); }
+  });
+
+  // Coach detailed performance — all teams, all assignments, per-match breakdown
+  app.get("/api/coaches/:id/performance/detailed", requireAuth, async (req, res, next) => {
+    try {
+      const coachUserId = req.params.id;
+      const coachUser = await storage.getUser(coachUserId);
+      if (!coachUser) return res.status(404).json({ error: "Coach not found" });
+
+      const allAssignments = await storage.getCoachAssignmentsByCoach(coachUserId);
+      const allTeams = await db.select().from(schema.teams);
+      const teamMap = Object.fromEntries(allTeams.map((t: any) => [t.id, t]));
+
+      let careerMatches = 0, careerWins = 0, careerLosses = 0;
+      const assignmentDetails = [];
+
+      for (const a of allAssignments) {
+        const team = teamMap[a.teamId] as any;
+        const teamMatches = await storage.getMatchesByTeam(a.teamId);
+        const coachedMatches = teamMatches
+          .filter((m: any) => {
+            if (!m.matchDate) return false;
+            if (m.matchDate < a.startDate) return false;
+            if (a.endDate && m.matchDate > a.endDate) return false;
+            return true;
+          })
+          .sort((a: any, b: any) => b.matchDate.localeCompare(a.matchDate));
+
+        const withResult = coachedMatches.filter((m: any) => m.result);
+        const wins = withResult.filter((m: any) => m.result === "W").length;
+        const losses = withResult.filter((m: any) => m.result === "L").length;
+
+        if (a.assignmentRole === "HEAD_COACH") {
+          careerMatches += withResult.length;
+          careerWins += wins;
+          careerLosses += losses;
+        }
+
+        assignmentDetails.push({
+          id: a.id,
+          teamId: a.teamId,
+          teamName: team?.name || a.teamId,
+          teamCategory: team?.category || "",
+          assignmentRole: a.assignmentRole,
+          startDate: a.startDate,
+          endDate: a.endDate || null,
+          active: a.active,
+          isPrimary: a.isPrimary,
+          isTemporary: a.isTemporary,
+          tempReason: a.tempReason || null,
+          matchCount: withResult.length,
+          totalPlayed: coachedMatches.length,
+          wins,
+          losses,
+          draws: withResult.length - wins - losses,
+          winRate: withResult.length > 0 ? +(wins / withResult.length).toFixed(3) : 0,
+          matches: coachedMatches.map((m: any) => ({
+            id: m.id,
+            matchDate: m.matchDate,
+            opponent: m.opponent,
+            result: m.result || null,
+            setsFor: m.setsFor ?? m.homeSetsWon ?? null,
+            setsAgainst: m.setsAgainst ?? m.awaySetsWon ?? null,
+            homeScore: m.homeScore ?? null,
+            awayScore: m.awayScore ?? null,
+            statsEntered: !!m.statsEntered,
+            scoreLocked: !!m.scoreLocked,
+            venue: m.venue || null,
+          })),
+        });
+      }
+
+      const snap = await storage.getCoachPerformance(coachUserId);
+      const winRate = careerMatches > 0 ? careerWins / careerMatches : 0;
+
+      res.json({
+        coachUserId,
+        coachName: coachUser.fullName,
+        coachPhoto: (coachUser as any).photoUrl || null,
+        coachRole: coachUser.role,
+        careerMatches,
+        careerWins,
+        careerLosses,
+        winRate: +winRate.toFixed(3),
+        stars: snap?.stars || computeStars(winRate),
+        provisional: careerMatches < 5,
+        assignments: assignmentDetails,
+      });
+    } catch (e) { next(e); }
+  });
+
+  // Coach users list for assignment picker
+  app.get("/api/users/coaches", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const users = await storage.getUsers();
+      const coaches = users
+        .filter((u: any) => u.role === "COACH" || (u.roles as string[] || []).includes("COACH"))
+        .map((u: any) => ({ id: u.id, fullName: u.fullName, email: u.email, photoUrl: u.photoUrl || null }))
+        .sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
+      res.json(coaches);
     } catch (e) { next(e); }
   });
 

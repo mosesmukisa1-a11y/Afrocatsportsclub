@@ -139,6 +139,8 @@ export const api = {
   updateCoachAssignment: (id: string, data: any) => apiFetch<any>(`/coach-assignments/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   getCoachPerformance: (coachUserId: string) => apiFetch<any>(`/coaches/${coachUserId}/performance`),
+  getCoachDetailedPerformance: (coachUserId: string) => apiFetch<any>(`/coaches/${coachUserId}/performance/detailed`),
+  getCoachUsers: () => apiFetch<any[]>("/users/coaches"),
 
   getPlayerContracts: (playerId: string) => apiFetch<any[]>(`/contracts/player/${playerId}`),
   createContract: (data: any) => apiFetch<any>("/contracts", { method: "POST", body: JSON.stringify(data) }),
