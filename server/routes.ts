@@ -7894,32 +7894,31 @@ th{background:#0d7377;color:white}
       if (!teamId) return res.status(400).json({ error: "teamId required" });
       const matches = await storage.getMatches();
       const teamMatches = matches
-        .filter((m: any) => (m.homeTeamId === teamId || m.awayTeamId === teamId) && m.statsEntered)
-        .sort((a: any, b: any) => (b.date || "").localeCompare(a.date || ""))
+        .filter((m: any) => m.teamId === teamId && m.statsEntered)
+        .sort((a: any, b: any) => (b.matchDate || "").localeCompare(a.matchDate || ""))
         .slice(0, 5);
 
       const trends = [];
       for (const match of teamMatches) {
-        const stats = await storage.getPlayerMatchStats(match.id);
-        const teamStats = stats.filter((s: any) => {
-          const player = s.playerId;
-          return true;
-        });
-        const totalServes = teamStats.reduce((s: number, st: any) => s + (st.serveAttempts || 0), 0);
-        const serveErrors = teamStats.reduce((s: number, st: any) => s + (st.serviceErrors || 0), 0);
-        const totalReceives = teamStats.reduce((s: number, st: any) => s + (st.receptionAttempts || 0), 0);
-        const perfectReceives = teamStats.reduce((s: number, st: any) => s + (st.receptionPerfect || 0), 0);
-        const totalAttacks = teamStats.reduce((s: number, st: any) => s + (st.attackAttempts || 0), 0);
-        const kills = teamStats.reduce((s: number, st: any) => s + (st.kills || 0), 0);
-        const attackErrors = teamStats.reduce((s: number, st: any) => s + (st.attackErrors || 0), 0);
+        const stats = await storage.getStatsByMatch(match.id);
+        // Use actual schema fields: servesAce, servesError, receivePerfect, receiveError, spikesKill, spikesError
+        const serveAces    = stats.reduce((s: number, st: any) => s + (st.servesAce   || 0), 0);
+        const serveErrors  = stats.reduce((s: number, st: any) => s + (st.servesError || 0), 0);
+        const totalServes  = serveAces + serveErrors;
+        const recvPerfect  = stats.reduce((s: number, st: any) => s + (st.receivePerfect || 0), 0);
+        const recvErrors   = stats.reduce((s: number, st: any) => s + (st.receiveError   || 0), 0);
+        const totalRecvs   = recvPerfect + recvErrors;
+        const kills        = stats.reduce((s: number, st: any) => s + (st.spikesKill  || 0), 0);
+        const atkErrors    = stats.reduce((s: number, st: any) => s + (st.spikesError || 0), 0);
+        const totalAttacks = kills + atkErrors;
 
         trends.push({
           matchId: match.id,
           opponent: match.opponent || "Unknown",
-          date: match.date,
-          serveErrorPct: totalServes > 0 ? Math.round((serveErrors / totalServes) * 100) : 0,
-          receivePerfectPct: totalReceives > 0 ? Math.round((perfectReceives / totalReceives) * 100) : 0,
-          attackEfficiency: totalAttacks > 0 ? Math.round(((kills - attackErrors) / totalAttacks) * 100) : 0,
+          date: match.matchDate,
+          serveErrorPct:     totalServes  > 0 ? Math.round((serveErrors / totalServes)  * 100) : 0,
+          receivePerfectPct: totalRecvs   > 0 ? Math.round((recvPerfect / totalRecvs)   * 100) : 0,
+          attackEfficiency:  totalAttacks > 0 ? Math.round(((kills - atkErrors) / totalAttacks) * 100) : 0,
         });
       }
 
