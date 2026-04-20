@@ -5526,8 +5526,8 @@ th{background:#0d7377;color:white}
   app.post("/api/reports/attendance-summary", requireAuth, requireRole(["ADMIN", "MANAGER", "COACH"]), async (req, res, next) => {
     try {
       const { teamId, startDate, endDate } = req.body;
-      const sessions = await db.select().from(schema.attendanceSessions);
-      const filtered = sessions.filter((s: any) => {
+      const allSessions = await db.select().from(schema.attendanceSessions);
+      const filtered = allSessions.filter((s: any) => {
         if (teamId && s.teamId !== teamId) return false;
         if (startDate && s.sessionDate < startDate) return false;
         if (endDate && s.sessionDate > endDate) return false;
@@ -5536,39 +5536,98 @@ th{background:#0d7377;color:white}
 
       const records = await db.select().from(schema.attendanceRecords);
       const allPlayers = await storage.getPlayers();
+      const allTeams = await storage.getTeams();
       const pMap: Record<string, any> = {};
       for (const p of allPlayers) pMap[p.id] = p;
+      const teamMap: Record<string, string> = {};
+      for (const t of allTeams) teamMap[t.id] = t.name;
       const team = teamId ? await storage.getTeam(teamId) : null;
 
-      const sessionIds = new Set(filtered.map(s => s.id));
+      const sessionIds = new Set(filtered.map((s: any) => s.id));
       const relevantRecords = records.filter((r: any) => sessionIds.has(r.sessionId));
 
-      const playerAttendance: Record<string, { present: number; late: number; absent: number; name: string }> = {};
+      // ── Build session→team lookup ──────────────────────────
+      const sessionTeamMap: Record<string, string | null> = {};
+      for (const s of filtered) sessionTeamMap[s.id] = (s as any).teamId || null;
+
+      // ── Count expected sessions per team (from filtered set) ──
+      const teamSessionCount: Record<string, number> = {};   // teamId → count
+      let allTeamSessionCount = 0;
+      for (const s of filtered) {
+        const tid = (s as any).teamId;
+        if (tid) teamSessionCount[tid] = (teamSessionCount[tid] || 0) + 1;
+        else allTeamSessionCount++;
+      }
+
+      // ── Aggregate records per player ──────────────────────
+      type PlayerAtt = { present: number; late: number; absent: number; excused: number; name: string; team: string };
+      const playerAttendance: Record<string, PlayerAtt> = {};
       for (const r of relevantRecords) {
-        if (!playerAttendance[r.playerId]) { const pp = pMap[r.playerId]; playerAttendance[r.playerId] = { present: 0, late: 0, absent: 0, name: pp ? `${pp.firstName} ${pp.lastName}` : "Unknown" }; }
-        if (r.status === "PRESENT") playerAttendance[r.playerId].present++;
-        else if (r.status === "LATE") playerAttendance[r.playerId].late++;
+        if (!playerAttendance[r.playerId]) {
+          const pp = pMap[r.playerId];
+          playerAttendance[r.playerId] = {
+            present: 0, late: 0, absent: 0, excused: 0,
+            name: pp ? `${pp.firstName} ${pp.lastName}` : "Unknown",
+            team: pp?.teamId ? (teamMap[pp.teamId] || "Unknown Team") : "No Team",
+          };
+        }
+        const s = r.status as string;
+        if (s === "PRESENT") playerAttendance[r.playerId].present++;
+        else if (s === "LATE") playerAttendance[r.playerId].late++;
+        else if (s === "EXCUSED") playerAttendance[r.playerId].excused++;
         else playerAttendance[r.playerId].absent++;
       }
 
-      const sortedAtt = Object.entries(playerAttendance).sort((a, b) => {
-        const totA = a[1].present + a[1].late + a[1].absent;
-        const totB = b[1].present + b[1].late + b[1].absent;
-        const rateA = totA > 0 ? (a[1].present + a[1].late) / totA : 0;
-        const rateB = totB > 0 ? (b[1].present + b[1].late) / totB : 0;
-        return rateB - rateA;
+      // ── Calculate expected sessions per player from their team ──
+      // Expected = sessions for their team + sessions for ALL teams (no teamId)
+      const getExpected = (playerId: string): number => {
+        const pp = pMap[playerId];
+        if (!pp?.teamId) return allTeamSessionCount;
+        return (teamSessionCount[pp.teamId] || 0) + allTeamSessionCount;
+      };
+
+      // ── Compute rates ─────────────────────────────────────
+      // Attend Rate = (PRESENT + LATE + EXCUSED) / expected_sessions
+      // On Time Rate = PRESENT / expected_sessions
+      // Unexcused Absent = total expected - present - late - excused
+      const sortedAtt = Object.entries(playerAttendance).map(([id, d]) => {
+        const expected = getExpected(id);
+        const recorded = d.present + d.late + d.absent + d.excused;
+        // Unrecorded sessions count as unexcused absent
+        const unrecordedAbsent = Math.max(0, expected - recorded);
+        const totalAbsent = d.absent + unrecordedAbsent;
+        const attendCount = d.present + d.late + d.excused;
+        const attendRate = expected > 0 ? (attendCount / expected * 100) : 0;
+        const onTimeRate = expected > 0 ? (d.present / expected * 100) : 0;
+        return { id, d, expected, totalAbsent, unrecordedAbsent, attendRate, onTimeRate };
+      }).sort((a, b) => {
+        // Primary: attend rate DESC; Secondary: on-time rate DESC
+        if (Math.abs(b.attendRate - a.attendRate) > 0.5) return b.attendRate - a.attendRate;
+        return b.onTimeRate - a.onTimeRate;
       });
 
       const totalSessions = filtered.length;
-      const avgRate = sortedAtt.length > 0
-        ? (sortedAtt.reduce((sum, [, d]) => {
-            const tot = d.present + d.late + d.absent;
-            return sum + (tot > 0 ? (d.present + d.late) / tot : 0);
-          }, 0) / sortedAtt.length * 100).toFixed(0)
-        : "0";
-      const perfect = sortedAtt.filter(([, d]) => d.absent === 0).length;
 
-      const aCss = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;max-width:900px;margin:0 auto;padding:24px;color:#1a1a2e;font-size:12px}.hdr{border-bottom:4px solid #0F8B7D;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}.club{font-size:20px;font-weight:900;color:#0F8B7D;letter-spacing:1px}.motto{font-size:9px;color:#888;margin-top:2px}.hdr-right{text-align:right;font-size:10px;color:#555;line-height:1.8}.rpt-title{font-size:15px;font-weight:700;color:#333;margin-bottom:4px}.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}.kpi{background:#f0faf9;border:1px solid #b2dfdb;border-radius:10px;padding:12px;text-align:center}.kpi .val{font-size:26px;font-weight:900;color:#0F8B7D}.kpi .lbl{font-size:9px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}.section-title{font-size:11px;font-weight:700;color:#0F8B7D;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F8B7D;padding-bottom:4px;margin:20px 0 10px}table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px}th{background:#0F8B7D;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:0.3px}td{padding:6px 8px;border-bottom:1px solid #e8edf0}tr:nth-child(even) td{background:#f8fbfa}.num{text-align:center}.good{color:#15803d;font-weight:700}.bad{color:#dc2626;font-weight:700}.warn{color:#d97706;font-weight:700}.bar-bg{background:#e5e7eb;border-radius:4px;height:8px;width:100%;display:inline-block;vertical-align:middle;overflow:hidden}.bar-fill{height:100%;border-radius:4px;display:inline-block}.footer{margin-top:24px;padding-top:10px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;font-size:9px;color:#9ca3af}@media print{body{padding:10px;max-width:100%}@page{margin:10mm}}`;
+      // Avg attend rate across all players (using expected sessions denominator)
+      const avgRate = sortedAtt.length > 0
+        ? (sortedAtt.reduce((sum, r) => sum + r.attendRate, 0) / sortedAtt.length).toFixed(0)
+        : "0";
+
+      // Avg on-time rate
+      const avgOnTime = sortedAtt.length > 0
+        ? (sortedAtt.reduce((sum, r) => sum + r.onTimeRate, 0) / sortedAtt.length).toFixed(0)
+        : "0";
+
+      // True perfect = 0 absent (unexcused) AND 0 late
+      const perfect = sortedAtt.filter(r => r.totalAbsent === 0 && r.d.late === 0).length;
+      // Never absent (may have been late or excused, but never unexcused absent)
+      const neverAbsent = sortedAtt.filter(r => r.totalAbsent === 0).length;
+      // Consistently late (late > 0, no absent)
+      const consistentlyLate = sortedAtt.filter(r => r.d.late > 0 && r.totalAbsent === 0).length;
+      // Below threshold
+      const belowThreshold = sortedAtt.filter(r => r.attendRate < 75).length;
+
+      const aCss = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:"Segoe UI",Arial,sans-serif;max-width:960px;margin:0 auto;padding:24px;color:#1a1a2e;font-size:12px}.hdr{border-bottom:4px solid #0F8B7D;padding-bottom:14px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}.club{font-size:20px;font-weight:900;color:#0F8B7D;letter-spacing:1px}.motto{font-size:9px;color:#888;margin-top:2px}.hdr-right{text-align:right;font-size:10px;color:#555;line-height:1.8}.rpt-title{font-size:15px;font-weight:700;color:#333;margin-bottom:4px}.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}.kpi{background:#f0faf9;border:1px solid #b2dfdb;border-radius:10px;padding:10px;text-align:center}.kpi .val{font-size:24px;font-weight:900;color:#0F8B7D}.kpi .lbl{font-size:8px;color:#666;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px}.kpi2-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}.kpi2{background:#fafafa;border:1px solid #e5e7eb;border-radius:8px;padding:8px;text-align:center}.kpi2 .val{font-size:18px;font-weight:800;color:#374151}.kpi2 .lbl{font-size:8px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.4px;margin-top:1px}.section-title{font-size:11px;font-weight:700;color:#0F8B7D;text-transform:uppercase;letter-spacing:0.6px;border-bottom:2px solid #0F8B7D;padding-bottom:4px;margin:20px 0 10px}.formula-note{font-size:10px;color:#555;background:#f0faf9;border:1px solid #b2dfdb;border-radius:6px;padding:8px 12px;margin-bottom:14px;line-height:1.6}table{width:100%;border-collapse:collapse;margin-bottom:20px;font-size:11px}th{background:#0F8B7D;color:#fff;padding:5px 7px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:0.3px}td{padding:5px 7px;border-bottom:1px solid #e8edf0}tr:nth-child(even) td{background:#f8fbfa}.num{text-align:center}.good{color:#15803d;font-weight:700}.bad{color:#dc2626;font-weight:700}.warn{color:#d97706;font-weight:700}.bar-bg{background:#e5e7eb;border-radius:4px;height:6px;width:60px;display:inline-block;vertical-align:middle;overflow:hidden}.bar-fill{height:100%;border-radius:4px;display:inline-block}.flag{display:inline-block;font-size:9px;padding:1px 4px;border-radius:3px;font-weight:700;margin-left:3px}.flag-late{background:#fef3c7;color:#92400e}.flag-perfect{background:#d1fae5;color:#065f46}.flag-exc{background:#dbeafe;color:#1e40af}.footer{margin-top:24px;padding-top:10px;border-top:1px solid #e5e7eb;font-size:9px;color:#9ca3af}.legend{display:flex;gap:16px;flex-wrap:wrap}@media print{body{padding:10px;max-width:100%}@page{margin:8mm}}`;
 
       let html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Attendance Summary</title><style>${aCss}</style></head><body>`;
       html += `<div class="hdr"><div><div class="club">AFROCAT VOLLEYBALL CLUB</div><div class="motto">One Team One Dream — Passion Discipline Victory</div></div><div class="hdr-right"><div class="rpt-title">Attendance Summary Report</div><div><strong>Team:</strong> ${esc(team?.name || "All Teams")}</div><div><strong>Period:</strong> ${esc(startDate || "All time")} to ${esc(endDate || "Present")}</div><div><strong>Generated:</strong> ${new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div></div></div>`;
@@ -5576,26 +5635,60 @@ th{background:#0d7377;color:white}
       html += `<div class="kpi-row">
         <div class="kpi"><div class="val">${totalSessions}</div><div class="lbl">Sessions Held</div></div>
         <div class="kpi"><div class="val">${sortedAtt.length}</div><div class="lbl">Players Tracked</div></div>
-        <div class="kpi"><div class="val">${avgRate}%</div><div class="lbl">Avg Attendance Rate</div></div>
+        <div class="kpi"><div class="val">${avgRate}%</div><div class="lbl">Avg Attend Rate</div></div>
+        <div class="kpi"><div class="val">${avgOnTime}%</div><div class="lbl">Avg On-Time Rate</div></div>
         <div class="kpi"><div class="val">${perfect}</div><div class="lbl">Perfect Attendance</div></div>
       </div>`;
 
-      html += `<div class="section-title">Player Attendance — Sorted by Rate (Highest First)</div>`;
-      html += `<table><thead><tr><th class="num">#</th><th>Player</th><th class="num">Present</th><th class="num">Late</th><th class="num">Absent</th><th class="num">Total</th><th class="num">Rate</th><th style="width:80px">Visual</th></tr></thead><tbody>`;
-      sortedAtt.forEach(([_id, data], i) => {
-        const total = data.present + data.late + data.absent;
-        const rate = total > 0 ? ((data.present + data.late) / total * 100) : 0;
-        const rateStr = rate.toFixed(0);
-        const cls = rate >= 90 ? "good" : rate >= 75 ? "warn" : "bad";
-        const barColor = rate >= 90 ? "#15803d" : rate >= 75 ? "#d97706" : "#dc2626";
-        html += `<tr><td class="num">${i + 1}</td><td><strong>${esc(data.name)}</strong></td><td class="num" style="color:#15803d;font-weight:600">${data.present}</td><td class="num" style="color:#d97706">${data.late}</td><td class="num" style="color:#dc2626">${data.absent}</td><td class="num">${total}</td><td class="num ${cls}">${rateStr}%</td><td><div class="bar-bg"><div class="bar-fill" style="width:${rateStr}%;background:${barColor}"></div></div></td></tr>`;
+      html += `<div class="kpi2-row">
+        <div class="kpi2"><div class="val" style="color:#15803d">${neverAbsent}</div><div class="lbl">Never Absent (incl. excused/late)</div></div>
+        <div class="kpi2"><div class="val" style="color:#d97706">${consistentlyLate}</div><div class="lbl">Attended but Sometimes Late</div></div>
+        <div class="kpi2"><div class="val" style="color:#dc2626">${belowThreshold}</div><div class="lbl">Below 75% Threshold</div></div>
+        <div class="kpi2"><div class="val" style="color:#6366f1">${sortedAtt.filter(r => r.d.excused > 0).length}</div><div class="lbl">Had Excused Absences</div></div>
+      </div>`;
+
+      html += `<div class="formula-note">
+        <strong>How rates are calculated:</strong><br>
+        &bull; <strong>Attend %</strong> = (Present + Late + Excused) ÷ Expected Sessions × 100 &mdash; measures who showed up regardless of timing or reason<br>
+        &bull; <strong>On Time %</strong> = Present Only ÷ Expected Sessions × 100 &mdash; measures who arrived on time with no lateness<br>
+        &bull; <strong>Expected Sessions</strong> = sessions held for the player's team in the selected period (unrecorded sessions count as unexcused absent)<br>
+        &bull; <strong>Perfect Attendance</strong> = 0 unexcused absences AND 0 late marks &mdash; strictly on time to every session
+      </div>`;
+
+      html += `<div class="section-title">Player Attendance — Sorted by Attend % then On-Time %</div>`;
+      html += `<table><thead><tr><th class="num">#</th><th>Player</th><th>Team</th><th class="num">Present</th><th class="num">Late</th><th class="num">Excused</th><th class="num">Absent</th><th class="num">Expected</th><th class="num">Attend %</th><th class="num">On Time %</th><th style="width:60px">Visual</th></tr></thead><tbody>`;
+      sortedAtt.forEach(({ d, expected, totalAbsent, attendRate, onTimeRate }, i) => {
+        const attendStr = attendRate.toFixed(0);
+        const onTimeStr = onTimeRate.toFixed(0);
+        const attendCls = attendRate >= 90 ? "good" : attendRate >= 75 ? "warn" : "bad";
+        const barColor = attendRate >= 90 ? "#15803d" : attendRate >= 75 ? "#d97706" : "#dc2626";
+        const isPerfect = totalAbsent === 0 && d.late === 0;
+        const isLateFlag = d.late > 0 && totalAbsent === 0;
+        const flags = isPerfect
+          ? `<span class="flag flag-perfect">★ Perfect</span>`
+          : isLateFlag
+          ? `<span class="flag flag-late">⏰ Late</span>`
+          : d.excused > 0 ? `<span class="flag flag-exc">Excused</span>` : "";
+        html += `<tr>
+          <td class="num">${i + 1}</td>
+          <td><strong>${esc(d.name)}</strong>${flags}</td>
+          <td style="font-size:10px;color:#555">${esc(d.team)}</td>
+          <td class="num" style="color:#15803d;font-weight:600">${d.present}</td>
+          <td class="num" style="color:${d.late > 0 ? "#d97706" : "#999"};font-weight:${d.late > 0 ? "700" : "400"}">${d.late}</td>
+          <td class="num" style="color:#6366f1">${d.excused}</td>
+          <td class="num" style="color:${totalAbsent > 0 ? "#dc2626" : "#999"};font-weight:${totalAbsent > 0 ? "700" : "400"}">${totalAbsent}</td>
+          <td class="num" style="color:#555">${expected}</td>
+          <td class="num ${attendCls}">${attendStr}%</td>
+          <td class="num" style="color:${Number(onTimeStr) >= 90 ? "#15803d" : Number(onTimeStr) >= 75 ? "#d97706" : "#dc2626"};font-weight:700">${onTimeStr}%</td>
+          <td><div class="bar-bg"><div class="bar-fill" style="width:${attendStr}%;background:${barColor}"></div></div></td>
+        </tr>`;
       });
       if (sortedAtt.length === 0) {
-        html += `<tr><td colspan="8" style="text-align:center;color:#888;padding:16px">No attendance records found for the selected period</td></tr>`;
+        html += `<tr><td colspan="11" style="text-align:center;color:#888;padding:16px">No attendance records found for the selected period</td></tr>`;
       }
       html += `</tbody></table>`;
 
-      html += `<div class="footer"><span>AFROCAT VOLLEYBALL CLUB — One Team One Dream &bull; Attendance threshold: 75% = Acceptable, 90%+ = Excellent</span><span>Generated: ${new Date().toLocaleString()}</span></div>`;
+      html += `<div class="footer"><div class="legend"><span><strong>Attend %:</strong> Present+Late+Excused ÷ Expected</span><span><strong>On Time %:</strong> Present only ÷ Expected</span><span><strong>★ Perfect:</strong> 0 absent &amp; 0 late</span><span><strong>⏰ Late:</strong> Attended every session but arrived late at least once</span><span style="color:#dc2626">Below 75% = At Risk</span><span style="color:#d97706">75–89% = Acceptable</span><span style="color:#15803d">90%+ = Excellent</span></div><div style="margin-top:6px">AFROCAT VOLLEYBALL CLUB — One Team One Dream &bull; Generated: ${new Date().toLocaleString()}</div></div>`;
       html += `</body></html>`;
 
       res.json({ html });
