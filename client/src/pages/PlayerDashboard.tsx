@@ -8,7 +8,7 @@ import {
   Trophy, Target, Zap, Calendar, Activity, Shield,
   TrendingUp, AlertTriangle, FileText, CheckCircle,
   MapPin, Clock, Swords, User, Flame,
-  Heart, BarChart3, Loader2, Cake
+  Heart, BarChart3, Loader2, Cake, Search, Download, X
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -49,6 +49,7 @@ export default function PlayerDashboard() {
   const [chartFilter, setChartFilter] = useState<"all" | "home" | "away">("all");
   const [activeTab, setActiveTab] = useState("overview");
 
+  const [statsSearch, setStatsSearch] = useState("");
   const isPlayer = user?.role === "PLAYER";
   const canViewAny = !!user && ["ADMIN", "MANAGER", "COACH"].includes(user.role);
   const effectivePlayerId = isPlayer && user?.playerId ? user.playerId : selectedPlayerId;
@@ -79,6 +80,150 @@ export default function PlayerDashboard() {
     borderRadius: 12,
     color: "var(--color-afrocat-text)",
     fontSize: 12,
+  };
+
+  const filteredStats = (dash?.recentStats || []).filter((s: any) => {
+    if (!statsSearch.trim()) return true;
+    const q = statsSearch.toLowerCase();
+    return (
+      (s.opponent || "").toLowerCase().includes(q) ||
+      (s.matchDate || "").toLowerCase().includes(q)
+    );
+  });
+
+  const handleDownloadPDF = async () => {
+    if (!dash) return;
+    const { default: jsPDF } = await import("jspdf");
+    const { default: autoTable } = await import("jspdf-autotable");
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    const playerName = `${dash.player?.firstName || ""} ${dash.player?.lastName || ""}`.trim();
+    const teamName = dash.player?.teamName || "Unassigned";
+    const position = dash.player?.position || "—";
+    const jersey = dash.player?.jerseyNo ? `#${dash.player.jerseyNo}` : "—";
+    const generated = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+
+    doc.setFillColor(13, 27, 32);
+    doc.rect(0, 0, 210, 297, "F");
+
+    doc.setFillColor(0, 150, 136);
+    doc.rect(0, 0, 210, 38, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.text("AFROCAT SPORTS CLUB", 14, 14);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.text("Player Stats Report", 14, 22);
+
+    doc.setFontSize(9);
+    doc.setTextColor(200, 230, 225);
+    doc.text(`Generated: ${generated}`, 14, 30);
+    doc.text(`One Team One Dream`, 196, 30, { align: "right" });
+
+    doc.setFillColor(20, 40, 48);
+    doc.roundedRect(14, 44, 182, 34, 3, 3, "F");
+
+    doc.setTextColor(255, 210, 63);
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text(playerName, 22, 57);
+
+    doc.setTextColor(160, 200, 195);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${teamName}  ·  ${position}  ·  ${jersey}`, 22, 65);
+
+    const totals = dash.totals || {};
+    const kpis = [
+      ["Matches", totals.matches ?? 0],
+      ["Total Points", totals.pointsTotal ?? 0],
+      ["Kills", totals.kills ?? 0],
+      ["Aces", totals.aces ?? 0],
+      ["Blocks", totals.blocks ?? 0],
+      ["Digs", totals.digs ?? 0],
+    ];
+
+    doc.setTextColor(255, 210, 63);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.text("Season Totals", 14, 88);
+
+    const kpiPerRow = 3;
+    kpis.forEach(([label, value], idx) => {
+      const col = idx % kpiPerRow;
+      const row = Math.floor(idx / kpiPerRow);
+      const x = 14 + col * 62;
+      const y = 94 + row * 22;
+      doc.setFillColor(20, 40, 48);
+      doc.roundedRect(x, y, 58, 18, 2, 2, "F");
+      doc.setTextColor(255, 210, 63);
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(String(value), x + 29, y + 11, { align: "center" });
+      doc.setTextColor(140, 180, 175);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.text(String(label).toUpperCase(), x + 29, y + 16, { align: "center" });
+    });
+
+    const statsToExport = statsSearch.trim() ? filteredStats : (dash.recentStats || []);
+    if (statsToExport.length > 0) {
+      doc.setTextColor(255, 210, 63);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(statsSearch.trim() ? `Match Stats (filtered: "${statsSearch}")` : "Match Stats — All Matches", 14, 148);
+
+      autoTable(doc, {
+        startY: 153,
+        head: [["Date", "Opponent", "Result", "Points", "Kills", "Aces", "Blocks", "Digs", "Assists", "Errors"]],
+        body: statsToExport.map((s: any) => [
+          s.matchDate || "—",
+          s.opponent || "—",
+          s.result || "—",
+          s.pointsTotal ?? 0,
+          s.spikesKill ?? 0,
+          s.servesAce ?? 0,
+          (s.blocksSolo ?? 0) + (s.blocksAssist ?? 0),
+          s.digs ?? 0,
+          s.settingAssist ?? 0,
+          (s.spikesError ?? 0) + (s.servesError ?? 0),
+        ]),
+        styles: {
+          fontSize: 8,
+          cellPadding: 3,
+          fillColor: [20, 40, 48],
+          textColor: [200, 225, 220],
+          lineColor: [40, 70, 80],
+          lineWidth: 0.3,
+        },
+        headStyles: {
+          fillColor: [0, 120, 108],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 8,
+        },
+        alternateRowStyles: { fillColor: [16, 34, 42] },
+        columnStyles: {
+          3: { textColor: [255, 210, 63], fontStyle: "bold" },
+          2: { halign: "center" },
+        },
+        margin: { left: 14, right: 14 },
+      });
+    }
+
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFillColor(0, 120, 108);
+      doc.rect(0, 290, 210, 7, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(7);
+      doc.text(`Afrocat Sports Club — Confidential  ·  Page ${i} of ${pageCount}`, 105, 295, { align: "center" });
+    }
+
+    doc.save(`${playerName.replace(/\s+/g, "_")}_Stats_${generated.replace(/ /g, "_")}.pdf`);
   };
 
   return (
@@ -619,42 +764,121 @@ export default function PlayerDashboard() {
               {activeTab === "reports" && (
                 <AcCard>
                   <div className="p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                      <FileText size={16} className="text-afrocat-gold" />
-                      <span className="font-bold text-sm text-afrocat-text">Recent Match Stats</span>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                      <div className="flex items-center gap-2">
+                        <FileText size={16} className="text-afrocat-gold" />
+                        <span className="font-bold text-sm text-afrocat-text">Match Stats</span>
+                        {(dash.recentStats || []).length > 0 && (
+                          <span className="text-xs text-afrocat-muted">
+                            ({filteredStats.length} of {dash.recentStats.length} matches)
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {/* Search input */}
+                        <div className="relative">
+                          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-afrocat-muted" />
+                          <input
+                            type="text"
+                            value={statsSearch}
+                            onChange={e => setStatsSearch(e.target.value)}
+                            placeholder="Search opponent or date..."
+                            data-testid="input-stats-search"
+                            className="pl-8 pr-7 py-1.5 rounded-lg text-xs bg-afrocat-white-5 border border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted focus:outline-none focus:border-afrocat-teal w-48"
+                          />
+                          {statsSearch && (
+                            <button
+                              onClick={() => setStatsSearch("")}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-afrocat-muted hover:text-afrocat-text"
+                              data-testid="button-clear-search"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                        {/* PDF Download */}
+                        <button
+                          onClick={handleDownloadPDF}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-afrocat-teal hover:bg-afrocat-teal-dark text-white transition-colors"
+                          data-testid="button-download-pdf"
+                        >
+                          <Download size={13} />
+                          Save PDF
+                        </button>
+                      </div>
                     </div>
+
                     {(dash.recentStats || []).length === 0 ? (
                       <p className="text-sm py-8 text-center text-afrocat-muted">No match stats recorded yet</p>
+                    ) : filteredStats.length === 0 ? (
+                      <div className="py-10 text-center">
+                        <Search size={28} className="mx-auto mb-2 text-afrocat-muted" />
+                        <p className="text-sm text-afrocat-muted">No matches found for "<span className="text-afrocat-text">{statsSearch}</span>"</p>
+                        <button onClick={() => setStatsSearch("")} className="text-xs text-afrocat-teal mt-2 underline" data-testid="button-clear-search-empty">Clear search</button>
+                      </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-afrocat-border">
-                              {["Date", "Opponent", "Result", "Pts", "K", "Ace", "Blk", "Digs"].map(h => (
-                                <th key={h} className="px-3 py-2 text-xs uppercase tracking-wider text-afrocat-muted">{h}</th>
+                              {["Date", "Opponent", "Result", "Pts", "Kills", "Aces", "Blks", "Digs", "Asst", "Err"].map(h => (
+                                <th key={h} className="px-3 py-2 text-xs uppercase tracking-wider text-afrocat-muted text-center first:text-left">{h}</th>
                               ))}
                             </tr>
                           </thead>
                           <tbody>
-                            {dash.recentStats.map((s: any, i: number) => (
-                              <tr key={i} className="border-b border-afrocat-border" data-testid={`row-stat-${i}`}>
-                                <td className="px-3 py-2.5 text-xs text-afrocat-muted">{s.matchDate || "—"}</td>
-                                <td className="px-3 py-2.5 font-medium text-sm text-afrocat-text">{s.opponent || "—"}</td>
-                                <td className="px-3 py-2.5 text-center">
-                                  {s.result ? (
-                                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s.result === "W" ? "bg-afrocat-green-soft text-afrocat-green" : "bg-afrocat-red-soft text-afrocat-red"}`}>
-                                      {s.result}
-                                    </span>
-                                  ) : "—"}
-                                </td>
-                                <td className="px-3 py-2.5 text-center font-bold text-afrocat-gold">{s.pointsTotal ?? 0}</td>
-                                <td className="px-3 py-2.5 text-center text-afrocat-text">{s.spikesKill ?? 0}</td>
-                                <td className="px-3 py-2.5 text-center text-afrocat-text">{s.servesAce ?? 0}</td>
-                                <td className="px-3 py-2.5 text-center text-afrocat-text">{(s.blocksSolo ?? 0) + (s.blocksAssist ?? 0)}</td>
-                                <td className="px-3 py-2.5 text-center text-afrocat-text">{s.digs ?? 0}</td>
-                              </tr>
-                            ))}
+                            {filteredStats.map((s: any, i: number) => {
+                              const totalErrors = (s.spikesError ?? 0) + (s.servesError ?? 0);
+                              return (
+                                <tr key={i} className="border-b border-afrocat-border hover:bg-afrocat-white-3 transition-colors" data-testid={`row-stat-${i}`}>
+                                  <td className="px-3 py-2.5 text-xs text-afrocat-muted whitespace-nowrap">{s.matchDate || "—"}</td>
+                                  <td className="px-3 py-2.5 font-medium text-sm text-afrocat-text whitespace-nowrap">{s.opponent || "—"}</td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    {s.result ? (
+                                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${s.result === "W" ? "bg-afrocat-green-soft text-afrocat-green" : "bg-afrocat-red-soft text-afrocat-red"}`}>
+                                        {s.result}
+                                      </span>
+                                    ) : "—"}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center font-bold text-afrocat-gold">{s.pointsTotal ?? 0}</td>
+                                  <td className="px-3 py-2.5 text-center text-afrocat-text">{s.spikesKill ?? 0}</td>
+                                  <td className="px-3 py-2.5 text-center text-afrocat-text">{s.servesAce ?? 0}</td>
+                                  <td className="px-3 py-2.5 text-center text-afrocat-text">{(s.blocksSolo ?? 0) + (s.blocksAssist ?? 0)}</td>
+                                  <td className="px-3 py-2.5 text-center text-afrocat-text">{s.digs ?? 0}</td>
+                                  <td className="px-3 py-2.5 text-center text-afrocat-text">{s.settingAssist ?? 0}</td>
+                                  <td className="px-3 py-2.5 text-center">
+                                    <span className={totalErrors > 3 ? "text-afrocat-red font-bold" : "text-afrocat-text"}>{totalErrors}</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 border-afrocat-teal/30 bg-afrocat-white-3">
+                              <td colSpan={3} className="px-3 py-2 text-xs font-bold text-afrocat-muted">TOTALS ({filteredStats.length} matches)</td>
+                              <td className="px-3 py-2 text-center font-bold text-afrocat-gold">
+                                {filteredStats.reduce((acc: number, s: any) => acc + (s.pointsTotal ?? 0), 0)}
+                              </td>
+                              <td className="px-3 py-2 text-center font-bold text-afrocat-teal">
+                                {filteredStats.reduce((acc: number, s: any) => acc + (s.spikesKill ?? 0), 0)}
+                              </td>
+                              <td className="px-3 py-2 text-center font-bold text-afrocat-teal">
+                                {filteredStats.reduce((acc: number, s: any) => acc + (s.servesAce ?? 0), 0)}
+                              </td>
+                              <td className="px-3 py-2 text-center font-bold text-afrocat-teal">
+                                {filteredStats.reduce((acc: number, s: any) => acc + (s.blocksSolo ?? 0) + (s.blocksAssist ?? 0), 0)}
+                              </td>
+                              <td className="px-3 py-2 text-center font-bold text-afrocat-teal">
+                                {filteredStats.reduce((acc: number, s: any) => acc + (s.digs ?? 0), 0)}
+                              </td>
+                              <td className="px-3 py-2 text-center font-bold text-afrocat-teal">
+                                {filteredStats.reduce((acc: number, s: any) => acc + (s.settingAssist ?? 0), 0)}
+                              </td>
+                              <td className="px-3 py-2 text-center font-bold text-afrocat-red">
+                                {filteredStats.reduce((acc: number, s: any) => acc + (s.spikesError ?? 0) + (s.servesError ?? 0), 0)}
+                              </td>
+                            </tr>
+                          </tfoot>
                         </table>
                       </div>
                     )}
