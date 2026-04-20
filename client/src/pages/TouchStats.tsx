@@ -123,6 +123,9 @@ export default function TouchStats() {
   const [showSubForm, setShowSubForm] = useState(false);
   const [subOutId, setSubOutId] = useState<string>("");
   const [subInId, setSubInId] = useState<string>("");
+  const [lineupConfirmed, setLineupConfirmed] = useState(false);
+  const [lineupDraft, setLineupDraft] = useState<string[]>([]);
+  const [servingTeam, setServingTeam] = useState<"home" | "away">("home");
 
   const selectedMatch = matches.find((m: any) => m.id === selectedMatchId);
   const [syncResetKey, setSyncResetKey] = useState(0);
@@ -143,6 +146,10 @@ export default function TouchStats() {
     setRecentEvents([]);
     setSyncResetKey(k => k + 1);
     setShowReport(false);
+    setLineupConfirmed(false);
+    setLineupDraft([]);
+    setServingTeam("home");
+    setRotationOrder([]);
     const match = matches.find((m: any) => m.id === matchId);
     if (match?.teamId) setSelectedTeamId(match.teamId);
   }, [matches]);
@@ -271,8 +278,16 @@ export default function TouchStats() {
       else setOptimisticAway(awayPoints + 1);
       return api.scoreboardPoint(selectedMatchId, side);
     },
-    onSuccess: (result: any) => {
+    onSuccess: (result: any, { side }) => {
+      if (side === "AFROCAT" && servingTeam === "away") {
+        setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(-1), ...prev.slice(0, -1)] : prev);
+        setServingTeam("home");
+        toast({ title: "Side Out — Rotated!", description: "Lineup rotated. P1 is now serving." });
+      } else if (side === "OPP" && servingTeam === "home") {
+        setServingTeam("away");
+      }
       if (result.setResult?.setEnded) {
+        setServingTeam("home");
         toast({
           title: `Set ${result.setResult.setNumber} Complete!`,
           description: `${result.setResult.winner === "AFROCAT" ? teamName : (selectedMatch?.opponent || "OPP")} wins ${result.setResult.homePoints}-${result.setResult.awayPoints}${result.setResult.matchComplete ? " — MATCH OVER!" : ""}`,
@@ -384,10 +399,18 @@ export default function TouchStats() {
       combinationType: combo,
       pointSide,
     });
+
+    if (pointSide === "home" && servingTeam === "away") {
+      setRotationOrder(prev => prev.length >= 6 ? [...prev.slice(-1), ...prev.slice(0, -1)] : prev);
+      setServingTeam("home");
+    } else if (pointSide === "away" && servingTeam === "home") {
+      setServingTeam("away");
+    }
+
     setSelectedAction(null);
     setShowCombo(false);
     setPendingSetEvent(null);
-  }, [selectedPlayerId, selectedAction, selectedMatchId, selectedTeamId, selectedPlayer, eventMut]);
+  }, [selectedPlayerId, selectedAction, selectedMatchId, selectedTeamId, selectedPlayer, eventMut, servingTeam]);
 
   const handleCombo = useCallback((combo: string | null) => {
     if (!pendingSetEvent) return;
@@ -427,8 +450,6 @@ export default function TouchStats() {
 
   useEffect(() => {
     if (players.length > 0 && selectedMatchId) {
-      const starters = [...players].filter((p: any) => !p.isLibero).slice(0, 6);
-      setRotationOrder(starters.map((p: any) => p.id));
       setSubsUsedPerSet({});
       setTimeoutsUsedPerSet({});
       setShowSubForm(false);
@@ -796,6 +817,26 @@ export default function TouchStats() {
               </div>
             )}
 
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-bold ${
+                servingTeam === "home"
+                  ? "bg-afrocat-teal-soft border-afrocat-teal/30 text-afrocat-teal"
+                  : "bg-afrocat-white-5 border-afrocat-border text-afrocat-muted"
+              }`} data-testid="badge-serving-team">
+                <span>⟳</span>
+                {servingTeam === "home" ? `${teamName} Serving` : `${selectedMatch?.opponent || "OPP"} Serving`}
+              </div>
+              {!isLocked && (
+                <button
+                  onClick={() => setServingTeam(s => s === "home" ? "away" : "home")}
+                  className="text-[10px] text-afrocat-muted hover:text-afrocat-teal cursor-pointer underline"
+                  data-testid="button-toggle-serve"
+                >
+                  toggle serve
+                </button>
+              )}
+            </div>
+
             {showFivbPanel && (
               <div className="mt-4 space-y-2">
                 <div className="flex items-center justify-between">
@@ -868,7 +909,127 @@ export default function TouchStats() {
           </div>
         )}
 
-        {selectedMatchId && !initLoading && players.length > 0 && !isLocked && (
+        {selectedMatchId && !initLoading && players.length > 0 && !isLocked && !lineupConfirmed && (
+          <div className="afrocat-card p-5 space-y-4" data-testid="lineup-picker">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-afrocat-text uppercase tracking-wider">Set Starting Lineup</h3>
+                <p className="text-[11px] text-afrocat-muted mt-0.5">
+                  Select exactly 6 players in rotation order — Position 1 serves first.
+                </p>
+              </div>
+              <div className="text-right">
+                <span className={`text-2xl font-black ${lineupDraft.length === 6 ? "text-afrocat-teal" : "text-afrocat-muted"}`}>
+                  {lineupDraft.length}/6
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+              {[...players].sort((a: any, b: any) => (a.jerseyNo ?? 99) - (b.jerseyNo ?? 99)).map((p: any) => {
+                const posIdx = lineupDraft.indexOf(p.id);
+                const selected = posIdx !== -1;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      if (selected) {
+                        setLineupDraft(prev => prev.filter(id => id !== p.id));
+                      } else if (lineupDraft.length < 6) {
+                        setLineupDraft(prev => [...prev, p.id]);
+                      }
+                    }}
+                    className={`relative p-2.5 rounded-xl border-2 text-center transition-all cursor-pointer ${
+                      selected
+                        ? "border-afrocat-teal bg-afrocat-teal-soft"
+                        : "border-afrocat-border bg-afrocat-white-3 hover:border-afrocat-teal/40"
+                    } ${!selected && lineupDraft.length >= 6 ? "opacity-40 cursor-not-allowed" : ""}`}
+                    data-testid={`lineup-player-${p.id}`}
+                  >
+                    {selected && (
+                      <div className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-afrocat-teal text-white text-[10px] font-black flex items-center justify-center border-2 border-afrocat-card z-10">
+                        {posIdx + 1}
+                      </div>
+                    )}
+                    {p.photoUrl ? (
+                      <img src={p.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover mx-auto mb-1 border-2 border-afrocat-teal/20" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-afrocat-white-5 flex items-center justify-center text-xs font-bold text-afrocat-muted mx-auto mb-1 border-2 border-afrocat-teal/20">
+                        {getInitials(p.firstName, p.lastName)}
+                      </div>
+                    )}
+                    <div className="text-[10px] font-bold text-afrocat-text truncate">#{p.jerseyNo} {p.firstName}</div>
+                    <div className="text-[9px] text-afrocat-muted truncate">{p.position || (p.isLibero ? "Libero" : "-")}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {lineupDraft.length === 6 && (
+              <div className="bg-afrocat-white-3 rounded-xl p-3 border border-afrocat-border">
+                <div className="text-[10px] font-bold text-afrocat-muted uppercase tracking-wider mb-2">Rotation Preview — P1 Serves First</div>
+                <div className="grid grid-cols-3 gap-1 mb-1">
+                  {[4, 3, 2].map(pos => {
+                    const p = players.find((pl: any) => pl.id === lineupDraft[pos - 1]);
+                    return (
+                      <div key={pos} className="text-center p-1.5 rounded-lg bg-afrocat-white-5 border border-afrocat-border">
+                        <div className="text-[9px] font-bold text-afrocat-teal">P{pos}</div>
+                        <div className="text-[10px] font-bold text-afrocat-text truncate">{p ? `#${p.jerseyNo} ${p.firstName}` : "—"}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="text-[8px] text-center text-afrocat-muted tracking-widest opacity-50 mb-1">— NET —</div>
+                <div className="grid grid-cols-3 gap-1">
+                  {[5, 6, 1].map(pos => {
+                    const p = players.find((pl: any) => pl.id === lineupDraft[pos - 1]);
+                    const isServer = pos === 1;
+                    return (
+                      <div key={pos} className={`text-center p-1.5 rounded-lg border ${isServer ? "bg-afrocat-gold-soft border-afrocat-gold/40" : "bg-afrocat-white-5 border-afrocat-border"}`}>
+                        <div className={`text-[9px] font-bold ${isServer ? "text-afrocat-gold" : "text-afrocat-teal"}`}>{isServer ? "P1 ⟳" : `P${pos}`}</div>
+                        <div className="text-[10px] font-bold text-afrocat-text truncate">{p ? `#${p.jerseyNo} ${p.firstName}` : "—"}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => {
+                  if (lineupDraft.length !== 6) return;
+                  setRotationOrder(lineupDraft);
+                  setLineupConfirmed(true);
+                  setShowFivbPanel(true);
+                  toast({ title: "Lineup Confirmed!", description: "Position 1 is serving first. Rotation will auto-advance on side-outs." });
+                }}
+                disabled={lineupDraft.length !== 6}
+                className="flex-1 bg-afrocat-teal text-white font-bold text-sm py-2.5 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer hover:bg-afrocat-teal/80 transition-colors"
+                data-testid="button-confirm-lineup"
+              >
+                Confirm Starting Lineup & Begin
+              </button>
+              <button
+                onClick={() => {
+                  const nonLibero = [...players].filter((p: any) => !p.isLibero).slice(0, 6);
+                  const draft = nonLibero.map((p: any) => p.id);
+                  setLineupDraft(draft);
+                  setRotationOrder(draft);
+                  setLineupConfirmed(true);
+                  setShowFivbPanel(true);
+                  toast({ title: "Auto-filled Lineup", description: "First 6 non-libero players set as starters." });
+                }}
+                className="px-4 py-2.5 rounded-xl border border-afrocat-border text-xs text-afrocat-muted hover:text-afrocat-teal cursor-pointer"
+                data-testid="button-autofill-lineup"
+              >
+                Auto-fill
+              </button>
+            </div>
+          </div>
+        )}
+
+        {selectedMatchId && !initLoading && players.length > 0 && !isLocked && lineupConfirmed && (
           <>
             <div>
               <h3 className="text-sm font-bold text-afrocat-muted uppercase tracking-wider mb-3" data-testid="text-step-player">
