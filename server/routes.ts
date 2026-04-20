@@ -177,6 +177,7 @@ export async function registerRoutes(
         requestedTeamId: z.string().optional(),
         requestedPosition: z.enum(["SETTER", "LIBERO", "MIDDLE", "OUTSIDE", "OPPOSITE"]).optional(),
         requestedJerseyNo: z.number().int().min(1).max(99).optional(),
+        contractAccepted: z.boolean().optional().default(false),
       }).parse(req.body);
 
       const existing = await storage.getUserByEmail(body.email);
@@ -253,6 +254,35 @@ export async function registerRoutes(
       } catch (err) {
         if (playerId) await storage.deletePlayer(playerId);
         throw err;
+      }
+
+      // ── Auto-record contract acceptance if ticked at registration ──
+      if (body.contractAccepted) {
+        try {
+          const isMinorReg = (() => {
+            if (!body.dob) return false;
+            const birth = new Date(body.dob);
+            const today = new Date();
+            let age = today.getFullYear() - birth.getFullYear();
+            const m = today.getMonth() - birth.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+            return age < 18;
+          })();
+          await db.insert(schema.contractAcceptances).values({
+            userId: user.id,
+            playerId,
+            contractKey: "AFROCAT_CONTRACT_2024_2026",
+            contractVersionHash: "PDF_v1_2024_2026",
+            sport: "VOLLEYBALL",
+            isMinor: isMinorReg,
+            acceptedBy: "SELF",
+            accepterFullName: body.fullName,
+            ipAddress: (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || null,
+            userAgent: req.headers["user-agent"] || null,
+          });
+        } catch (contractErr: any) {
+          console.warn("[REGISTER] Contract acceptance insert warning:", contractErr.message);
+        }
       }
 
       const frontendUrl = process.env.FRONTEND_URL
@@ -5103,6 +5133,39 @@ th{background:#0d7377;color:white}
           };
         }),
       });
+    } catch (e) { next(e); }
+  });
+
+  // ─── ADMIN BULK AUTO-SIGN CONTRACT ───────────────────
+  app.post("/api/contract/bulk-auto-sign", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
+    try {
+      const allAcceptances = await db.select().from(schema.contractAcceptances)
+        .where(eq(schema.contractAcceptances.contractKey, "AFROCAT_CONTRACT_2024_2026"));
+      const acceptedUserIds = new Set(allAcceptances.map(a => a.userId));
+
+      const allUsers = await db.select().from(schema.users);
+      const toSign = allUsers.filter(u => u.accountStatus === "ACTIVE" && !acceptedUserIds.has(u.id));
+
+      let signed = 0;
+      for (const u of toSign) {
+        try {
+          await db.insert(schema.contractAcceptances).values({
+            userId: u.id,
+            playerId: u.playerId || null,
+            contractKey: "AFROCAT_CONTRACT_2024_2026",
+            contractVersionHash: "PDF_v1_2024_2026",
+            sport: "VOLLEYBALL",
+            isMinor: false,
+            acceptedBy: "SELF",
+            accepterFullName: u.fullName || u.email,
+            ipAddress: "ADMIN_BULK_SIGN",
+            userAgent: "ADMIN_BULK_AUTO_SIGN",
+          });
+          signed++;
+        } catch (_) {}
+      }
+
+      res.json({ ok: true, signed, skipped: toSign.length - signed, total: allUsers.length });
     } catch (e) { next(e); }
   });
 

@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Mail, Clock, AlertTriangle } from "lucide-react";
+import { CheckCircle, Mail, Clock, AlertTriangle, ScrollText, ExternalLink } from "lucide-react";
 import { CameraCapture } from "@/components/CameraCapture";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -63,6 +63,7 @@ export default function Register() {
   const [registered, setRegistered] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
   const [genderLocked, setGenderLocked] = useState(false);
+  const [contractAccepted, setContractAccepted] = useState(false);
 
   const age = dob ? calculateAge(dob) : null;
   const isMinor = age !== null && age < 17;
@@ -127,6 +128,7 @@ export default function Register() {
     if (!photo) { toast({ title: "Profile photo is required. Please take a photo or upload from gallery.", variant: "destructive" }); return; }
     if (password !== confirmPassword) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
     if (password.length < 6) { toast({ title: "Password must be at least 6 characters", variant: "destructive" }); return; }
+    if (!contractAccepted) { toast({ title: "Club Contract Required", description: "You must read and accept the Afrocat Club Contract before registering.", variant: "destructive" }); return; }
 
     if (selectedRole === "PLAYER") {
       if (!heightCm || parseInt(heightCm) < 50 || parseInt(heightCm) > 250) { toast({ title: "Please enter a valid height (50–250 cm)", variant: "destructive" }); return; }
@@ -146,6 +148,7 @@ export default function Register() {
         gender,
         idNumber: idRequired ? idNumber : undefined,
         photo,
+        contractAccepted: true,
       };
       if (selectedRole === "PLAYER") {
         if (requestedTeamId) extra.requestedTeamId = requestedTeamId;
@@ -377,7 +380,45 @@ export default function Register() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full mt-4 bg-afrocat-teal hover:bg-afrocat-teal-dark text-white font-semibold" disabled={loading} data-testid="button-register">
+              <div className="border-t border-afrocat-border pt-4 mt-2 space-y-3">
+                <div className="flex items-center gap-2">
+                  <ScrollText className="h-4 w-4 text-afrocat-teal shrink-0" />
+                  <p className="text-xs font-semibold text-afrocat-text uppercase tracking-wider">Club Contract <span className="text-afrocat-red">*</span></p>
+                </div>
+                <div className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border text-xs text-afrocat-muted space-y-1.5">
+                  <p>By joining Afrocat Volleyball Club you agree to:</p>
+                  <ul className="list-disc list-inside space-y-1 pl-1">
+                    <li>Uphold club values: Passion, Discipline &amp; Victory</li>
+                    <li>Attend training sessions and honour your commitment</li>
+                    <li>Pay club contributions and fees on time</li>
+                    <li>Respect coaches, officials and fellow members</li>
+                    <li>Represent the club with integrity on and off court</li>
+                  </ul>
+                  <a
+                    href="/contracts/afrocat-volleyball-contract.pdf"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-afrocat-teal hover:underline font-medium mt-1"
+                    data-testid="link-read-contract"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Read the full club contract
+                  </a>
+                </div>
+                <label className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${contractAccepted ? "bg-afrocat-teal/10 border-afrocat-teal/40" : "bg-afrocat-white-3 border-afrocat-border hover:bg-afrocat-white-5"}`}>
+                  <input
+                    type="checkbox"
+                    checked={contractAccepted}
+                    onChange={e => setContractAccepted(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded accent-afrocat-teal shrink-0"
+                    data-testid="checkbox-contract-accept"
+                  />
+                  <span className="text-sm text-afrocat-text leading-snug">
+                    I have read and agree to the Afrocat Volleyball Club contract and all its terms &amp; conditions.
+                  </span>
+                </label>
+              </div>
+
+              <Button type="submit" className="w-full mt-4 bg-afrocat-teal hover:bg-afrocat-teal-dark text-white font-semibold" disabled={loading || !contractAccepted} data-testid="button-register">
                 {loading ? "Creating account..." : `Register as ${ROLES.find(r => r.value === selectedRole)?.label || "Player"}`}
               </Button>
             </form>

@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import {
   ScrollText, CheckCircle, AlertTriangle, Loader2, FileText,
-  Shield, UserCheck, Baby, Download
+  Shield, UserCheck, Baby, Download, Users, Zap, XCircle
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -59,6 +59,26 @@ export default function ClubContract() {
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
+  const isAdmin = user?.role === "ADMIN";
+
+  const { data: adminSummary, refetch: refetchSummary } = useQuery({
+    queryKey: ["/api/contract/admin/summary"],
+    queryFn: api.getClubContractAdminSummary,
+    enabled: isAdmin,
+  });
+
+  const bulkSignMut = useMutation({
+    mutationFn: api.bulkAutoSignContract,
+    onSuccess: (data) => {
+      toast({ title: `Bulk sign complete`, description: `${data.signed} member(s) marked as signed.` });
+      qc.invalidateQueries({ queryKey: ["/api/contract/admin/summary"] });
+      refetchSummary();
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const [showUnsigned, setShowUnsigned] = useState(false);
+
   const isAccepted = contractStatus?.accepted === true;
 
   const canSubmit = formData.agreed && formData.accepterFullName.trim() &&
@@ -99,6 +119,92 @@ export default function ClubContract() {
             )}
           </div>
         </div>
+
+        {isAdmin && adminSummary && (
+          <div className="afrocat-card overflow-hidden" data-testid="card-admin-summary">
+            <div className="bg-afrocat-gold-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px] flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold">
+                <Users className="w-5 h-5" /> Admin — Contract Overview
+              </h3>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-afrocat-muted">
+                  <span className="text-afrocat-green font-bold">{adminSummary.accepted}</span>/{adminSummary.totalActive} signed
+                </span>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-xl bg-afrocat-green-soft text-center">
+                  <div className="text-2xl font-bold text-afrocat-green" data-testid="text-admin-signed">{adminSummary.accepted}</div>
+                  <div className="text-[10px] text-afrocat-muted uppercase tracking-wider mt-1">Signed</div>
+                </div>
+                <div className="p-3 rounded-xl bg-afrocat-red-soft text-center">
+                  <div className="text-2xl font-bold text-afrocat-red" data-testid="text-admin-unsigned">{adminSummary.notAccepted}</div>
+                  <div className="text-[10px] text-afrocat-muted uppercase tracking-wider mt-1">Not Signed</div>
+                </div>
+                <div className="p-3 rounded-xl bg-afrocat-white-3 text-center">
+                  <div className="text-2xl font-bold text-afrocat-text" data-testid="text-admin-total">{adminSummary.totalActive}</div>
+                  <div className="text-[10px] text-afrocat-muted uppercase tracking-wider mt-1">Total Active</div>
+                </div>
+              </div>
+
+              {adminSummary.notAccepted > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <button
+                      className="text-xs text-afrocat-muted hover:text-afrocat-text flex items-center gap-1"
+                      onClick={() => setShowUnsigned(v => !v)}
+                      data-testid="button-toggle-unsigned"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-afrocat-red" />
+                      {showUnsigned ? "Hide" : "Show"} {adminSummary.notAccepted} unsigned member(s)
+                    </button>
+                  </div>
+                  {showUnsigned && (
+                    <div className="rounded-xl border border-afrocat-border divide-y divide-afrocat-border max-h-48 overflow-y-auto">
+                      {(adminSummary.notAcceptedUsers || []).map((u: any) => (
+                        <div key={u.id} className="px-3 py-2 flex items-center justify-between" data-testid={`row-unsigned-${u.id}`}>
+                          <div>
+                            <p className="text-sm font-medium text-afrocat-text">{u.fullName}</p>
+                            <p className="text-[10px] text-afrocat-muted">{u.email} · {u.role}</p>
+                          </div>
+                          <XCircle className="w-4 h-4 text-afrocat-red opacity-60" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={() => {
+                      if (window.confirm(`This will mark the contract as accepted on behalf of all ${adminSummary.notAccepted} unsigned active member(s). Continue?`)) {
+                        bulkSignMut.mutate();
+                      }
+                    }}
+                    disabled={bulkSignMut.isPending}
+                    className="w-full bg-afrocat-gold hover:bg-afrocat-gold/80 text-afrocat-bg font-bold"
+                    data-testid="button-bulk-sign"
+                  >
+                    {bulkSignMut.isPending ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing all members...</>
+                    ) : (
+                      <><Zap className="w-4 h-4 mr-2" /> Auto-Sign All {adminSummary.notAccepted} Unsigned Member(s)</>
+                    )}
+                  </Button>
+                  <p className="text-[10px] text-afrocat-muted text-center">
+                    Records the contract as accepted on behalf of all existing members who haven't yet signed.
+                  </p>
+                </div>
+              )}
+
+              {adminSummary.notAccepted === 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-afrocat-green-soft">
+                  <CheckCircle className="w-4 h-4 text-afrocat-green" />
+                  <p className="text-sm text-afrocat-green font-medium">All active members have signed the contract.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {isAccepted && (
           <div className="afrocat-card border border-afrocat-green/30 p-5" data-testid="card-confirmed">

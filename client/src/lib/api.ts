@@ -296,6 +296,7 @@ export const api = {
   acceptClubContract: (data: { accepterFullName: string; acceptedBy: string; guardianIdNumber?: string; guardianPhoneNumber?: string }) =>
     apiFetch<any>("/contract/accept", { method: "POST", body: JSON.stringify(data) }),
   getClubContractAdminSummary: () => apiFetch<any>("/contract/admin/summary"),
+  bulkAutoSignContract: () => apiFetch<any>("/contract/bulk-auto-sign", { method: "POST" }),
 
   getTouchStatsInit: (matchId: string, teamId: string) => apiFetch<any>(`/matches/${matchId}/stats-touch/init?teamId=${teamId}`),
   syncTouchStats: (matchId: string) => apiFetch<any>(`/matches/${matchId}/stats-touch/sync`, { method: "POST" }),
