@@ -4305,12 +4305,34 @@ th{background:#0d7377;color:white}
       const smartFocusHistory = await storage.getSmartFocusByPlayer(playerId);
 
       const attendanceRecords = await storage.getAttendanceRecordsByPlayer(playerId);
+      const attPresent = attendanceRecords.filter(r => r.status === "PRESENT").length;
+      const attLate = attendanceRecords.filter(r => r.status === "LATE").length;
+      const attAbsent = attendanceRecords.filter(r => r.status === "ABSENT").length;
+      const attExcused = attendanceRecords.filter(r => r.status === "EXCUSED").length;
+      // Compute expected sessions: team-specific + all-team sessions (same formula as attendance report)
+      const allAttSessions = await storage.getAttendanceSessions();
+      const teamAttSessions = allAttSessions.filter((s: any) => s.teamId === player.teamId).length;
+      const allTeamAttSessions = allAttSessions.filter((s: any) => !s.teamId).length;
+      const expectedSessions = player.teamId ? teamAttSessions + allTeamAttSessions : allTeamAttSessions;
+      const attRecorded = attPresent + attLate + attAbsent + attExcused;
+      const unrecordedAbsent = Math.max(0, expectedSessions - attRecorded);
+      const totalAbsent = attAbsent + unrecordedAbsent;
+      const attendCount = attPresent + attLate + attExcused;
+      const denominator = expectedSessions > 0 ? expectedSessions : (attRecorded > 0 ? attRecorded : 1);
+      const attendRate = Math.round((attendCount / denominator) * 100);
+      const onTimeRate = Math.round((attPresent / denominator) * 100);
+      const isPerfect = expectedSessions > 0 && totalAbsent === 0 && attLate === 0;
       const attendanceSummary = {
-        total: attendanceRecords.length,
-        present: attendanceRecords.filter(r => r.status === "PRESENT").length,
-        late: attendanceRecords.filter(r => r.status === "LATE").length,
-        absent: attendanceRecords.filter(r => r.status === "ABSENT").length,
-        excused: attendanceRecords.filter(r => r.status === "EXCUSED").length,
+        total: attRecorded,
+        expectedSessions,
+        present: attPresent,
+        late: attLate,
+        absent: totalAbsent,
+        recordedAbsent: attAbsent,
+        excused: attExcused,
+        attendRate,
+        onTimeRate,
+        isPerfect,
       };
 
       const injuries = await storage.getInjuriesByPlayer(playerId);
@@ -4352,10 +4374,10 @@ th{background:#0d7377;color:white}
       }
 
       const motivationalMessages: string[] = [];
-      const attRate = attendanceSummary.total > 0 ? ((attendanceSummary.present + attendanceSummary.late) / attendanceSummary.total) * 100 : 100;
-      if (attRate >= 90) motivationalMessages.push("🔥 Elite discipline! Keep leading by example.");
-      else if (attRate >= 70) motivationalMessages.push("✅ Good consistency — aim for 90% attendance this month.");
-      else if (attendanceSummary.total > 0) motivationalMessages.push("⚠️ Attendance is holding you back. Let's commit to training this week.");
+      if (attendanceSummary.isPerfect) motivationalMessages.push("🌟 Perfect attendance! You're setting the gold standard for the squad.");
+      else if (attendanceSummary.attendRate >= 90) motivationalMessages.push("🔥 Elite discipline! Keep leading by example.");
+      else if (attendanceSummary.attendRate >= 70) motivationalMessages.push("✅ Good consistency — aim for 90% attendance this month.");
+      else if (attendanceSummary.expectedSessions > 0) motivationalMessages.push("⚠️ Attendance is holding you back. Let's commit to training this week.");
 
       if (statsWithMatch.length >= 3) {
         const last3 = statsWithMatch.slice(0, 3);
@@ -8342,7 +8364,7 @@ th{background:#0d7377;color:white}
         const weekKey = sess.sessionDate?.substring(0, 7) || "unknown";
         if (!weeks[weekKey]) weeks[weekKey] = { total: 0, present: 0 };
         weeks[weekKey].total += records.length;
-        weeks[weekKey].present += records.filter((r: any) => r.status === "PRESENT" || r.status === "LATE").length;
+        weeks[weekKey].present += records.filter((r: any) => r.status === "PRESENT" || r.status === "LATE" || r.status === "EXCUSED").length;
 
         for (const r of records) {
           if (!playerAttendance[r.playerId]) {
@@ -8350,7 +8372,7 @@ th{background:#0d7377;color:white}
             playerAttendance[r.playerId] = { name: player ? `${player.firstName} ${player.lastName}` : "Unknown", total: 0, present: 0 };
           }
           playerAttendance[r.playerId].total++;
-          if (r.status === "PRESENT" || r.status === "LATE") playerAttendance[r.playerId].present++;
+          if (r.status === "PRESENT" || r.status === "LATE" || r.status === "EXCUSED") playerAttendance[r.playerId].present++;
         }
       }
 

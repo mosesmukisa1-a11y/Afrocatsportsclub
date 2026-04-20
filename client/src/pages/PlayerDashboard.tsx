@@ -523,10 +523,12 @@ export default function PlayerDashboard() {
                           <StatItem icon={Activity} label="Digs" value={dash.totals?.digs ?? 0} />
                           <StatItem icon={AlertTriangle} label="Serve Errors" value={dash.totals?.servesError ?? 0} danger />
                           <StatItem icon={AlertTriangle} label="Spike Errors" value={dash.totals?.spikesError ?? 0} danger />
-                          <StatItem icon={CheckCircle} label="Attendance" value={
-                            dash.attendanceSummary?.total > 0
-                              ? `${Math.round((dash.attendanceSummary.present / dash.attendanceSummary.total) * 100)}%`
-                              : "N/A"
+                          <StatItem icon={CheckCircle} label="Attend %" value={
+                            dash.attendanceSummary?.expectedSessions > 0
+                              ? `${dash.attendanceSummary.attendRate}%`
+                              : dash.attendanceSummary?.total > 0
+                                ? `${dash.attendanceSummary.attendRate}%`
+                                : "N/A"
                           } accent />
                         </div>
                       </div>
@@ -711,20 +713,35 @@ export default function PlayerDashboard() {
                         </div>
                       ))}
                     </div>
-                    {dash.attendanceSummary?.total > 0 && (
-                      <div className="mt-4 p-4 rounded-xl bg-afrocat-teal-soft">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-afrocat-teal">Attendance Rate</span>
-                          <span className="text-2xl font-bold text-afrocat-teal">
-                            {Math.round((dash.attendanceSummary.present / dash.attendanceSummary.total) * 100)}%
-                          </span>
+                    {(dash.attendanceSummary?.expectedSessions > 0 || dash.attendanceSummary?.total > 0) && (
+                      <div className="mt-4 space-y-3">
+                        {dash.attendanceSummary?.isPerfect && (
+                          <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-afrocat-gold/10 border border-afrocat-gold/40">
+                            <span className="text-afrocat-gold text-lg">🌟</span>
+                            <span className="text-sm font-bold text-afrocat-gold">Perfect Attendance — 0 absences, 0 late marks</span>
+                          </div>
+                        )}
+                        <div className="p-4 rounded-xl bg-afrocat-teal-soft">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-afrocat-teal">Attend % <span className="text-xs font-normal text-afrocat-muted">(Present+Late+Excused / Expected)</span></span>
+                            <span className="text-2xl font-bold text-afrocat-teal">{dash.attendanceSummary.attendRate}%</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-afrocat-white-10">
+                            <div className="h-full rounded-full bg-afrocat-teal transition-all" style={{ width: `${Math.min(100, dash.attendanceSummary.attendRate)}%` }} />
+                          </div>
                         </div>
-                        <div className="w-full h-2 rounded-full mt-2 bg-afrocat-white-10">
-                          <div
-                            className="h-full rounded-full bg-afrocat-teal transition-all"
-                            style={{ width: `${(dash.attendanceSummary.present / dash.attendanceSummary.total) * 100}%` }}
-                          />
+                        <div className="p-4 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-afrocat-text">On Time % <span className="text-xs font-normal text-afrocat-muted">(Present only / Expected)</span></span>
+                            <span className="text-xl font-bold text-afrocat-text">{dash.attendanceSummary.onTimeRate}%</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-afrocat-white-10">
+                            <div className="h-full rounded-full bg-afrocat-gold transition-all" style={{ width: `${Math.min(100, dash.attendanceSummary.onTimeRate)}%` }} />
+                          </div>
                         </div>
+                        <p className="text-[11px] text-afrocat-muted text-center">
+                          Expected sessions: {dash.attendanceSummary.expectedSessions} &bull; Recorded: {dash.attendanceSummary.total}
+                        </p>
                       </div>
                     )}
                   </div>

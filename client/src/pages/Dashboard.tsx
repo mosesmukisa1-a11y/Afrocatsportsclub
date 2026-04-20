@@ -1216,6 +1216,28 @@ export default function Dashboard() {
                       </div>
                     ))}
                   </div>
+                  {playerDash.attendanceSummary.isPerfect && (
+                    <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-afrocat-gold/10 border border-afrocat-gold/30" data-testid="badge-perfect-attendance">
+                      <span className="text-afrocat-gold">🌟</span>
+                      <span className="text-xs font-bold text-afrocat-gold">Perfect Attendance</span>
+                    </div>
+                  )}
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-afrocat-muted">Attend %</span>
+                      <span className="text-sm font-bold text-afrocat-teal" data-testid="text-attend-rate">{playerDash.attendanceSummary.attendRate ?? "—"}%</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-afrocat-white-10">
+                      <div className="h-full rounded-full bg-afrocat-teal transition-all" style={{ width: `${Math.min(100, playerDash.attendanceSummary.attendRate || 0)}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-afrocat-muted">On Time %</span>
+                      <span className="text-sm font-bold text-afrocat-gold" data-testid="text-ontime-rate">{playerDash.attendanceSummary.onTimeRate ?? "—"}%</span>
+                    </div>
+                    <div className="w-full h-1.5 rounded-full bg-afrocat-white-10">
+                      <div className="h-full rounded-full bg-afrocat-gold transition-all" style={{ width: `${Math.min(100, playerDash.attendanceSummary.onTimeRate || 0)}%` }} />
+                    </div>
+                  </div>
                 </div>
               )}
 
