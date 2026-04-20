@@ -123,14 +123,14 @@ export default function Register() {
     if (!dob) { toast({ title: "Date of birth is required", variant: "destructive" }); return; }
     if (!nationality.trim()) { toast({ title: "Nationality is required", variant: "destructive" }); return; }
     if (idRequired && !idNumber.trim()) { toast({ title: "ID/Passport number is required for ages 17+", variant: "destructive" }); return; }
-    if (!photo) { toast({ title: "Photo is required. Please take a photo or upload from gallery.", variant: "destructive" }); return; }
+    if (!gender) { toast({ title: "Please select your gender", variant: "destructive" }); return; }
+    if (!photo) { toast({ title: "Profile photo is required. Please take a photo or upload from gallery.", variant: "destructive" }); return; }
     if (password !== confirmPassword) { toast({ title: "Passwords don't match", variant: "destructive" }); return; }
     if (password.length < 6) { toast({ title: "Password must be at least 6 characters", variant: "destructive" }); return; }
 
     if (selectedRole === "PLAYER") {
-      if (!heightCm || parseInt(heightCm) < 50 || parseInt(heightCm) > 250) { toast({ title: "Please enter a valid height (50-250 cm)", variant: "destructive" }); return; }
-      if (!weightKg || parseInt(weightKg) < 20 || parseInt(weightKg) > 200) { toast({ title: "Please enter a valid weight (20-200 kg)", variant: "destructive" }); return; }
-      if (!gender) { toast({ title: "Please select your gender", variant: "destructive" }); return; }
+      if (!heightCm || parseInt(heightCm) < 50 || parseInt(heightCm) > 250) { toast({ title: "Please enter a valid height (50–250 cm)", variant: "destructive" }); return; }
+      if (!weightKg || parseInt(weightKg) < 20 || parseInt(weightKg) > 200) { toast({ title: "Please enter a valid weight (20–200 kg)", variant: "destructive" }); return; }
       if (!requestedTeamId) { toast({ title: "Please select a team", variant: "destructive" }); return; }
       if (!requestedPosition) { toast({ title: "Please select a position", variant: "destructive" }); return; }
       if (!requestedJerseyNo) { toast({ title: "Please enter a jersey number", variant: "destructive" }); return; }
@@ -143,6 +143,7 @@ export default function Register() {
         phone,
         dob,
         nationality,
+        gender,
         idNumber: idRequired ? idNumber : undefined,
         photo,
       };
@@ -152,7 +153,6 @@ export default function Register() {
         if (requestedJerseyNo) extra.requestedJerseyNo = parseInt(requestedJerseyNo);
         if (heightCm) extra.heightCm = parseInt(heightCm);
         if (weightKg) extra.weightKg = parseInt(weightKg);
-        if (gender) extra.gender = gender;
       }
 
       const result = await register(fullName, email, password, extra);
@@ -289,6 +289,24 @@ export default function Register() {
                   className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text placeholder:text-afrocat-muted" />
               </div>
 
+              <div className="space-y-2">
+                <Label className="text-afrocat-muted text-sm">Gender <span className="text-afrocat-red">*</span></Label>
+                <Select value={gender} onValueChange={handleGenderChange} disabled={genderLocked}>
+                  <SelectTrigger data-testid="select-gender" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
+                    <SelectValue placeholder="Select gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MALE">Male</SelectItem>
+                    <SelectItem value="FEMALE">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+                {genderLocked && (
+                  <p className="text-[10px] text-afrocat-gold flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Auto-set based on selected team
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="password" className="text-afrocat-muted text-sm">Password <span className="text-afrocat-red">*</span></Label>
@@ -306,24 +324,6 @@ export default function Register() {
                 <div className="border-t border-afrocat-border pt-4 mt-2">
                   <p className="text-xs text-afrocat-muted mb-3">Player details <span className="text-afrocat-red">*</span></p>
                   <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label className="text-afrocat-muted text-sm">Gender <span className="text-afrocat-red">*</span></Label>
-                      <Select value={gender} onValueChange={handleGenderChange} disabled={genderLocked}>
-                        <SelectTrigger data-testid="select-gender" className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text">
-                          <SelectValue placeholder="Select gender" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="MALE">Male</SelectItem>
-                          <SelectItem value="FEMALE">Female</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {genderLocked && (
-                        <p className="text-[10px] text-afrocat-gold flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> Auto-set based on selected team
-                        </p>
-                      )}
-                    </div>
-
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
                         <Label htmlFor="heightCm" className="text-afrocat-muted text-sm">Height (cm) <span className="text-afrocat-red">*</span></Label>
