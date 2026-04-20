@@ -17,6 +17,12 @@ import { generateDevelopmentReport } from "./devstats/report";
 import { generateO2BISPdf, validateLiberoRule, autoSelectLiberos } from "./o2bis";
 import { normalizeMatchStatus, addCountdown, enrichMatch } from "./match-utils";
 
+const TRAINING_SCHEDULE: Record<string, number[]> = {
+  MEN: [2, 4],    // Tuesday=2, Thursday=4
+  WOMEN: [1, 3],  // Monday=1, Wednesday=3
+  ALL: [5],       // Friday=5
+};
+
 const TEAM_GENDER_RULES: Record<string, string> = {
   "Afrocat D": "MALE",
   "Afrocat C": "MALE",
@@ -836,20 +842,84 @@ export async function registerRoutes(
       if (!session) return res.status(404).json({ message: "Session not found" });
       if (session.status === "CLOSED") return res.status(403).json({ message: "Attendance closed" });
 
-      const existing = await storage.getAttendanceRecordBySessionAndPlayer(req.params.id, req.user!.playerId);
-      if (existing) return res.status(400).json({ message: "Already checked in" });
+      const body = z.object({
+        status: z.enum(["PRESENT", "LATE", "ABSENT"]).optional(),
+        reason: z.string().optional(),
+      }).safeParse(req.body);
 
-      const now = new Date();
-      const sessionDate = new Date(session.sessionDate);
-      const isLate = now.getTime() - sessionDate.getTime() > 15 * 60 * 1000;
+      const existing = await storage.getAttendanceRecordBySessionAndPlayer(req.params.id, req.user!.playerId);
+
+      let status = body.success && body.data.status ? body.data.status : "PRESENT";
+      // If no explicit status, auto-detect LATE based on session date/time
+      if (!body.success || !body.data.status) {
+        const now = new Date();
+        const sessionDate = new Date(session.sessionDate);
+        const isLate = now.getTime() - sessionDate.getTime() > 15 * 60 * 1000;
+        status = isLate ? "LATE" : "PRESENT";
+      }
+
+      if (existing) {
+        // Allow player to update their own self-marked record if not yet confirmed
+        if (!existing.confirmedByUserId) {
+          const updated = await storage.updateAttendanceRecord(existing.id, {
+            status: status as any,
+            reason: body.success ? body.data.reason : undefined,
+            selfMarked: true,
+          } as any);
+          return res.json(updated);
+        }
+        return res.status(400).json({ message: "Attendance already confirmed by coach" });
+      }
 
       const record = await storage.createAttendanceRecord({
         sessionId: req.params.id,
         playerId: req.user!.playerId,
-        status: isLate ? "LATE" : "PRESENT",
+        status: status as any,
+        reason: body.success ? body.data.reason : undefined,
         selfMarked: true,
       });
       res.status(201).json(record);
+    } catch (e) { next(e); }
+  });
+
+  // Get upcoming attendance sessions for the logged-in player's team + their own status
+  app.get("/api/attendance/my-sessions", requireAuth, requireRole(["PLAYER"]), async (req, res, next) => {
+    try {
+      const playerId = req.user!.playerId;
+      if (!playerId) return res.json([]);
+      const player = await storage.getPlayer(playerId);
+      if (!player?.teamId) return res.json([]);
+
+      const sessions = await storage.getAttendanceSessions(player.teamId);
+      const now = new Date();
+      const todayStr = now.toISOString().split("T")[0];
+
+      // Return sessions from past 30 days + next 14 days, sorted by date desc
+      const cutoffPast = new Date(now);
+      cutoffPast.setDate(cutoffPast.getDate() - 30);
+      const cutoffPastStr = cutoffPast.toISOString().split("T")[0];
+
+      const relevant = sessions.filter(s => s.sessionDate >= cutoffPastStr);
+      const enriched = await Promise.all(relevant.map(async s => {
+        const record = await storage.getAttendanceRecordBySessionAndPlayer(s.id, playerId);
+        const isPast = s.sessionDate < todayStr;
+        const isToday = s.sessionDate === todayStr;
+        return {
+          ...s,
+          myStatus: record?.status || null,
+          myReason: record?.reason || null,
+          selfMarked: record?.selfMarked || false,
+          confirmed: !!record?.confirmedByUserId,
+          confirmedAt: record?.confirmedAt || null,
+          recordId: record?.id || null,
+          isPast,
+          isToday,
+          isOpen: s.status !== "CLOSED",
+        };
+      }));
+
+      enriched.sort((a, b) => b.sessionDate.localeCompare(a.sessionDate));
+      res.json(enriched);
     } catch (e) { next(e); }
   });
 
@@ -876,12 +946,22 @@ export async function registerRoutes(
   app.get("/api/attendance/pending-confirmations", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (_req, res, next) => {
     try {
       const sessions = await storage.getAttendanceSessions();
+      const allPlayers = await storage.getPlayers();
+      const playerMap: Record<string, any> = {};
+      for (const p of allPlayers) playerMap[p.id] = p;
+
       const pending: any[] = [];
       for (const session of sessions) {
         const records = await storage.getAttendanceRecords(session.id);
         const unconfirmed = records.filter(r => r.selfMarked && !r.confirmedByUserId);
         if (unconfirmed.length > 0) {
-          pending.push({ session, records: unconfirmed });
+          pending.push({
+            session,
+            records: unconfirmed.map(r => {
+              const p = playerMap[r.playerId];
+              return { ...r, playerName: p ? `${p.firstName} ${p.lastName}` : "Unknown" };
+            }),
+          });
         }
       }
       res.json(pending);
@@ -1889,8 +1969,36 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
   });
 
   // ─── ATTENDANCE ──────────────────────────────────
+  // Helper: auto-generate sessions for current + next 7 days
+  async function autoGenerateSessions() {
+    const teams = await storage.getTeams();
+    const now = new Date();
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(now);
+      d.setDate(d.getDate() + i);
+      const dow = d.getDay();
+      const dateStr = d.toISOString().split("T")[0];
+      for (const team of teams) {
+        const teamDays = [...(TRAINING_SCHEDULE[team.category] || []), ...TRAINING_SCHEDULE.ALL];
+        if (!teamDays.includes(dow)) continue;
+        const existing = (await storage.getAttendanceSessions(team.id))
+          .find(s => s.sessionDate === dateStr && s.sessionType === "TRAINING");
+        if (existing) continue;
+        await storage.createAttendanceSession({
+          teamId: team.id,
+          sessionDate: dateStr,
+          sessionType: "TRAINING",
+          notes: `Auto-scheduled: ${d.toLocaleDateString("en-US", { weekday: "long" })} training`,
+        });
+      }
+    }
+  }
+
   app.get("/api/attendance/sessions", requireAuth, async (req, res, next) => {
-    try { res.json(await storage.getAttendanceSessions(req.query.teamId as string | undefined)); } catch (e) { next(e); }
+    try {
+      await autoGenerateSessions();
+      res.json(await storage.getAttendanceSessions(req.query.teamId as string | undefined));
+    } catch (e) { next(e); }
   });
 
   app.post("/api/attendance/sessions", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
@@ -4449,11 +4557,6 @@ th{background:#0d7377;color:white}
   });
 
   // ─── TRAINING SCHEDULE & NOTIFICATIONS ──────────
-  const TRAINING_SCHEDULE: Record<string, number[]> = {
-    MEN: [2, 4],
-    WOMEN: [1, 3],
-    ALL: [5],
-  };
 
   app.get("/api/training/my-schedule", requireAuth, async (req, res, next) => {
     try {

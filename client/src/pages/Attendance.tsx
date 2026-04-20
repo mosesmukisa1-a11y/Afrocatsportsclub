@@ -5,20 +5,359 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CalendarCheck, Calendar, Users, Send, Loader2, Lock, ShieldCheck, Pencil, AlertCircle, Check, X } from "lucide-react";
+import {
+  Plus, CalendarCheck, Calendar, Send, Loader2, Lock, ShieldCheck, Pencil,
+  AlertCircle, Check, X, UserCheck, Clock, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp,
+} from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 
+// ─── Helpers ────────────────────────────────────────────
+const STATUS_COLORS: Record<string, string> = {
+  PRESENT: "bg-green-500/20 text-green-400 border-green-500/30",
+  LATE:    "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+  ABSENT:  "bg-red-500/20 text-red-400 border-red-500/30",
+  EXCUSED: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+};
+const STATUS_ICONS: Record<string, string> = {
+  PRESENT: "✅", LATE: "⏰", ABSENT: "❌", EXCUSED: "🩺",
+};
+function dayName(dateStr: string) {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" });
+}
+function formatDate(dateStr: string) {
+  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// ─── Player Self-Mark Section ────────────────────────────
+function PlayerAttendanceView() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: mySessions = [], isLoading } = useQuery({
+    queryKey: ["/api/attendance/my-sessions"],
+    queryFn: api.getMyAttendanceSessions,
+  });
+
+  const [markingSession, setMarkingSession] = useState<any | null>(null);
+  const [markStatus, setMarkStatus] = useState("PRESENT");
+  const [markReason, setMarkReason] = useState("");
+  const [showPast, setShowPast] = useState(false);
+
+  const checkinMut = useMutation({
+    mutationFn: () => api.attendanceCheckIn(markingSession!.id, { status: markStatus, reason: markReason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/my-sessions"] });
+      toast({
+        title: markStatus === "PRESENT" ? "✅ Marked Present" : markStatus === "LATE" ? "⏰ Marked Late" : "❌ Marked Absent",
+        description: markReason ? `Reason: ${markReason}` : "Your attendance has been submitted for coach confirmation.",
+      });
+      setMarkingSession(null);
+      setMarkStatus("PRESENT");
+      setMarkReason("");
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const today = new Date().toISOString().split("T")[0];
+  const upcoming = (mySessions as any[]).filter(s => s.sessionDate >= today);
+  const past = (mySessions as any[]).filter(s => s.sessionDate < today);
+
+  if (isLoading) {
+    return <div className="text-center py-10 text-afrocat-muted"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Loading your sessions…</div>;
+  }
+
+  if (mySessions.length === 0) {
+    return (
+      <div className="afrocat-card p-8 text-center">
+        <CalendarCheck className="h-10 w-10 text-afrocat-muted mx-auto mb-3" />
+        <p className="text-afrocat-muted font-medium">No sessions scheduled yet.</p>
+        <p className="text-xs text-afrocat-muted mt-1">Sessions are auto-created on your team's training days.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Upcoming / Today sessions */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-bold text-afrocat-muted uppercase tracking-wider flex items-center gap-2">
+          <Calendar className="h-4 w-4" /> Upcoming Sessions ({upcoming.length})
+        </h2>
+        {upcoming.length === 0 ? (
+          <div className="afrocat-card p-5 text-center text-afrocat-muted text-sm">No upcoming sessions in the next 2 weeks.</div>
+        ) : (
+          upcoming.map(s => (
+            <SessionCard
+              key={s.id}
+              session={s}
+              onMark={() => { setMarkingSession(s); setMarkStatus(s.myStatus || "PRESENT"); setMarkReason(s.myReason || ""); }}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Past sessions toggle */}
+      {past.length > 0 && (
+        <div className="space-y-3">
+          <button
+            onClick={() => setShowPast(p => !p)}
+            className="flex items-center gap-2 text-sm font-bold text-afrocat-muted uppercase tracking-wider hover:text-afrocat-text transition-colors"
+          >
+            {showPast ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            Past Sessions ({past.length})
+          </button>
+          {showPast && past.map(s => (
+            <SessionCard
+              key={s.id}
+              session={s}
+              onMark={() => { setMarkingSession(s); setMarkStatus(s.myStatus || "PRESENT"); setMarkReason(s.myReason || ""); }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Mark Attendance Modal */}
+      {markingSession && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-afrocat-card border border-afrocat-border rounded-2xl w-full max-w-sm p-6 space-y-5 shadow-2xl">
+            <div>
+              <h3 className="font-display font-bold text-lg text-afrocat-text">Mark Attendance</h3>
+              <p className="text-sm text-afrocat-muted mt-1">
+                {dayName(markingSession.sessionDate)}, {formatDate(markingSession.sessionDate)} · {markingSession.sessionType}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs uppercase text-afrocat-muted font-bold">Your Status</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {["PRESENT", "LATE", "ABSENT"].map(st => (
+                  <button
+                    key={st}
+                    onClick={() => setMarkStatus(st)}
+                    data-testid={`btn-status-${st.toLowerCase()}`}
+                    className={`py-3 rounded-xl border font-bold text-sm transition-all ${markStatus === st ? STATUS_COLORS[st] + " ring-2 ring-current" : "border-afrocat-border text-afrocat-muted hover:border-afrocat-teal/50"}`}
+                  >
+                    {STATUS_ICONS[st]} {st.charAt(0) + st.slice(1).toLowerCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {(markStatus === "LATE" || markStatus === "ABSENT") && (
+              <div className="space-y-1">
+                <Label className="text-xs uppercase text-afrocat-muted font-bold">
+                  Reason {markStatus === "ABSENT" ? "(required)" : "(optional)"}
+                </Label>
+                <textarea
+                  value={markReason}
+                  onChange={e => setMarkReason(e.target.value)}
+                  placeholder={markStatus === "ABSENT" ? "Why were you absent?" : "Why are you late?"}
+                  rows={2}
+                  data-testid="input-mark-reason"
+                  className="w-full px-4 py-2.5 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text placeholder:text-afrocat-muted focus:outline-none focus:ring-1 focus:ring-afrocat-teal resize-none"
+                />
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <Button
+                onClick={() => checkinMut.mutate()}
+                disabled={checkinMut.isPending || (markStatus === "ABSENT" && !markReason.trim())}
+                className="flex-1 bg-afrocat-teal hover:bg-afrocat-teal/80"
+                data-testid="button-submit-attendance"
+              >
+                {checkinMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserCheck className="h-4 w-4 mr-2" />}
+                Submit
+              </Button>
+              <Button variant="outline" className="border-afrocat-border text-afrocat-muted" onClick={() => setMarkingSession(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SessionCard({ session: s, onMark }: { session: any; onMark: () => void }) {
+  const today = new Date().toISOString().split("T")[0];
+  const isToday = s.sessionDate === today;
+  const canMark = s.isOpen && !s.confirmed;
+
+  return (
+    <div
+      className={`afrocat-card p-4 border transition-all ${isToday ? "border-afrocat-teal/50 shadow-afrocat-teal/10 shadow-lg" : "border-afrocat-border"}`}
+      data-testid={`card-my-session-${s.id}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            {isToday && (
+              <Badge className="bg-afrocat-teal/20 text-afrocat-teal border-afrocat-teal/30 text-[10px]">TODAY</Badge>
+            )}
+            <span className="font-bold text-afrocat-text text-sm">{dayName(s.sessionDate)}, {formatDate(s.sessionDate)}</span>
+          </div>
+          <p className="text-xs text-afrocat-muted mt-0.5">{s.sessionType}{s.notes ? ` · ${s.notes}` : ""}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {s.isOpen ? (
+            <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]">Open</Badge>
+          ) : (
+            <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[10px] flex items-center gap-1">
+              <Lock className="h-2.5 w-2.5" /> Closed
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        {/* My Status */}
+        {s.myStatus ? (
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${STATUS_COLORS[s.myStatus]}`}>
+              {STATUS_ICONS[s.myStatus]} {s.myStatus.charAt(0) + s.myStatus.slice(1).toLowerCase()}
+            </span>
+            {s.confirmed ? (
+              <span className="flex items-center gap-1 text-[10px] text-green-400">
+                <ShieldCheck className="h-3 w-3" /> Confirmed
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[10px] text-yellow-400">
+                <Clock className="h-3 w-3" /> Pending coach approval
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-xs text-afrocat-muted">Not marked yet</span>
+        )}
+
+        {canMark && (
+          <Button
+            size="sm"
+            onClick={onMark}
+            className={`text-xs ${s.myStatus ? "bg-afrocat-white-5 hover:bg-afrocat-white-10 text-afrocat-text border border-afrocat-border" : "bg-afrocat-teal hover:bg-afrocat-teal/80 text-white"}`}
+            data-testid={`button-mark-${s.id}`}
+          >
+            {s.myStatus ? <Pencil className="h-3 w-3 mr-1" /> : <UserCheck className="h-3 w-3 mr-1" />}
+            {s.myStatus ? "Update" : "Mark Attendance"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Coach Pending Approvals ─────────────────────────────
+function PendingApprovalsPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: pending = [], isLoading } = useQuery({
+    queryKey: ["/api/attendance/pending-confirmations"],
+    queryFn: api.getPendingConfirmations,
+  });
+  const [collapsed, setCollapsed] = useState(false);
+
+  const confirmMut = useMutation({
+    mutationFn: ({ recordId, status }: { recordId: string; status: string }) =>
+      api.confirmAttendance(recordId, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/pending-confirmations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/sessions"] });
+      toast({ title: "Attendance confirmed" });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const allPending = (pending as any[]).flatMap(p =>
+    p.records.map((r: any) => ({ ...r, session: p.session }))
+  );
+
+  if (isLoading || allPending.length === 0) return null;
+
+  return (
+    <div className="afrocat-card overflow-hidden border border-afrocat-gold/30">
+      <button
+        className="w-full bg-afrocat-gold-soft px-5 py-3 flex items-center justify-between text-left"
+        onClick={() => setCollapsed(c => !c)}
+        data-testid="button-toggle-pending"
+      >
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-afrocat-gold" />
+          <span className="font-display font-bold text-afrocat-gold">
+            Pending Approvals ({allPending.length})
+          </span>
+          <span className="text-xs text-afrocat-muted">Players have self-marked — review and confirm</span>
+        </div>
+        {collapsed ? <ChevronDown className="h-4 w-4 text-afrocat-gold" /> : <ChevronUp className="h-4 w-4 text-afrocat-gold" />}
+      </button>
+
+      {!collapsed && (
+        <div className="p-4 space-y-3">
+          {allPending.map((r: any) => (
+            <div
+              key={r.id}
+              className="flex items-center gap-3 p-3 rounded-xl bg-afrocat-white-5 border border-afrocat-border"
+              data-testid={`pending-record-${r.id}`}
+            >
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm text-afrocat-text">{r.playerName || "Player"}</p>
+                <p className="text-xs text-afrocat-muted">
+                  {r.session?.sessionDate ? dayName(r.session.sessionDate) + ", " + formatDate(r.session.sessionDate) : "Unknown date"}
+                  {" · "}{r.session?.sessionType || "Training"}
+                </p>
+                {r.reason && <p className="text-xs text-afrocat-muted italic mt-0.5">"{r.reason}"</p>}
+              </div>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${STATUS_COLORS[r.status] || "bg-afrocat-white-5 text-afrocat-muted border-afrocat-border"}`}>
+                {STATUS_ICONS[r.status] || "?"} {r.status}
+              </span>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => confirmMut.mutate({ recordId: r.id, status: r.status })}
+                  disabled={confirmMut.isPending}
+                  title="Approve as-is"
+                  data-testid={`button-approve-${r.id}`}
+                  className="p-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
+                >
+                  <ThumbsUp className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => confirmMut.mutate({ recordId: r.id, status: "ABSENT" })}
+                  disabled={confirmMut.isPending}
+                  title="Mark Absent"
+                  data-testid={`button-reject-${r.id}`}
+                  className="p-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                >
+                  <ThumbsDown className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────
 export default function Attendance() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: sessions = [], isLoading } = useQuery({ queryKey: ["/api/attendance/sessions"], queryFn: () => api.getAttendanceSessions() });
-  const { data: teams = [] } = useQuery({ queryKey: ["/api/teams"], queryFn: api.getTeams });
-  const { data: allPlayers = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
+
+  const isPlayerView = user?.role === "PLAYER" || (!!user?.playerId && user?.role === "PLAYER");
+  const isCoachView = !isPlayerView && (user?.role === "ADMIN" || user?.role === "MANAGER" || user?.role === "COACH" || user?.isSuperAdmin);
+
+  const { data: sessions = [], isLoading } = useQuery({
+    queryKey: ["/api/attendance/sessions"],
+    queryFn: () => api.getAttendanceSessions(),
+    enabled: isCoachView,
+  });
+  const { data: teams = [] } = useQuery({ queryKey: ["/api/teams"], queryFn: api.getTeams, enabled: isCoachView });
+  const { data: allPlayers = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers, enabled: isCoachView });
 
   const [open, setOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -103,6 +442,7 @@ export default function Attendance() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/attendance/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/attendance/sessions/records", markSessionId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/pending-confirmations"] });
       toast({ title: superAdminEditing ? "Attendance updated" : "Attendance saved & closed" });
       setMarkSessionId(null);
       setAttendance({});
@@ -125,13 +465,46 @@ export default function Attendance() {
     : (allPlayers || [])
   ).sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase()));
 
+  // ── Player View ──────────────────────────────────────────
+  if (isPlayerView) {
+    return (
+      <Layout>
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div>
+            <h1 className="text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-attendance-title">My Attendance</h1>
+            <p className="text-afrocat-muted mt-1">Your training sessions — mark your own attendance for coach confirmation</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="p-3 rounded-xl bg-afrocat-teal-soft border border-afrocat-teal/20">
+              <h4 className="font-bold text-sm text-afrocat-teal mb-1">Men's Teams</h4>
+              <p className="text-xs text-afrocat-muted">Tuesday & Thursday</p>
+            </div>
+            <div className="p-3 rounded-xl bg-afrocat-gold-soft border border-afrocat-gold/20">
+              <h4 className="font-bold text-sm text-afrocat-gold mb-1">Women's Teams</h4>
+              <p className="text-xs text-afrocat-muted">Monday & Wednesday</p>
+            </div>
+            <div className="p-3 rounded-xl bg-afrocat-green-soft border border-afrocat-green/20">
+              <h4 className="font-bold text-sm text-afrocat-green mb-1">All Teams</h4>
+              <p className="text-xs text-afrocat-muted">Friday (Combined)</p>
+            </div>
+          </div>
+
+          <PlayerAttendanceView />
+          <ExcuseRequestSection user={user} sessions={[]} />
+        </div>
+      </Layout>
+    );
+  }
+
+  // ── Coach / Admin View ───────────────────────────────────
   return (
     <Layout>
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-attendance-title">Attendance</h1>
-            <p className="text-afrocat-muted mt-1">Track training and match attendance</p>
+            <p className="text-afrocat-muted mt-1">Manage training and match attendance</p>
           </div>
           <div className="flex gap-2 flex-wrap">
             <Button
@@ -186,19 +559,12 @@ export default function Attendance() {
                       <div className="max-h-48 overflow-y-auto border border-afrocat-border rounded-lg p-2 space-y-1 mt-1">
                         {filteredPlayers.map((p: any) => (
                           <label key={p.id} className="flex items-center gap-2 p-1.5 rounded hover:bg-afrocat-white-5 cursor-pointer text-sm text-afrocat-text">
-                            <input
-                              type="checkbox"
-                              checked={scheduleForm.playerIds.includes(p.id)}
-                              onChange={() => togglePlayer(p.id)}
-                              className="rounded"
-                            />
+                            <input type="checkbox" checked={scheduleForm.playerIds.includes(p.id)} onChange={() => togglePlayer(p.id)} className="rounded" />
                             #{p.jerseyNo} {p.firstName} {p.lastName}
                           </label>
                         ))}
                       </div>
-                      {scheduleForm.playerIds.length > 0 && (
-                        <p className="text-xs text-afrocat-teal mt-1">{scheduleForm.playerIds.length} player(s) selected</p>
-                      )}
+                      {scheduleForm.playerIds.length > 0 && <p className="text-xs text-afrocat-teal mt-1">{scheduleForm.playerIds.length} player(s) selected</p>}
                     </div>
                   )}
                   <Button type="submit" disabled={scheduleMut.isPending || (!scheduleForm.teamId && scheduleForm.playerIds.length === 0)} className="w-full bg-afrocat-teal hover:bg-afrocat-teal/80" data-testid="button-confirm-schedule">
@@ -242,18 +608,21 @@ export default function Attendance() {
           </div>
         </div>
 
+        {/* Pending Approvals */}
+        <PendingApprovalsPanel />
+
+        {/* Mark Attendance Panel */}
         {markSessionId && (
           <div className="afrocat-card overflow-hidden">
             <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px]">
               <div className="flex items-center justify-between">
                 <h3 className="font-display font-bold text-afrocat-text">Mark Attendance — {markSession?.sessionDate} ({markSession?.sessionType})</h3>
                 <div className="flex items-center gap-2">
-                  {isClosed && (
+                  {isClosed ? (
                     <Badge className="bg-afrocat-red-soft text-afrocat-red border-0 flex items-center gap-1" data-testid="badge-attendance-closed">
                       <Lock className="h-3 w-3" /> Attendance Closed
                     </Badge>
-                  )}
-                  {!isClosed && (
+                  ) : (
                     <Badge className="bg-afrocat-green-soft text-afrocat-green border-0" data-testid="badge-attendance-open">Open</Badge>
                   )}
                 </div>
@@ -266,19 +635,11 @@ export default function Attendance() {
                     <Lock className="h-4 w-4 text-afrocat-red" />
                     <div>
                       <p className="text-sm font-medium text-afrocat-red">Attendance is closed and locked.</p>
-                      <p className="text-xs text-afrocat-muted mt-0.5">
-                        {user?.isSuperAdmin ? "As Super Admin, you can edit this attendance." : "Only Super Admin can edit this attendance."}
-                      </p>
+                      <p className="text-xs text-afrocat-muted mt-0.5">{user?.isSuperAdmin ? "As Super Admin, you can edit this attendance." : "Only Super Admin can edit this attendance."}</p>
                     </div>
                   </div>
                   {user?.isSuperAdmin && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="border-afrocat-gold text-afrocat-gold hover:bg-afrocat-gold-soft"
-                      onClick={() => setSuperAdminEditing(true)}
-                      data-testid="button-superadmin-edit"
-                    >
+                    <Button size="sm" variant="outline" className="border-afrocat-gold text-afrocat-gold hover:bg-afrocat-gold-soft" onClick={() => setSuperAdminEditing(true)} data-testid="button-superadmin-edit">
                       <Pencil className="h-3 w-3 mr-1" /> Edit Attendance
                     </Button>
                   )}
@@ -297,40 +658,36 @@ export default function Attendance() {
               ) : (
                 <>
                   <div className="space-y-3">
-                    {[...sessionPlayers].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => (
-                      <div key={p.id} className="flex items-center justify-between border-b border-afrocat-border pb-2 last:border-0" data-testid={`row-player-attendance-${p.id}`}>
-                        <span className="font-medium text-afrocat-text">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
-                        <Select
-                          value={attendance[p.id] || "PRESENT"}
-                          onValueChange={v => setAttendance({...attendance, [p.id]: v})}
-                          disabled={!canEdit}
-                        >
-                          <SelectTrigger className={`w-[130px] border-afrocat-border ${!canEdit ? 'opacity-50' : ''}`} data-testid={`select-status-${p.id}`}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="PRESENT">Present</SelectItem>
-                            <SelectItem value="LATE">Late</SelectItem>
-                            <SelectItem value="ABSENT">Absent</SelectItem>
-                            <SelectItem value="EXCUSED">Excused</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ))}
+                    {[...sessionPlayers].sort((a: any, b: any) => `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())).map((p: any) => {
+                      const record = (existingRecords as any[]).find((r: any) => r.playerId === p.id);
+                      const isSelfMarked = record?.selfMarked && !record?.confirmedByUserId;
+                      return (
+                        <div key={p.id} className={`flex items-center justify-between border-b border-afrocat-border pb-2 last:border-0 ${isSelfMarked ? "bg-afrocat-gold-soft/20 rounded-lg px-2" : ""}`} data-testid={`row-player-attendance-${p.id}`}>
+                          <div>
+                            <span className="font-medium text-afrocat-text">#{p.jerseyNo} {p.firstName} {p.lastName}</span>
+                            {isSelfMarked && (
+                              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-afrocat-gold/20 text-afrocat-gold">
+                                Self-marked
+                              </span>
+                            )}
+                          </div>
+                          <Select value={attendance[p.id] || "PRESENT"} onValueChange={v => setAttendance({...attendance, [p.id]: v})} disabled={!canEdit}>
+                            <SelectTrigger className={`w-[130px] border-afrocat-border ${!canEdit ? 'opacity-50' : ''}`} data-testid={`select-status-${p.id}`}><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="PRESENT">Present</SelectItem>
+                              <SelectItem value="LATE">Late</SelectItem>
+                              <SelectItem value="ABSENT">Absent</SelectItem>
+                              <SelectItem value="EXCUSED">Excused</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="flex gap-2 mt-4">
                     {canEdit && (
-                      <Button
-                        onClick={() => saveAndCloseMut.mutate()}
-                        disabled={saveAndCloseMut.isPending}
-                        className="bg-afrocat-teal hover:bg-afrocat-teal/80"
-                        data-testid="button-save-attendance"
-                      >
-                        {saveAndCloseMut.isPending ? (
-                          <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
-                        ) : superAdminEditing ? (
-                          <><ShieldCheck className="h-4 w-4 mr-2" /> Update Attendance</>
-                        ) : (
-                          <><Lock className="h-4 w-4 mr-2" /> Save & Close Attendance</>
-                        )}
+                      <Button onClick={() => saveAndCloseMut.mutate()} disabled={saveAndCloseMut.isPending} className="bg-afrocat-teal hover:bg-afrocat-teal/80" data-testid="button-save-attendance">
+                        {saveAndCloseMut.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</> : superAdminEditing ? <><ShieldCheck className="h-4 w-4 mr-2" /> Update Attendance</> : <><Lock className="h-4 w-4 mr-2" /> Save & Close Attendance</>}
                       </Button>
                     )}
                     <Button variant="outline" className="border-afrocat-border text-afrocat-text" onClick={() => { setMarkSessionId(null); setSuperAdminEditing(false); }}>Cancel</Button>
@@ -341,10 +698,11 @@ export default function Attendance() {
           </div>
         )}
 
+        {/* Training Schedule Rules */}
         <div className="afrocat-card overflow-hidden">
           <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px]">
             <h3 className="font-display font-bold text-afrocat-text flex items-center gap-2">
-              <CalendarCheck className="h-5 w-5 text-afrocat-teal" /> Training Schedule Rules
+              <CalendarCheck className="h-5 w-5 text-afrocat-teal" /> Training Schedule
             </h3>
           </div>
           <div className="p-5">
@@ -365,13 +723,14 @@ export default function Attendance() {
           </div>
         </div>
 
+        {/* Sessions Grid */}
         {isLoading ? (
-          <div className="text-center py-10 text-afrocat-muted">Loading...</div>
+          <div className="text-center py-10 text-afrocat-muted"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" /> Loading sessions…</div>
         ) : sessions.length === 0 ? (
-          <div className="text-center py-10 text-afrocat-muted">No attendance sessions yet. Use "Auto-Generate Week" or create one manually.</div>
+          <div className="text-center py-10 text-afrocat-muted">No attendance sessions yet. Sessions auto-generate when this page loads.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sessions.map((s: any) => {
+            {[...sessions].sort((a: any, b: any) => b.sessionDate.localeCompare(a.sessionDate)).map((s: any) => {
               const team = teams.find((t: any) => t.id === s.teamId);
               const closed = s.status === "CLOSED";
               return (
@@ -384,7 +743,10 @@ export default function Attendance() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                       <CalendarCheck className="h-5 w-5 text-afrocat-teal" />
-                      <span className="font-semibold text-afrocat-text">{s.sessionDate}</span>
+                      <div>
+                        <div className="font-semibold text-afrocat-text text-sm">{s.sessionDate}</div>
+                        <div className="text-[10px] text-afrocat-muted">{dayName(s.sessionDate)}</div>
+                      </div>
                     </div>
                     {closed ? (
                       <Badge className="bg-afrocat-red-soft text-afrocat-red border-0 text-[10px] flex items-center gap-1" data-testid={`badge-closed-${s.id}`}>
@@ -394,19 +756,10 @@ export default function Attendance() {
                       <Badge className="bg-afrocat-green-soft text-afrocat-green border-0 text-[10px]" data-testid={`badge-open-${s.id}`}>Open</Badge>
                     )}
                   </div>
-                  <p className="text-sm text-afrocat-muted">{team?.name || "Team"} • {s.sessionType}</p>
+                  <p className="text-sm text-afrocat-muted">{team?.name || "Team"} · {s.sessionType}</p>
                   {s.notes && <p className="text-xs text-afrocat-muted mt-1 italic">{s.notes}</p>}
-                  {s.lockedAt && (
-                    <p className="text-[10px] text-afrocat-muted mt-2 flex items-center gap-1">
-                      <Lock className="h-2.5 w-2.5" /> Locked {new Date(s.lockedAt).toLocaleString()}
-                    </p>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={`mt-3 w-full border-afrocat-border ${closed ? 'text-afrocat-muted' : 'text-afrocat-teal'}`}
-                    data-testid={`button-mark-attendance-${s.id}`}
-                  >
+                  {s.lockedAt && <p className="text-[10px] text-afrocat-muted mt-2 flex items-center gap-1"><Lock className="h-2.5 w-2.5" /> Locked {new Date(s.lockedAt).toLocaleString()}</p>}
+                  <Button variant="outline" size="sm" className={`mt-3 w-full border-afrocat-border ${closed ? 'text-afrocat-muted' : 'text-afrocat-teal'}`} data-testid={`button-mark-attendance-${s.id}`}>
                     {closed ? "View Attendance" : "Mark Attendance"}
                   </Button>
                 </div>
@@ -421,6 +774,7 @@ export default function Attendance() {
   );
 }
 
+// ─── Excuse Request Section (unchanged) ─────────────────
 function ExcuseRequestSection({ user, sessions }: { user: any; sessions: any[] }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -476,7 +830,7 @@ function ExcuseRequestSection({ user, sessions }: { user: any; sessions: any[] }
             <div key={r.id} className="afrocat-card p-4 flex items-center gap-3" data-testid={`excuse-pending-${r.id}`}>
               <div className="flex-1">
                 <div className="font-bold text-sm text-afrocat-text">{r.playerName}</div>
-                <div className="text-[10px] text-afrocat-muted">{r.excuseType} • {r.sessionDate || "Session"} • {r.reason}</div>
+                <div className="text-[10px] text-afrocat-muted">{r.excuseType} · {r.sessionDate || "Session"} · {r.reason}</div>
               </div>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/20 text-yellow-400">{r.excuseType}</span>
               <div className="flex gap-1">
@@ -495,13 +849,9 @@ function ExcuseRequestSection({ user, sessions }: { user: any; sessions: any[] }
             <div key={r.id} className="afrocat-card p-4 flex items-center gap-3">
               <div className="flex-1">
                 <div className="text-sm text-afrocat-text">{r.excuseType}: {r.reason}</div>
-                <div className="text-[10px] text-afrocat-muted">{r.sessionDate || "Session"} • {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</div>
+                <div className="text-[10px] text-afrocat-muted">{r.sessionDate || "Session"} · {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : ""}</div>
               </div>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                r.status === "APPROVED" ? "bg-green-500/20 text-green-400" :
-                r.status === "REJECTED" ? "bg-red-500/20 text-red-400" :
-                "bg-yellow-500/20 text-yellow-400"
-              }`}>{r.status}</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === "APPROVED" ? "bg-green-500/20 text-green-400" : r.status === "REJECTED" ? "bg-red-500/20 text-red-400" : "bg-yellow-500/20 text-yellow-400"}`}>{r.status}</span>
             </div>
           ))}
         </div>

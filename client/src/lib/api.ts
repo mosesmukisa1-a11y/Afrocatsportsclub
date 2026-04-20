@@ -252,10 +252,12 @@ export const api = {
   getMyMedia: () => apiFetch<any[]>("/players/me/media"),
   getCoachMedia: () => apiFetch<any[]>("/coaches/me/media"),
 
-  attendanceCheckIn: (sessionId: string) => apiFetch<any>(`/attendance/sessions/${sessionId}/checkin`, { method: "POST" }),
+  attendanceCheckIn: (sessionId: string, data?: { status?: string; reason?: string }) =>
+    apiFetch<any>(`/attendance/sessions/${sessionId}/checkin`, { method: "POST", body: JSON.stringify(data || {}) }),
   confirmAttendance: (recordId: string, data: { status?: string; notes?: string }) =>
     apiFetch<any>(`/attendance/records/${recordId}/confirm`, { method: "POST", body: JSON.stringify(data) }),
   getPendingConfirmations: () => apiFetch<any[]>("/attendance/pending-confirmations"),
+  getMyAttendanceSessions: () => apiFetch<any[]>("/attendance/my-sessions"),
 
   adminCreateUser: (data: { fullName: string; email: string; password: string; role: string }) =>
     apiFetch<any>("/admin/users", { method: "POST", body: JSON.stringify(data) }),
