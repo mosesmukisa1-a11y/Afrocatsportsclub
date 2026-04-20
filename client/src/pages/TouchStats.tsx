@@ -9,7 +9,7 @@ import {
   Undo2, Lock, Unlock, User, Trophy, Upload, CheckCircle2,
   Plus, Minus, Maximize, Minimize, Clock,
   FileText, ChevronDown, ChevronUp, Printer, Star,
-  RotateCw, Users as UsersIcon
+  RotateCw, Users as UsersIcon, UserCheck, Radio
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -178,6 +178,23 @@ export default function TouchStats() {
   const scorerName = touchInit?.scorerName || "-";
   const playerOfMatchPlayerId = matchData?.playerOfMatchPlayerId;
   const scoringStarted = !!matchData?.scoringStartedAt;
+  const assignedHeadCoach = touchInit?.staff?.headCoach || null;
+  const assignedAsstCoach = touchInit?.staff?.assistantCoach || null;
+
+  const [inlineCoachId, setInlineCoachId] = useState<string>("");
+  const { data: staffUsers = [] } = useQuery({
+    queryKey: ["/api/staff-eligible-users"],
+    queryFn: api.getStaffEligibleUsers,
+    enabled: !!selectedMatchId && !assignedHeadCoach,
+  });
+  const saveCoachMut = useMutation({
+    mutationFn: (headCoachUserId: string) =>
+      api.saveMatchStaff(selectedMatchId!, { headCoachUserId, assistantCoachUserId: "", medicUserId: "", teamManagerUserId: "" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
+      toast({ title: "Head coach saved" });
+    },
+  });
 
   const [optimisticHome, setOptimisticHome] = useState<number | null>(null);
   const [optimisticAway, setOptimisticAway] = useState<number | null>(null);
@@ -1074,6 +1091,85 @@ export default function TouchStats() {
               </div>
             )}
 
+            {/* ── Head Coach ── */}
+            <div className="rounded-xl border border-afrocat-border bg-afrocat-white-3 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-afrocat-muted uppercase tracking-wider">
+                <UserCheck className="w-3.5 h-3.5" /> Head Coach
+              </div>
+              {assignedHeadCoach ? (
+                <div className="flex items-center gap-2" data-testid="text-assigned-headcoach">
+                  <div className="w-6 h-6 rounded-full bg-afrocat-teal-soft border border-afrocat-teal/30 flex items-center justify-center text-[9px] font-bold text-afrocat-teal">
+                    {assignedHeadCoach.fullName.charAt(0)}
+                  </div>
+                  <span className="text-sm font-semibold text-afrocat-text">{assignedHeadCoach.fullName}</span>
+                  {assignedAsstCoach && (
+                    <span className="text-[10px] text-afrocat-muted ml-2">+ {assignedAsstCoach.fullName} (asst.)</span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-2 items-center">
+                  <select
+                    value={inlineCoachId}
+                    onChange={e => setInlineCoachId(e.target.value)}
+                    className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-afrocat-border bg-afrocat-white-5 text-afrocat-text"
+                    data-testid="select-inline-headcoach"
+                  >
+                    <option value="">No coach assigned — select one</option>
+                    {(staffUsers as any[]).filter((u: any) => u.role === "COACH").map((u: any) => (
+                      <option key={u.id} value={u.id}>{u.fullName}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={!inlineCoachId || saveCoachMut.isPending}
+                    onClick={() => inlineCoachId && saveCoachMut.mutate(inlineCoachId)}
+                    className="px-3 py-1.5 rounded-lg bg-afrocat-teal text-white text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-afrocat-teal/80 transition-colors"
+                    data-testid="button-save-inline-coach"
+                  >
+                    Save
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Who serves first? ── */}
+            <div className="rounded-xl border border-afrocat-border bg-afrocat-white-3 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-afrocat-muted uppercase tracking-wider">
+                <Radio className="w-3.5 h-3.5" /> Who Serves First?
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setServingTeam("home")}
+                  className={`rounded-xl border-2 py-2.5 text-xs font-bold transition-all cursor-pointer ${
+                    servingTeam === "home"
+                      ? "border-afrocat-teal bg-afrocat-teal-soft text-afrocat-teal"
+                      : "border-afrocat-border bg-afrocat-white-5 text-afrocat-muted hover:border-afrocat-teal/40"
+                  }`}
+                  data-testid="button-we-serve"
+                >
+                  🏐 {teamName} serves
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setServingTeam("away")}
+                  className={`rounded-xl border-2 py-2.5 text-xs font-bold transition-all cursor-pointer ${
+                    servingTeam === "away"
+                      ? "border-afrocat-gold bg-afrocat-gold-soft text-afrocat-gold"
+                      : "border-afrocat-border bg-afrocat-white-5 text-afrocat-muted hover:border-afrocat-gold/40"
+                  }`}
+                  data-testid="button-they-serve"
+                >
+                  🛡️ {selectedMatch?.opponent || "Opponent"} serves (we receive)
+                </button>
+              </div>
+              <p className="text-[10px] text-afrocat-muted">
+                {servingTeam === "home"
+                  ? `P1 (back-right) is your first server.`
+                  : `${selectedMatch?.opponent || "Opponent"} serves first — your team receives to start.`}
+              </p>
+            </div>
+
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
               <button
                 onClick={() => {
@@ -1083,7 +1179,12 @@ export default function TouchStats() {
                   setRotationOrder(order);
                   setLineupConfirmed(true);
                   setShowFivbPanel(true);
-                  toast({ title: "Lineup Confirmed!", description: "Position 1 serves first. Rotation auto-advances on side-outs." });
+                  toast({
+                    title: "Lineup Confirmed!",
+                    description: servingTeam === "home"
+                      ? `${teamName} serves first. P1 is your server.`
+                      : `${selectedMatch?.opponent || "Opponent"} serves first — rotate after your first side-out.`,
+                  });
                 }}
                 disabled={lineupDraft.filter(Boolean).length !== 6}
                 className="flex-1 bg-afrocat-teal text-white font-bold text-sm py-2.5 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer hover:bg-afrocat-teal/80 transition-colors"

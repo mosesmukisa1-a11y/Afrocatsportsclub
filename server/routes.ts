@@ -6044,6 +6044,20 @@ th{background:#0d7377;color:white}
         if (currentUser) scorerName = currentUser.fullName;
       }
 
+      const staffRows = await db.select().from(schema.matchStaffAssignments)
+        .where(eq(schema.matchStaffAssignments.matchId, matchId));
+      const staffRow = staffRows[0] || null;
+      let headCoach: { id: string; fullName: string } | null = null;
+      let assistantCoach: { id: string; fullName: string } | null = null;
+      if (staffRow?.headCoachUserId) {
+        const hc = await storage.getUser(staffRow.headCoachUserId);
+        if (hc) headCoach = { id: hc.id, fullName: hc.fullName };
+      }
+      if (staffRow?.assistantCoachUserId) {
+        const ac = await storage.getUser(staffRow.assistantCoachUserId);
+        if (ac) assistantCoach = { id: ac.id, fullName: ac.fullName };
+      }
+
       res.json({
         match: {
           ...match,
@@ -6058,6 +6072,7 @@ th{background:#0d7377;color:white}
         },
         teamName: team?.name || "Home",
         scorerName,
+        staff: { headCoach, assistantCoach },
         players: players.map((p: any) => ({
           id: p.id,
           firstName: p.firstName,
