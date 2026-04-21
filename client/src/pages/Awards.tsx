@@ -9,8 +9,11 @@ import { Plus, Trophy, Star, TrendingUp, Target, Zap, Award as AwardIcon, Medal,
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { PlayerCard } from "@/components/PlayerCard";
+import { toJpeg } from "html-to-image";
+import { jsPDF } from "jspdf";
+import { Download } from "lucide-react";
 
 const AWARD_LABELS: Record<string, { label: string; icon: any; color: string; bg: string }> = {
   MVP:           { label: "Club MVP",       icon: Trophy,    color: "text-afrocat-gold",   bg: "bg-afrocat-gold-soft border-afrocat-gold/30" },
@@ -79,6 +82,85 @@ export default function Awards() {
   const sortedPlayers = [...players].sort((a: any, b: any) =>
     (a.fullName || `${a.firstName} ${a.lastName}`).localeCompare(b.fullName || `${b.firstName} ${b.lastName}`)
   );
+
+  /* Team-of-Week card refs — keyed by playerId */
+  const towCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [towPdfLoading, setTowPdfLoading] = useState(false);
+
+  async function downloadTOWPdf() {
+    const towPlayers = (teamOfWeek as any)?.players || [];
+    if (!towPlayers.length) return;
+    setTowPdfLoading(true);
+    try {
+      /* Capture each card as JPEG */
+      const images: { dataUrl: string; playerName: string; slot: string }[] = [];
+      for (const p of towPlayers) {
+        const el = towCardRefs.current.get(p.playerId);
+        if (!el) continue;
+        const dataUrl = await toJpeg(el, { quality: 0.95, pixelRatio: 2, backgroundColor: "#0F1728" });
+        images.push({ dataUrl, playerName: p.playerName, slot: p.slot });
+      }
+      if (!images.length) return;
+
+      /* Build A4 landscape PDF — 3 cards per row */
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const PAGE_W = 297;
+      const PAGE_H = 210;
+      const MARGIN = 8;
+      const COLS = 3;
+      const GAP = 4;
+      const HEADER_H = 14;
+      const cardW = (PAGE_W - MARGIN * 2 - GAP * (COLS - 1)) / COLS;
+      const cardH = cardW * 1.4; /* preserve card aspect ratio */
+
+      /* Header */
+      pdf.setFillColor(15, 23, 40);
+      pdf.rect(0, 0, PAGE_W, PAGE_H, "F");
+      pdf.setTextColor(239, 196, 44);
+      pdf.setFontSize(14);
+      pdf.setFont("helvetica", "bold");
+      pdf.text("🏆 Afrocat VC — Team of the Week", MARGIN, 9);
+      pdf.setFontSize(8);
+      pdf.setTextColor(150, 160, 180);
+      const label = (teamOfWeek as any)?.weekLabel || "";
+      pdf.text(label, MARGIN, 13);
+
+      /* Place cards in a grid */
+      images.forEach(({ dataUrl, playerName, slot }, idx) => {
+        const col = idx % COLS;
+        const row = Math.floor(idx / COLS);
+        const x = MARGIN + col * (cardW + GAP);
+        const y = MARGIN + HEADER_H + row * (cardH + GAP + 5);
+
+        /* Check if we need a new page */
+        if (y + cardH > PAGE_H - MARGIN && idx > 0 && row > 0) {
+          pdf.addPage();
+          pdf.setFillColor(15, 23, 40);
+          pdf.rect(0, 0, PAGE_W, PAGE_H, "F");
+        }
+
+        pdf.addImage(dataUrl, "JPEG", x, y, cardW, cardH);
+
+        /* Slot label below each card */
+        pdf.setFontSize(7);
+        pdf.setTextColor(150, 160, 180);
+        const slotLabel = slot === "OH" ? "Outside Hitter" : slot === "MB" ? "Middle Blocker" : slot === "OPP" ? "Opposite" : slot === "S" ? "Setter" : slot === "L" ? "Libero" : slot;
+        pdf.text(slotLabel.toUpperCase(), x + cardW / 2, y + cardH + 3.5, { align: "center" });
+      });
+
+      /* Footer */
+      pdf.setPage(pdf.getNumberOfPages());
+      pdf.setFontSize(7);
+      pdf.setTextColor(80, 90, 110);
+      pdf.text("Afrocat Volleyball Club • Generated " + new Date().toLocaleDateString(), PAGE_W / 2, PAGE_H - 3, { align: "center" });
+
+      pdf.save(`Afrocat_Team_of_Week_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (e) {
+      console.error("PDF generation failed", e);
+    } finally {
+      setTowPdfLoading(false);
+    }
+  }
 
   const createMut = useMutation({
     mutationFn: () => api.createAward(form),
@@ -520,7 +602,7 @@ export default function Awards() {
               </div>
             ) : (
               <>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
                     <h2 className="text-base font-display font-bold text-afrocat-text" data-testid="text-tow-title">
                       🏆 Team of the Week
@@ -529,15 +611,38 @@ export default function Awards() {
                       {teamOfWeek.weekLabel} · {teamOfWeek.matchCount} match{teamOfWeek.matchCount !== 1 ? "es" : ""} analysed
                     </p>
                   </div>
-                  <Badge className="bg-afrocat-teal/10 text-afrocat-teal border-afrocat-teal/30 text-xs">
-                    {teamOfWeek.players.length} players selected
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-afrocat-teal/10 text-afrocat-teal border-afrocat-teal/30 text-xs">
+                      {teamOfWeek.players.length} players
+                    </Badge>
+                    <Button
+                      size="sm"
+                      onClick={downloadTOWPdf}
+                      disabled={towPdfLoading}
+                      data-testid="button-download-tow-pdf"
+                      className="bg-afrocat-gold hover:bg-afrocat-gold/90 text-black font-bold text-xs gap-1.5"
+                    >
+                      {towPdfLoading ? (
+                        <><Loader2 size={13} className="animate-spin" /> Generating…</>
+                      ) : (
+                        <><Download size={13} /> Download PDF</>
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
                 {/* Position formation display */}
                 <div className="flex flex-wrap gap-5 justify-center" data-testid="grid-team-of-week">
                   {(teamOfWeek.players as any[]).map((p: any, i: number) => (
-                    <div key={p.playerId} className="flex flex-col items-center" data-testid={`card-tow-player-${p.playerId}`}>
+                    <div
+                      key={p.playerId}
+                      className="flex flex-col items-center"
+                      data-testid={`card-tow-player-${p.playerId}`}
+                      ref={el => {
+                        if (el) towCardRefs.current.set(p.playerId, el);
+                        else towCardRefs.current.delete(p.playerId);
+                      }}
+                    >
                       <PlayerCard
                         size="sm"
                         showDownload
@@ -561,10 +666,9 @@ export default function Awards() {
                   ))}
                 </div>
 
-                {/* Download all button */}
-                <div className="flex justify-center pt-2">
-                  <p className="text-xs text-afrocat-muted">Click "Download Card" under each player to save their FIFA-style card as JPEG.</p>
-                </div>
+                <p className="text-center text-[11px] text-afrocat-muted pt-1">
+                  Click <strong>Download PDF</strong> for the full team sheet, or the icon under each card to save individually.
+                </p>
               </>
             )}
           </div>
