@@ -15,6 +15,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { ALL_ENUMS, SKILL_TYPES, OUTCOME } from "./devstats/enums";
 import { generateDevelopmentReport } from "./devstats/report";
 import { generateO2BISPdf, validateLiberoRule, autoSelectLiberos } from "./o2bis";
+import { buildPlayerValuation, generatePlayerFinancePdf, generateTeamFinancePdf, generateClubFinancePdf } from "./financePdf";
 import { normalizeMatchStatus, addCountdown, enrichMatch } from "./match-utils";
 
 const TRAINING_SCHEDULE: Record<string, number[]> = {
@@ -8148,42 +8149,58 @@ th{background:#0d7377;color:white}
   // ─── FINANCE: PLAYER SUMMARY + VALUE + EXIT ──────────
   app.get("/api/finance/player/:playerId", requireAuth, async (req, res, next) => {
     try {
-      const player = await storage.getPlayer(req.params.playerId);
-      if (!player) return res.status(404).json({ error: "Player not found" });
-      const payments = await storage.getPlayerPayments(req.params.playerId);
-      const expenses = await storage.getPlayerExpenses(req.params.playerId);
-      const configs = await storage.getFeeConfigs();
-      const feeMap: Record<string, number> = {};
-      configs.forEach((c: any) => { feeMap[c.key] = parseInt(c.value) || 0; });
-
-      const membershipFee = player.employmentClass === "WORKING"
-        ? (feeMap.membershipFeeWorking || 800)
-        : (feeMap.membershipFeeNonWorking || 400);
-      const developmentFee = feeMap.developmentFee || 2500;
-      const resourceFee = feeMap.resourceFee || 1500;
-      const leagueFee = feeMap.leagueAffiliationFeePerPlayer || 0;
-      const totalFeesDue = membershipFee + developmentFee + resourceFee + leagueFee;
-
-      const approvedPayments = payments.filter((p: any) => p.status === "APPROVED");
-      const totalPaidByPlayer = approvedPayments.filter((p: any) => p.paidBy === "PLAYER").reduce((s: number, p: any) => s + p.amount, 0);
-      const totalPaidByOthers = approvedPayments.filter((p: any) => p.paidBy !== "PLAYER").reduce((s: number, p: any) => s + p.amount, 0);
-      const totalPaid = approvedPayments.reduce((s: number, p: any) => s + p.amount, 0);
-      const outstanding = Math.max(0, totalFeesDue - totalPaid);
-
-      const approvedExpenses = expenses.filter((e: any) => e.status === "APPROVED");
-      const clubExpenses = approvedExpenses.filter((e: any) => e.paidBy !== "PLAYER").reduce((s: number, e: any) => s + e.amount, 0);
-
-      const playerValue = totalPaidByOthers + clubExpenses;
-
+      const val = await buildPlayerValuation(req.params.playerId, storage);
+      if (!val) return res.status(404).json({ error: "Player not found" });
       res.json({
-        playerId: req.params.playerId,
-        playerName: `${player.firstName} ${player.lastName}`,
-        employmentClass: player.employmentClass || "NON_WORKING",
-        fees: { membership: membershipFee, development: developmentFee, resource: resourceFee, league: leagueFee, total: totalFeesDue },
-        totalPaid, totalPaidByPlayer, totalPaidByOthers, outstanding,
-        clubExpenses, playerValue,
-        payments, expenses,
+        playerId: val.playerId,
+        playerName: val.playerName,
+        employmentClass: val.employmentClass,
+        fees: val.fees,
+        totalPaid: val.totalPaid,
+        totalPaidByPlayer: val.totalPaidByPlayer,
+        totalPaidByOthers: val.totalPaidByOthers,
+        outstanding: val.outstanding,
+        clubExpenses: val.clubExpenses,
+        playerValue: val.clubInvestment,
+        clubValue: val.transferValue,
+        transferValue: val.transferValue,
+        valuationBreakdown: val.valuationBreakdown,
+        stats: val.stats,
+        perfScore: val.perfScore,
+        attendRate: val.attendRate,
+        ageMult: val.ageMult,
+        payments: val.payments,
+        expenses: val.expenses,
       });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/finance/player/:playerId/valuation-pdf", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const val = await buildPlayerValuation(req.params.playerId, storage);
+      if (!val) return res.status(404).json({ error: "Player not found" });
+      const buf = await generatePlayerFinancePdf(val);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Finance_${val.playerName.replace(/\s+/g, "_")}.pdf"`);
+      res.end(buf);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/finance/team/:teamId/valuation-pdf", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const buf = await generateTeamFinancePdf(req.params.teamId, storage);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Team_Finance_${req.params.teamId}.pdf"`);
+      res.end(buf);
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/finance/club/valuation-pdf", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const buf = await generateClubFinancePdf(storage);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Afrocat_Club_Finance_${new Date().toISOString().slice(0,10)}.pdf"`);
+      res.end(buf);
     } catch (e) { next(e); }
   });
 
@@ -8365,7 +8382,7 @@ th{background:#0d7377;color:white}
         };
       };
 
-      const playerRows = players.map(computePlayerRow).sort((a: any, b: any) => a.name.localeCompare(b.name));
+      const playerRows = players.map((p: any) => ({ ...computePlayerRow(p), teamId: p.teamId })).sort((a: any, b: any) => a.name.localeCompare(b.name));
 
       // Officials: active users with non-PLAYER roles who are in the club
       const officialRoles = ["ADMIN","COACH","ASSISTANT_COACH","MANAGER","STATISTICIAN","TRAINER","PHYSIOTHERAPIST","MEDIC","FINANCE"];

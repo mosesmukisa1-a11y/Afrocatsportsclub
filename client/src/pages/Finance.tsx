@@ -8,7 +8,8 @@ import { useState } from "react";
 import {
   DollarSign, Plus, Check, X, Settings, Users, FileText,
   ArrowUpRight, ArrowDownRight, Trash2, TrendingUp, Scale,
-  BarChart3, Receipt, Star, Printer, ChevronUp, ChevronDown
+  BarChart3, Receipt, Star, Printer, ChevronUp, ChevronDown,
+  Download, Info, Trophy, Activity, Calendar, Package
 } from "lucide-react";
 
 type Tab = "summary" | "payments" | "expenses" | "players" | "config" | "ledger" | "income-statement" | "balance-sheet" | "valuations";
@@ -82,6 +83,7 @@ export default function Finance() {
 
   const [valSort, setValSort] = useState<{ col: string; dir: "asc" | "desc" }>({ col: "transferValue", dir: "desc" });
   const [valFilter, setValFilter] = useState({ type: "ALL", search: "" });
+  const [selectedTeamPdf, setSelectedTeamPdf] = useState("");
 
   const getValField = (row: any, col: string): any => {
     if (col.includes(".")) { const [k1, k2] = col.split("."); return row[k1]?.[k2]; }
@@ -429,6 +431,7 @@ export default function Finance() {
 
             {playerFinance && (
               <div className="space-y-4">
+                {/* Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="afrocat-card p-4 text-center">
                     <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Total Due</div>
@@ -440,17 +443,84 @@ export default function Finance() {
                   </div>
                   <div className="afrocat-card p-4 text-center">
                     <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Outstanding</div>
-                    <div className="text-xl font-display font-bold text-red-400">{fmt(playerFinance.outstanding ?? 0)}</div>
+                    <div className={`text-xl font-display font-bold ${playerFinance.outstanding > 0 ? "text-red-400" : "text-green-400"}`}>{playerFinance.outstanding > 0 ? fmt(playerFinance.outstanding) : "PAID ✓"}</div>
                   </div>
                   <div className="afrocat-card p-4 text-center">
-                    <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Club Value</div>
-                    <div className="text-xl font-display font-bold text-afrocat-teal">{fmt(playerFinance.clubValue ?? 0)}</div>
+                    <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Transfer Value</div>
+                    <div className="text-xl font-display font-bold text-afrocat-gold">{fmt(playerFinance.transferValue ?? 0)}</div>
                   </div>
                 </div>
-                {(playerFinance.payments || []).length > 0 && (
+
+                {/* Fee Breakdown */}
+                <div className="afrocat-card p-4 space-y-2">
+                  <h4 className="font-bold text-sm text-afrocat-text mb-2 flex items-center gap-2"><Receipt className="w-4 h-4 text-afrocat-teal" /> Fee Breakdown</h4>
+                  {[
+                    { label: "Membership Fee", val: playerFinance.fees?.membership },
+                    { label: "Development Fee", val: playerFinance.fees?.development },
+                    { label: "Resource Fee", val: playerFinance.fees?.resource },
+                    ...(playerFinance.fees?.league > 0 ? [{ label: "League Affiliation Fee", val: playerFinance.fees?.league }] : []),
+                  ].map(row => (
+                    <div key={row.label} className="flex justify-between items-center py-1 border-b border-afrocat-border/30 last:border-0">
+                      <span className="text-xs text-afrocat-muted">{row.label}</span>
+                      <span className="text-xs font-bold text-afrocat-text">{fmt(row.val || 0)}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center pt-1 mt-1">
+                    <span className="text-xs font-bold text-afrocat-text">Total Due</span>
+                    <span className="text-sm font-display font-bold text-afrocat-teal">{fmt(playerFinance.fees?.total || 0)}</span>
+                  </div>
+                </div>
+
+                {/* Valuation Breakdown */}
+                {playerFinance.valuationBreakdown && (
+                  <div className="afrocat-card p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-sm text-afrocat-text flex items-center gap-2"><Trophy className="w-4 h-4 text-afrocat-gold" /> Transfer Value Calculation</h4>
+                      <span className="text-[10px] text-afrocat-muted italic">How the club value is determined</span>
+                    </div>
+                    <div className="space-y-2">
+                      {[
+                        { icon: <Package className="w-3.5 h-3.5" />, label: "1. Base Value", desc: playerFinance.valuationBreakdown.baseLabel, value: fmt(playerFinance.valuationBreakdown.baseValue), color: "text-afrocat-text" },
+                        { icon: <Calendar className="w-3.5 h-3.5" />, label: "2. Age Multiplier", desc: playerFinance.valuationBreakdown.ageLabel, value: `× ${playerFinance.valuationBreakdown.ageMult}`, color: "text-blue-400" },
+                        { icon: <Activity className="w-3.5 h-3.5" />, label: "3. Performance Score", desc: playerFinance.valuationBreakdown.perfLabel, value: `${playerFinance.valuationBreakdown.perfScore}/100`, color: "text-purple-400" },
+                        { icon: <Users className="w-3.5 h-3.5" />, label: "4. Attendance Rate", desc: playerFinance.valuationBreakdown.attendLabel, value: `${playerFinance.valuationBreakdown.attendRate}%`, color: "text-green-400" },
+                        { icon: <DollarSign className="w-3.5 h-3.5" />, label: "5. Club Investment", desc: "Equipment, fees & expenses paid by club", value: fmt(playerFinance.valuationBreakdown.clubInvestment), color: "text-afrocat-teal" },
+                      ].map((row, i) => (
+                        <div key={i} className="flex items-start justify-between gap-2 bg-afrocat-white-3 rounded-lg p-2.5">
+                          <div className="flex items-start gap-2">
+                            <span className="text-afrocat-muted mt-0.5">{row.icon}</span>
+                            <div>
+                              <div className="text-xs font-bold text-afrocat-gold">{row.label}</div>
+                              <div className="text-[10px] text-afrocat-muted leading-tight mt-0.5">{row.desc}</div>
+                            </div>
+                          </div>
+                          <span className={`text-sm font-display font-bold shrink-0 ${row.color}`}>{row.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="rounded-lg bg-afrocat-white-5 border border-afrocat-teal/30 p-3 space-y-1">
+                      <div className="text-[9px] text-afrocat-muted uppercase font-bold tracking-wider">Formula</div>
+                      <div className="text-[10px] text-afrocat-text font-mono leading-tight">{playerFinance.valuationBreakdown.formula}</div>
+                      <div className="flex items-center justify-between pt-1 border-t border-afrocat-border/30 mt-1">
+                        <span className="text-xs font-bold text-afrocat-teal">TRANSFER VALUE</span>
+                        <span className="text-lg font-display font-bold text-afrocat-gold">{fmt(playerFinance.transferValue ?? 0)}</span>
+                      </div>
+                    </div>
+                    {canManage && (
+                      <a href={`/api/finance/player/${selectedPlayerId}/valuation-pdf`} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-afrocat-teal/20 hover:bg-afrocat-teal/30 border border-afrocat-teal/40 text-afrocat-teal text-xs font-bold transition-all"
+                        data-testid="button-download-player-pdf">
+                        <Download className="w-3.5 h-3.5" /> Download Player Finance PDF
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {/* Payment History */}
+                {(playerFinance.payments || []).filter((p: any) => p.status === "APPROVED").length > 0 && (
                   <div className="afrocat-card p-4 space-y-2">
                     <h4 className="font-bold text-sm text-afrocat-text mb-2">Payment History</h4>
-                    {(playerFinance.payments || []).map((p: any) => (
+                    {(playerFinance.payments || []).filter((p: any) => p.status === "APPROVED").map((p: any) => (
                       <div key={p.id} className="flex justify-between items-center py-1.5 border-b border-afrocat-border/40 last:border-0">
                         <div>
                           <div className="text-xs font-medium text-afrocat-text">{p.feeType?.replace(/_/g, " ")} — {p.paymentDate}</div>
@@ -503,12 +573,44 @@ export default function Finance() {
                     className="flex-1 min-w-[180px] px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text"
                     data-testid="input-val-search"
                   />
+                  {/* Team PDF */}
+                  {valuations?.players && (() => {
+                    const teams = Array.from(new Map((valuations.players as any[]).filter(r => r.teamId).map((r: any) => [r.teamId, r.team])).entries());
+                    return teams.length > 0 ? (
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={selectedTeamPdf}
+                          onChange={e => setSelectedTeamPdf(e.target.value)}
+                          className="px-2 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-xs text-afrocat-text"
+                          data-testid="select-team-pdf"
+                        >
+                          <option value="">Team PDF…</option>
+                          {teams.map(([id, name]) => <option key={id as string} value={id as string}>{name as string}</option>)}
+                        </select>
+                        {selectedTeamPdf && (
+                          <a href={`/api/finance/team/${selectedTeamPdf}/valuation-pdf`} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-afrocat-teal/20 hover:bg-afrocat-teal/30 border border-afrocat-teal/40 text-afrocat-teal text-xs font-bold"
+                            data-testid="button-team-pdf">
+                            <Download className="w-3.5 h-3.5" /> Get
+                          </a>
+                        )}
+                      </div>
+                    ) : null;
+                  })()}
+                  <a
+                    href="/api/finance/club/valuation-pdf"
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-gold hover:bg-afrocat-gold/80 text-afrocat-dark text-sm font-bold"
+                    data-testid="button-club-finance-pdf"
+                  >
+                    <Download className="w-4 h-4" /> Club PDF
+                  </a>
                   <button
                     onClick={() => window.print()}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal hover:bg-afrocat-teal/80 text-white text-sm font-bold"
                     data-testid="button-val-print"
                   >
-                    <Printer className="w-4 h-4" /> Print Report
+                    <Printer className="w-4 h-4" /> Print
                   </button>
                 </div>
 
@@ -536,11 +638,12 @@ export default function Finance() {
                           {sortHeader("perfScore", "Perf Score")}
                           {sortHeader("attendRate", "Attend %")}
                           {sortHeader("transferValue", "Transfer Value")}
+                          <th className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted">PDF</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-afrocat-border">
                         {valPlayerRows.length === 0 && (
-                          <tr><td colSpan={11} className="py-8 text-center text-afrocat-muted text-sm">No players found.</td></tr>
+                          <tr><td colSpan={12} className="py-8 text-center text-afrocat-muted text-sm">No players found.</td></tr>
                         )}
                         {valPlayerRows.map((r: any, i: number) => {
                           const tv = r.transferValue ?? 0;
@@ -571,6 +674,14 @@ export default function Finance() {
                               <td className="px-3 py-2.5">
                                 <span className={tvTier}>{fmt(tv)}</span>
                                 {tv >= 15000 && <Star className="w-3 h-3 inline ml-1 text-afrocat-gold fill-current" />}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <a href={`/api/finance/player/${r.id}/valuation-pdf`} target="_blank" rel="noopener noreferrer"
+                                  title={`Download PDF for ${r.name}`}
+                                  className="inline-flex items-center justify-center w-7 h-7 rounded bg-afrocat-white-5 hover:bg-afrocat-teal/20 border border-afrocat-border hover:border-afrocat-teal/40 text-afrocat-muted hover:text-afrocat-teal transition-all"
+                                  data-testid={`button-player-pdf-${r.id}`}>
+                                  <Download className="w-3 h-3" />
+                                </a>
                               </td>
                             </tr>
                           );
