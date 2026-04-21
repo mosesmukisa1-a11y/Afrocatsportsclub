@@ -443,6 +443,7 @@ export default function Attendance() {
       queryClient.invalidateQueries({ queryKey: ["/api/attendance/sessions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/attendance/sessions/records", markSessionId] });
       queryClient.invalidateQueries({ queryKey: ["/api/attendance/pending-confirmations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/finance/player"] });
       toast({ title: superAdminEditing ? "Attendance updated" : "Attendance saved & closed" });
       setMarkSessionId(null);
       setAttendance({});

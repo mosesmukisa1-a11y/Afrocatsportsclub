@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { Search } from "lucide-react";
 import {
   DollarSign, Plus, Check, X, Settings, Users, FileText,
   ArrowUpRight, ArrowDownRight, Trash2, TrendingUp, Scale,
@@ -62,6 +63,8 @@ export default function Finance() {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showLedgerForm, setShowLedgerForm] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
+  const [playerSearch, setPlayerSearch] = useState("");
+  const isPlayerRole = user?.role === "PLAYER";
 
   const [payForm, setPayForm] = useState({ playerId: "", feeType: "MEMBERSHIP", amount: "", paidBy: "PLAYER", paidByName: "", reference: "", paymentDate: "" });
   const [expForm, setExpForm] = useState({ playerId: "", amount: "", paidBy: "CLUB", paidByName: "", reason: "TRANSPORT", notes: "", expenseDate: "" });
@@ -75,7 +78,20 @@ export default function Finance() {
   const { data: expenses = [] } = useQuery({ queryKey: ["/api/finance/expenses"], queryFn: () => api.getFinanceExpenses() });
   const { data: feeConfig = {} } = useQuery({ queryKey: ["/api/finance/fee-config"], queryFn: api.getFeeConfig });
   const { data: summary } = useQuery({ queryKey: ["/api/finance/summary"], queryFn: () => api.getFinanceSummary(), enabled: !!canManage });
-  const { data: playerFinance } = useQuery({ queryKey: ["/api/finance/player", selectedPlayerId], queryFn: () => api.getPlayerFinance(selectedPlayerId), enabled: !!selectedPlayerId });
+  const { data: playerFinance } = useQuery({
+    queryKey: ["/api/finance/player", selectedPlayerId],
+    queryFn: () => api.getPlayerFinance(selectedPlayerId),
+    enabled: !!selectedPlayerId,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+  });
+
+  useEffect(() => {
+    if (isPlayerRole && user?.playerId && !selectedPlayerId) {
+      setSelectedPlayerId(user.playerId);
+    }
+  }, [isPlayerRole, user?.playerId]);
 
   const [stmtFrom, setStmtFrom] = useState("");
   const [stmtTo, setStmtTo] = useState("");
@@ -139,6 +155,16 @@ export default function Finance() {
   const sortedPlayers = [...players].sort((a: any, b: any) =>
     `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())
   );
+
+  const filteredDropdownPlayers = useMemo(() => {
+    if (!playerSearch.trim()) return sortedPlayers;
+    const q = playerSearch.toLowerCase();
+    return sortedPlayers.filter((p: any) =>
+      `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
+      String(p.jerseyNo || "").includes(q) ||
+      (p.position || "").toLowerCase().includes(q)
+    );
+  }, [sortedPlayers, playerSearch]);
 
   const createPaymentMut = useMutation({
     mutationFn: (data: any) => api.createFinancePayment(data),
@@ -440,12 +466,49 @@ export default function Finance() {
 
         {activeTab === "players" && (
           <div className="space-y-4">
-            <div className="afrocat-card p-4">
-              <Select value={selectedPlayerId} onValueChange={setSelectedPlayerId}>
-                <SelectTrigger data-testid="select-player-finance"><SelectValue placeholder="Select a player to view finances" /></SelectTrigger>
-                <SelectContent>{sortedPlayers.map((p: any) => <SelectItem key={p.id} value={p.id}>{p.firstName} {p.lastName} (#{p.jerseyNo})</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
+            {isPlayerRole ? (
+              <div className="afrocat-card p-4 flex items-center gap-3">
+                <Users className="w-5 h-5 text-afrocat-teal" />
+                <div>
+                  <div className="text-xs text-afrocat-muted uppercase font-bold">Your Finance Profile</div>
+                  <div className="text-sm font-medium text-afrocat-text">
+                    {playerFinance?.playerName || "Loading your data…"}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="afrocat-card p-4 space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-afrocat-muted pointer-events-none" />
+                  <input
+                    value={playerSearch}
+                    onChange={e => setPlayerSearch(e.target.value)}
+                    placeholder="Search players by name, #, or position…"
+                    className="w-full pl-9 pr-4 py-2 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal"
+                    data-testid="input-player-finance-search"
+                  />
+                </div>
+                <div className="max-h-52 overflow-y-auto rounded-xl border border-afrocat-border divide-y divide-afrocat-border/40" data-testid="list-player-finance-picker">
+                  {filteredDropdownPlayers.length === 0 ? (
+                    <div className="px-4 py-3 text-xs text-afrocat-muted text-center">No players found</div>
+                  ) : filteredDropdownPlayers.map((p: any) => (
+                    <button key={p.id}
+                      onClick={() => setSelectedPlayerId(p.id)}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-left cursor-pointer ${selectedPlayerId === p.id ? "bg-afrocat-teal/15 text-afrocat-teal font-semibold" : "text-afrocat-text hover:bg-afrocat-white-5"}`}
+                      data-testid={`item-player-finance-${p.id}`}>
+                      <span className="w-7 h-7 rounded-full bg-afrocat-gold-soft text-afrocat-gold text-xs font-bold flex items-center justify-center shrink-0">
+                        {p.jerseyNo || "—"}
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block font-medium truncate">{p.lastName}, {p.firstName}</span>
+                        <span className="block text-[10px] text-afrocat-muted truncate">{p.position || "—"} · {p.gender || ""}</span>
+                      </span>
+                      {selectedPlayerId === p.id && <Check className="w-4 h-4 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {playerFinance && (
               <div className="space-y-4">
@@ -464,8 +527,14 @@ export default function Finance() {
                     <div className={`text-xl font-display font-bold ${playerFinance.outstanding > 0 ? "text-red-400" : "text-green-400"}`}>{playerFinance.outstanding > 0 ? fmt(playerFinance.outstanding) : "PAID ✓"}</div>
                   </div>
                   <div className="afrocat-card p-4 text-center">
-                    <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Transfer Value</div>
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <span className="text-xs text-afrocat-muted uppercase font-bold">Transfer Value</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-afrocat-green-soft text-afrocat-green text-[9px] font-bold tracking-wider flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-afrocat-green animate-pulse inline-block" />LIVE
+                      </span>
+                    </div>
                     <div className="text-xl font-display font-bold text-afrocat-gold">{fmt(playerFinance.transferValue ?? 0)}</div>
+                    <div className="text-[9px] text-afrocat-muted mt-1">Updates with stats &amp; attendance</div>
                   </div>
                 </div>
 
@@ -494,7 +563,9 @@ export default function Finance() {
                   <div className="afrocat-card p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="font-bold text-sm text-afrocat-text flex items-center gap-2"><Trophy className="w-4 h-4 text-afrocat-gold" /> Transfer Value Calculation</h4>
-                      <span className="text-[10px] text-afrocat-muted italic">How the club value is determined</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-afrocat-green-soft text-afrocat-green text-[9px] font-bold tracking-wider flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-afrocat-green animate-pulse inline-block" />LIVE
+                      </span>
                     </div>
                     <div className="space-y-2">
                       {[

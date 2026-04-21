@@ -286,6 +286,7 @@ export default function TouchStats() {
       queryClient.invalidateQueries({ queryKey: ["/api/matches/stats-touch/init", selectedMatchId, selectedTeamId] });
       queryClient.invalidateQueries({ queryKey: ["/api/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/finance/player"] });
       toast({ title: "Stats Synced!", description: `${data.synced} player stats saved. Match duration recorded.` });
     },
     onError: (err: any) => toast({ title: "Sync Failed", description: err.message, variant: "destructive" }),
