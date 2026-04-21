@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { toJpeg } from "html-to-image";
 import { Download, Loader2 } from "lucide-react";
 
@@ -27,6 +27,22 @@ interface PlayerCardData {
   badgeColor?: "gold" | "teal" | "purple";
 }
 
+/** Converts any image URL to a base64 data URL so html-to-image can capture it. */
+async function toDataUrl(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, { cache: "force-cache" });
+    const blob = await response.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return url;
+  }
+}
+
 function Stars({ count, max = 5, color = "#EFC42C" }: { count: number; max?: number; color?: string }) {
   return (
     <div style={{ display: "flex", gap: 2 }}>
@@ -51,22 +67,46 @@ interface PlayerCardProps {
 export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
 
   const W = size === "sm" ? 220 : size === "lg" ? 360 : 280;
   const H = Math.round(W * 1.4);
   const scale = W / 280;
-
   const s = (n: number) => Math.round(n * scale);
+
+  const { photoUrl } = data;
+
+  /* Pre-load player photo as base64 so html-to-image can embed it */
+  useEffect(() => {
+    setPhotoDataUrl(null);
+    if (!photoUrl) return;
+    let cancelled = false;
+    toDataUrl(photoUrl).then(url => {
+      if (!cancelled) setPhotoDataUrl(url);
+    });
+    return () => { cancelled = true; };
+  }, [photoUrl]);
 
   const handleDownload = async () => {
     if (!cardRef.current) return;
     setDownloading(true);
     try {
+      /* Ensure photo is loaded before capture */
+      let imgSrc = photoDataUrl;
+      if (!imgSrc && photoUrl) {
+        imgSrc = await toDataUrl(photoUrl);
+        setPhotoDataUrl(imgSrc);
+        await new Promise(r => setTimeout(r, 80)); // let React re-render
+      }
+
       const dataUrl = await toJpeg(cardRef.current, {
         quality: 0.97,
         pixelRatio: 3,
         backgroundColor: "#0F1728",
+        /* Skip external resources — we've already embedded them */
+        fetchRequestInit: { cache: "force-cache" },
       });
+
       const a = document.createElement("a");
       a.href = dataUrl;
       a.download = `${data.playerName.replace(/\s+/g, "_")}_card.jpg`;
@@ -84,7 +124,6 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
     playerName,
     position,
     jerseyNo,
-    photoUrl,
     teamName = "AFROCAT VC",
     badge = "PLAYER",
     badgeColor = "gold",
@@ -104,9 +143,12 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
     { label: "BLK", val: stats.blocks ?? 0, stars: stars.blk },
   ];
 
+  /* The image source — use data URL if ready, else fall back to original URL */
+  const imgSrc = photoDataUrl || photoUrl;
+
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-      {/* THE CARD */}
+      {/* ══ THE CARD ══ */}
       <div
         ref={cardRef}
         data-testid={`player-card-${playerName.replace(/\s+/g, "-").toLowerCase()}`}
@@ -122,45 +164,42 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
           flexShrink: 0,
         }}
       >
-        {/* ── PAINT SPLASH BACKGROUND ── */}
-        {/* Teal splash — top left diagonal */}
+        {/* ── Paint splash layers ── */}
         <div style={{
           position: "absolute", top: s(-30), left: s(-40), width: s(210), height: s(320),
           background: "linear-gradient(135deg, #15A09B 0%, #0d7377 100%)",
           transform: "rotate(-18deg)", opacity: 0.75, borderRadius: s(12),
         }} />
-        {/* Gold splash — top right */}
         <div style={{
           position: "absolute", top: s(-50), right: s(-30), width: s(180), height: s(280),
           background: "linear-gradient(135deg, #EFC42C 0%, #d4a017 100%)",
           transform: "rotate(14deg)", opacity: 0.6, borderRadius: s(12),
         }} />
-        {/* Dark green accent — middle */}
         <div style={{
           position: "absolute", top: s(60), left: s(80), width: s(160), height: s(200),
           background: "linear-gradient(135deg, #1a4731 0%, #0f2e1f 100%)",
           transform: "rotate(-8deg)", opacity: 0.5, borderRadius: s(8),
         }} />
-        {/* Extra teal shimmer diagonal */}
         <div style={{
           position: "absolute", bottom: s(100), right: s(-20), width: s(120), height: s(180),
           background: "linear-gradient(135deg, #15A09B 0%, transparent 100%)",
           transform: "rotate(25deg)", opacity: 0.3, borderRadius: s(8),
         }} />
 
-        {/* ── PLAYER PHOTO ── */}
-        {photoUrl ? (
+        {/* ── Player photo (always use base64 src for capture) ── */}
+        {imgSrc ? (
           <img
-            src={photoUrl}
+            src={imgSrc}
             alt={playerName}
             style={{
               position: "absolute",
               top: 0, left: 0, width: "100%", height: "65%",
               objectFit: "cover", objectPosition: "top center",
+              display: "block",
             }}
-            crossOrigin="anonymous"
           />
         ) : (
+          /* Placeholder initials when no photo */
           <div style={{
             position: "absolute", top: 0, left: 0, width: "100%", height: "65%",
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -169,61 +208,63 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
               width: s(90), height: s(90), borderRadius: "50%",
               background: "rgba(255,255,255,0.1)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: s(32), fontWeight: 900, color: "rgba(255,255,255,0.4)",
+              fontSize: s(32), fontWeight: 900, color: "rgba(255,255,255,0.5)",
             }}>
               {playerName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
             </div>
           </div>
         )}
 
-        {/* Photo-to-bottom gradient */}
+        {/* Photo-to-stats gradient overlay */}
         <div style={{
-          position: "absolute", top: "30%", left: 0, right: 0, bottom: 0,
-          background: "linear-gradient(to bottom, transparent 0%, rgba(15,23,40,0.85) 30%, rgba(15,23,40,0.98) 60%, #0F1728 100%)",
+          position: "absolute", top: "28%", left: 0, right: 0, bottom: 0,
+          background: "linear-gradient(to bottom, transparent 0%, rgba(15,23,40,0.82) 28%, rgba(15,23,40,0.97) 56%, #0F1728 100%)",
         }} />
 
-        {/* ── JERSEY BADGE ── */}
+        {/* ── Jersey badge (top-right) ── */}
         <div style={{
           position: "absolute", top: s(10), right: s(10),
           width: s(36), height: s(36), borderRadius: "50%",
           background: "rgba(15,23,40,0.85)",
           border: `${s(2)}px solid ${badgeBg}`,
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: s(13), fontWeight: 900, color: badgeBg, backdropFilter: "blur(4px)",
+          fontSize: s(13), fontWeight: 900, color: badgeBg,
         }}>
           {jerseyNo ?? "—"}
         </div>
 
-        {/* ── AWARD BADGE ── */}
+        {/* ── Award badge (top-left) ── */}
         <div style={{
           position: "absolute", top: s(10), left: s(10),
           padding: `${s(3)}px ${s(8)}px`,
           borderRadius: s(20),
-          background: `${badgeBg}22`,
-          border: `${s(1)}px solid ${badgeBg}66`,
-          backdropFilter: "blur(6px)",
+          background: `${badgeBg}20`,
+          border: `${s(1)}px solid ${badgeBg}55`,
         }}>
-          <span style={{ fontSize: s(8), fontWeight: 800, color: badgeBg, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+          <span style={{
+            fontSize: s(8), fontWeight: 800, color: badgeBg,
+            letterSpacing: "0.1em", textTransform: "uppercase" as const,
+          }}>
             {badge}
           </span>
         </div>
 
-        {/* ── BOTTOM STATS SECTION ── */}
+        {/* ── Bottom stats section ── */}
         <div style={{
           position: "absolute", bottom: 0, left: 0, right: 0,
           padding: `${s(10)}px ${s(12)}px ${s(12)}px`,
         }}>
-          {/* Star ratings row */}
+          {/* Star rating rows */}
           <div style={{
             display: "flex", justifyContent: "space-between",
             marginBottom: s(8),
             padding: `${s(6)}px ${s(4)}px`,
             borderRadius: s(8),
-            background: "rgba(255,255,255,0.05)",
-            border: "1px solid rgba(255,255,255,0.06)",
+            background: "rgba(0,0,0,0.35)",
+            border: "1px solid rgba(255,255,255,0.07)",
           }}>
             {statRow.map(row => (
-              <div key={row.label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: s(2) }}>
+              <div key={row.label} style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: s(2) }}>
                 <Stars count={row.stars} color={badgeBg} />
                 <span style={{ fontSize: s(8), fontWeight: 700, color: "rgba(255,255,255,0.4)", letterSpacing: "0.05em" }}>
                   {row.label}
@@ -235,25 +276,24 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
           {/* Player name */}
           <div style={{
             fontSize: s(17), fontWeight: 900, color: "#FFFFFF",
-            letterSpacing: "0.04em", textTransform: "uppercase",
+            letterSpacing: "0.04em", textTransform: "uppercase" as const,
             lineHeight: 1.1, marginBottom: s(2),
-            textShadow: "0 2px 8px rgba(0,0,0,0.8)",
           }}>
             {playerName}
           </div>
 
-          {/* Position | Stats summary */}
+          {/* Position + quick stats line */}
           <div style={{
             fontSize: s(9), fontWeight: 600, color: badgeBg,
-            letterSpacing: "0.08em", marginBottom: s(7),
-            textTransform: "uppercase",
+            letterSpacing: "0.07em", marginBottom: s(7),
+            textTransform: "uppercase" as const,
           }}>
             {position || "PLAYER"}
-            {stats.matches && stats.matches > 0 ? (
-              <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 400 }}>
-                {" "}| {stats.kills ?? 0}K · {stats.aces ?? 0}A · {stats.blocks ?? 0}BLK · {stats.digs ?? 0}DIG
+            {(stats.matches ?? 0) > 0 && (
+              <span style={{ color: "rgba(255,255,255,0.35)", fontWeight: 400 }}>
+                {" "}· {stats.kills ?? 0}K {stats.aces ?? 0}A {stats.blocks ?? 0}BLK {stats.digs ?? 0}DIG
               </span>
-            ) : null}
+            )}
           </div>
 
           {/* Club footer */}
@@ -263,17 +303,16 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
             paddingTop: s(6),
           }}>
             <div>
-              <div style={{ fontSize: s(8), fontWeight: 800, color: "rgba(255,255,255,0.5)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              <div style={{ fontSize: s(8), fontWeight: 800, color: "rgba(255,255,255,0.5)", letterSpacing: "0.12em", textTransform: "uppercase" as const }}>
                 {teamName}
               </div>
-              <div style={{ fontSize: s(7), color: "rgba(255,255,255,0.3)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              <div style={{ fontSize: s(7), color: "rgba(255,255,255,0.28)", letterSpacing: "0.05em", textTransform: "uppercase" as const }}>
                 AFROCAT VOLLEYBALL CLUB
               </div>
             </div>
-            {/* Small volleyball icon */}
             <div style={{
               width: s(22), height: s(22), borderRadius: "50%",
-              background: "radial-gradient(circle at 35% 35%, rgba(239,196,44,0.3), rgba(21,160,155,0.2))",
+              background: "radial-gradient(circle at 35% 35%, rgba(239,196,44,0.25), rgba(21,160,155,0.2))",
               border: `${s(1)}px solid rgba(255,255,255,0.15)`,
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: s(12),
@@ -281,7 +320,7 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
           </div>
         </div>
 
-        {/* Corner accent — top left */}
+        {/* Corner accents */}
         <div style={{
           position: "absolute", top: 0, left: 0,
           width: s(40), height: s(40),
@@ -289,12 +328,11 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
           borderLeft: `${s(3)}px solid ${badgeBg}`,
           borderRadius: `${s(18)}px 0 0 0`,
         }} />
-        {/* Corner accent — bottom right */}
         <div style={{
           position: "absolute", bottom: 0, right: 0,
           width: s(30), height: s(30),
-          borderBottom: `${s(2)}px solid rgba(255,255,255,0.15)`,
-          borderRight: `${s(2)}px solid rgba(255,255,255,0.15)`,
+          borderBottom: `${s(2)}px solid rgba(255,255,255,0.12)`,
+          borderRight: `${s(2)}px solid rgba(255,255,255,0.12)`,
           borderRadius: `0 0 ${s(18)}px 0`,
         }} />
       </div>
@@ -307,13 +345,15 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
           data-testid={`btn-download-card-${playerName.replace(/\s+/g, "-").toLowerCase()}`}
           style={{
             display: "flex", alignItems: "center", gap: 6,
-            padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+            padding: "6px 14px", borderRadius: 8, cursor: downloading ? "wait" : "pointer",
             background: "rgba(21,160,155,0.15)", border: "1px solid rgba(21,160,155,0.4)",
-            color: "#15A09B", fontSize: 12, fontWeight: 600, transition: "all 0.2s",
+            color: "#15A09B", fontSize: 12, fontWeight: 600,
           }}
         >
-          {downloading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-          Download Card
+          {downloading
+            ? <><Loader2 size={13} className="animate-spin" /> Generating…</>
+            : <><Download size={13} /> Download Card</>
+          }
         </button>
       )}
     </div>
