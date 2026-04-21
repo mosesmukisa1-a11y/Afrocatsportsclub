@@ -1122,6 +1122,7 @@ export async function registerRoutes(
         email: body.email,
         passwordHash,
         role: body.role,
+        roles: [body.role] as any,
         playerId,
         emailVerified: true,
         accountStatus: "ACTIVE",
@@ -1794,23 +1795,30 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
   app.get("/api/staff-eligible-users", requireAuth, async (_req, res, next) => {
     try {
       const users = await storage.getAllUsers();
-      const isCoach = (u: any) =>
-        u.role === "COACH" || (Array.isArray(u.roles) && u.roles.includes("COACH"));
-      const isMedic = (u: any) =>
-        u.role === "MEDICAL" || (Array.isArray(u.roles) && u.roles.includes("MEDICAL"));
-      const isManager = (u: any) =>
-        u.role === "MANAGER" || (Array.isArray(u.roles) && u.roles.includes("MANAGER")) || u.role === "ADMIN";
+      // Defensive parse: handles null, empty array, JS array, or PostgreSQL string "{A,B}"
+      const parseRoles = (roles: any): string[] => {
+        if (!roles) return [];
+        if (Array.isArray(roles)) return roles.filter(Boolean);
+        if (typeof roles === "string") {
+          return roles.replace(/^\{|\}$/g, "").split(",").map(s => s.trim()).filter(Boolean);
+        }
+        return [];
+      };
+      const hasRole = (u: any, role: string): boolean => {
+        return u.role === role || parseRoles(u.roles).includes(role);
+      };
       const eligible = users
         .filter((u: any) => u.accountStatus === "APPROVED" || u.accountStatus === "ACTIVE" || !u.accountStatus || u.isSuperAdmin)
         .map((u: any) => ({
           id: u.id,
           fullName: u.fullName,
           role: u.role,
-          roles: u.roles || [],
-          isCoach: isCoach(u),
-          isMedic: isMedic(u),
-          isManager: isManager(u),
-        }));
+          roles: parseRoles(u.roles),
+          isCoach: hasRole(u, "COACH"),
+          isMedic: hasRole(u, "MEDICAL"),
+          isManager: hasRole(u, "MANAGER") || u.role === "ADMIN" || parseRoles(u.roles).includes("ADMIN"),
+        }))
+        .sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
       res.json(eligible);
     } catch (e) { next(e); }
   });
@@ -2607,9 +2615,16 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
   // Coach users list for assignment picker
   app.get("/api/users/coaches", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
     try {
-      const users = await storage.getUsers();
+      const users = await storage.getAllUsers();
+      const parseRoles = (roles: any): string[] => {
+        if (!roles) return [];
+        if (Array.isArray(roles)) return roles.filter(Boolean);
+        if (typeof roles === "string") return roles.replace(/^\{|\}$/g, "").split(",").map(s => s.trim()).filter(Boolean);
+        return [];
+      };
       const coaches = users
-        .filter((u: any) => u.role === "COACH" || (u.roles as string[] || []).includes("COACH"))
+        .filter((u: any) => u.role === "COACH" || parseRoles(u.roles).includes("COACH"))
+        .filter((u: any) => u.accountStatus === "ACTIVE" || u.accountStatus === "APPROVED" || !u.accountStatus || u.isSuperAdmin)
         .map((u: any) => ({ id: u.id, fullName: u.fullName, email: u.email, photoUrl: u.photoUrl || null }))
         .sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
       res.json(coaches);
@@ -7019,7 +7034,8 @@ th{background:#0d7377;color:white}
     }
 
     const allUsers = await storage.getUsers();
-    const coaches = allUsers.filter((u: any) => u.role === "ADMIN" || u.role === "COACH" || (u.roles && (u.roles.includes("ADMIN") || u.roles.includes("COACH"))));
+    const _parseR = (r: any): string[] => !r ? [] : Array.isArray(r) ? r : typeof r === "string" ? r.replace(/^\{|\}$/g, "").split(",").map((s: string) => s.trim()).filter(Boolean) : [];
+    const coaches = allUsers.filter((u: any) => u.role === "ADMIN" || u.role === "COACH" || _parseR(u.roles).includes("ADMIN") || _parseR(u.roles).includes("COACH"));
     for (const c of coaches) {
       try {
         await storage.createNotification({ userId: c.id, type: "MATCH_SELECTION", title: "Match Report Ready", message: `Stats finalized for ${matchLabel}. Check coach dashboard for player alerts and training focus.`, metadata: { matchId } });
@@ -7566,7 +7582,8 @@ th{background:#0d7377;color:white}
         for (const p of teamPlayers) {
           if (p.userId) teamPlayerUserIds.add(p.userId);
         }
-        targetUsers = allUsers.filter(u => teamPlayerUserIds.has(u.id) || (u.roles as string[] || []).some(r => ["ADMIN","MANAGER","COACH"].includes(r)));
+        const _pR = (r: any): string[] => !r ? [] : Array.isArray(r) ? r : typeof r === "string" ? r.replace(/^\{|\}$/g, "").split(",").map((s: string) => s.trim()).filter(Boolean) : [];
+        targetUsers = allUsers.filter((u: any) => teamPlayerUserIds.has(u.id) || ["ADMIN","MANAGER","COACH"].includes(u.role) || _pR(u.roles).some((r: string) => ["ADMIN","MANAGER","COACH"].includes(r)));
       }
 
       for (const u of targetUsers) {
