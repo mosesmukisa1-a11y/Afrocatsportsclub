@@ -1793,18 +1793,21 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
       const playerMap = new Map(allPlayers.map((p: any) => [p.id, p]));
 
       const now = new Date();
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const sevenDaysAgoStr = sevenDaysAgo.toISOString().slice(0, 10);
+      const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+      const fourteenDaysAgoStr = fourteenDaysAgo.toISOString().slice(0, 10);
 
-      const recentMatches = allMatches.filter((m: any) => {
-        if (!m.matchDate || m.matchDate < sevenDaysAgoStr) return false;
-        const day = new Date(m.matchDate + "T12:00:00").getDay();
-        return day === 5 || day === 6 || day === 0;
-      });
+      /* Any match in the last 14 days (no day-of-week restriction) */
+      const recentMatches = allMatches.filter((m: any) =>
+        m.matchDate && m.matchDate >= fourteenDaysAgoStr
+      );
 
+      /* Fall back to the most recent 10 matches if nothing in the window */
+      const sortedAll = [...allMatches].sort((a: any, b: any) =>
+        (b.matchDate || "").localeCompare(a.matchDate || "")
+      );
       const targetMatchIds = recentMatches.length > 0
         ? new Set(recentMatches.map((m: any) => m.id))
-        : new Set(allMatches.slice(-10).map((m: any) => m.id));
+        : new Set(sortedAll.slice(0, 10).map((m: any) => m.id));
 
       const allStats = await db.select().from(schema.playerMatchStats);
       const weekStats = allStats.filter((s: any) => targetMatchIds.has(s.matchId));
@@ -1921,8 +1924,8 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
       });
 
       const weekLabel = recentMatches.length > 0
-        ? `Weekend ${recentMatches[0]?.matchDate || "this week"}`
-        : "Last 10 Matches";
+        ? `Recent Matches (last 14 days)`
+        : "All-Time Best (last 10 matches)";
       res.json({ players: result, weekLabel, matchCount: targetMatchIds.size });
     } catch (e) { next(e); }
   });

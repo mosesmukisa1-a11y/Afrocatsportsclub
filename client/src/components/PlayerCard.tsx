@@ -258,23 +258,33 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
           position: "absolute", bottom: 0, left: 0, right: 0,
           padding: `${s(10)}px ${s(12)}px ${s(12)}px`,
         }}>
-          {/* Star rating rows */}
+          {/* FIFA-style numeric stat boxes */}
           <div style={{
             display: "flex", justifyContent: "space-between",
             marginBottom: s(8),
-            padding: `${s(6)}px ${s(4)}px`,
+            padding: `${s(5)}px ${s(6)}px`,
             borderRadius: s(8),
-            background: "rgba(0,0,0,0.35)",
-            border: "1px solid rgba(255,255,255,0.07)",
+            background: "rgba(0,0,0,0.45)",
+            border: "1px solid rgba(255,255,255,0.09)",
+            gap: s(2),
           }}>
-            {statRow.map(row => (
-              <div key={row.label} style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: s(2) }}>
-                <Stars count={row.stars} color={badgeBg} />
-                <span style={{ fontSize: s(8), fontWeight: 700, color: "rgba(255,255,255,0.4)", letterSpacing: "0.05em" }}>
-                  {row.label}
-                </span>
-              </div>
-            ))}
+            {statRow.map(row => {
+              /* Scale 1–5 stars to a FIFA-style 40–99 rating */
+              const fifaRating = Math.round(40 + (row.stars - 1) * 14.75);
+              return (
+                <div key={row.label} style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: s(1), flex: 1 }}>
+                  <span style={{
+                    fontSize: s(16), fontWeight: 900, color: badgeBg, lineHeight: 1,
+                    letterSpacing: "-0.02em",
+                  }}>
+                    {fifaRating}
+                  </span>
+                  <span style={{ fontSize: s(7), fontWeight: 700, color: "rgba(255,255,255,0.45)", letterSpacing: "0.06em" }}>
+                    {row.label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
 
           {/* Player name */}

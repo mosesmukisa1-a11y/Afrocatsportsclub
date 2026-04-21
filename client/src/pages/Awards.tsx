@@ -235,26 +235,26 @@ export default function Awards() {
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex gap-1 border-b border-afrocat-border overflow-x-auto">
+        {/* Tabs — wrap to 2 rows on narrow screens so all tabs are always visible */}
+        <div className="flex flex-wrap gap-x-0 gap-y-0 border-b border-afrocat-border">
           {[
-            { key: "match-mvps"   as AwardTab, label: `Match MVPs (${totalMvps})`,         icon: Star },
-            { key: "leaders"      as AwardTab, label: "Stats Leaders",                      icon: BarChart3 },
-            { key: "club-awards"  as AwardTab, label: `Club Awards (${clubAwards.length})`, icon: Trophy },
-            { key: "team-of-week" as AwardTab, label: "Team of the Week",                   icon: Users },
-            { key: "mvp-cards"    as AwardTab, label: "MVP Cards",                          icon: Medal },
+            { key: "match-mvps"   as AwardTab, label: `MVPs (${totalMvps})`,       icon: Star },
+            { key: "leaders"      as AwardTab, label: "Leaders",                    icon: BarChart3 },
+            { key: "club-awards"  as AwardTab, label: `Awards (${clubAwards.length})`, icon: Trophy },
+            { key: "team-of-week" as AwardTab, label: "Team of Week",               icon: Users },
+            { key: "mvp-cards"    as AwardTab, label: "MVP Cards",                  icon: Medal },
           ].map(t => (
             <button
               key={t.key}
               data-testid={`tab-${t.key}`}
               onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 cursor-pointer ${
+              className={`flex items-center gap-1 px-3 py-2.5 text-xs font-semibold whitespace-nowrap transition-colors border-b-2 cursor-pointer ${
                 tab === t.key
                   ? "border-afrocat-gold text-afrocat-gold"
                   : "border-transparent text-afrocat-muted hover:text-afrocat-text"
               }`}
             >
-              <t.icon size={13} /> {t.label}
+              <t.icon size={12} /> {t.label}
             </button>
           ))}
         </div>
