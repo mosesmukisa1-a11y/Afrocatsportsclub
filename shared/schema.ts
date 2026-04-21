@@ -826,13 +826,22 @@ export const playerInterviews = pgTable("player_interviews", {
   answers: text("answers").array().notNull(),
   tags: text("tags").array(),
   featured: boolean("featured").default(false),
+  likesCount: integer("likes_count").notNull().default(0),
+  viewCount: integer("view_count").notNull().default(0),
   publishedBy: varchar("published_by", { length: 36 }).notNull(),
   publishedAt: timestamp("published_at").defaultNow(),
 });
 
-export const insertPlayerInterviewSchema = createInsertSchema(playerInterviews).omit({ id: true, publishedAt: true });
+export const insertPlayerInterviewSchema = createInsertSchema(playerInterviews).omit({ id: true, publishedAt: true, likesCount: true, viewCount: true });
 export type InsertPlayerInterview = z.infer<typeof insertPlayerInterviewSchema>;
 export type PlayerInterview = typeof playerInterviews.$inferSelect;
+
+export const interviewLikes = pgTable("interview_likes", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  interviewId: varchar("interview_id", { length: 36 }).notNull(),
+  userId: varchar("user_id", { length: 36 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
 
 export const trainingSessions = pgTable("training_sessions", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),

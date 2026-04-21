@@ -8792,6 +8792,56 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  // ─── INTERVIEW LIKES ────────────────────────────────
+  app.post("/api/interviews/:id/like", requireAuth, async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const userId = req.user!.userId;
+      const [existing] = await db.select().from(schema.interviewLikes)
+        .where(and(eq(schema.interviewLikes.interviewId, id), eq(schema.interviewLikes.userId, userId)));
+      if (existing) {
+        await db.delete(schema.interviewLikes)
+          .where(and(eq(schema.interviewLikes.interviewId, id), eq(schema.interviewLikes.userId, userId)));
+        await db.update(schema.playerInterviews)
+          .set({ likesCount: sql`GREATEST(0, ${schema.playerInterviews.likesCount} - 1)` })
+          .where(eq(schema.playerInterviews.id, id));
+        return res.json({ liked: false });
+      }
+      await db.insert(schema.interviewLikes).values({ interviewId: id, userId });
+      await db.update(schema.playerInterviews)
+        .set({ likesCount: sql`${schema.playerInterviews.likesCount} + 1` })
+        .where(eq(schema.playerInterviews.id, id));
+      res.json({ liked: true });
+    } catch (e) { next(e); }
+  });
+
+  app.post("/api/interviews/:id/view", requireAuth, async (req, res, next) => {
+    try {
+      await db.update(schema.playerInterviews)
+        .set({ viewCount: sql`${schema.playerInterviews.viewCount} + 1` })
+        .where(eq(schema.playerInterviews.id, req.params.id));
+      res.json({ ok: true });
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/interviews/:id/my-like", requireAuth, async (req, res, next) => {
+    try {
+      const [existing] = await db.select().from(schema.interviewLikes)
+        .where(and(eq(schema.interviewLikes.interviewId, req.params.id), eq(schema.interviewLikes.userId, req.user!.userId)));
+      res.json({ liked: !!existing });
+    } catch (e) { next(e); }
+  });
+
+  // ─── BULK LIKES CHECK (for list page) ─────────────────
+  app.get("/api/interviews-my-likes", requireAuth, async (req, res, next) => {
+    try {
+      const likes = await db.select({ interviewId: schema.interviewLikes.interviewId })
+        .from(schema.interviewLikes)
+        .where(eq(schema.interviewLikes.userId, req.user!.userId));
+      res.json({ likedIds: likes.map(l => l.interviewId) });
+    } catch (e) { next(e); }
+  });
+
   app.get("/api/members/search", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
     try {
       const q = ((req.query.q as string) || "").toLowerCase();
