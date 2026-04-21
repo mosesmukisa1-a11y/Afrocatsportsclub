@@ -11,7 +11,6 @@ import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useRef } from "react";
 import { PlayerCard } from "@/components/PlayerCard";
-import { toJpeg } from "html-to-image";
 import { jsPDF } from "jspdf";
 import { Download } from "lucide-react";
 
@@ -117,83 +116,214 @@ export default function Awards() {
     if (!towPlayers.length) return;
     setTowPdfLoading(true);
     try {
-      /* Pre-convert all player photos to base64 so img tags are data-URL by capture time */
-      const photoCache = new Map<string, string>();
+      /* Pre-fetch all photos via proxy → base64 */
+      const photoMap = new Map<string, string>();
       for (const p of towPlayers) {
         if (p.photoUrl) {
-          const b64 = await proxyToDataUrl(p.photoUrl);
-          photoCache.set(p.playerId, b64);
-          /* Patch any <img> inside this card's wrapper to use the data URL */
-          const el = towCardRefs.current.get(p.playerId);
-          if (el) {
-            el.querySelectorAll("img").forEach(img => { img.src = b64; });
-          }
+          try {
+            const b64 = await proxyToDataUrl(p.photoUrl);
+            photoMap.set(p.playerId, b64);
+          } catch { /* skip missing photos */ }
         }
       }
-      /* Small pause so React/browser paints the updated img src */
-      await new Promise(r => setTimeout(r, 150));
 
-      /* Capture each card as JPEG */
-      const images: { dataUrl: string; playerName: string; slot: string }[] = [];
-      for (const p of towPlayers) {
-        const el = towCardRefs.current.get(p.playerId);
-        if (!el) continue;
-        const dataUrl = await toJpeg(el, { quality: 0.95, pixelRatio: 2, backgroundColor: "#0F1728", skipFonts: false });
-        images.push({ dataUrl, playerName: p.playerName, slot: p.slot });
-      }
-      if (!images.length) return;
-
-      /* Build A4 landscape PDF — 3 cards per row */
+      /* ── Layout constants ── */
       const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-      const PAGE_W = 297;
-      const PAGE_H = 210;
-      const MARGIN = 8;
-      const COLS = 3;
-      const GAP = 4;
-      const HEADER_H = 14;
-      const cardW = (PAGE_W - MARGIN * 2 - GAP * (COLS - 1)) / COLS;
-      const cardH = cardW * 1.4; /* preserve card aspect ratio */
+      const PAGE_W = 297, PAGE_H = 210;
+      const MX = 8, MY = 7;          // side / vertical margin
+      const HEADER_H = 13;           // page header height
+      const COLS = 4, GAP = 3;
+      const cardW = (PAGE_W - MX * 2 - GAP * (COLS - 1)) / COLS;   // ~68mm
+      const cardH = cardW * 1.42;                                    // ~96mm
 
-      /* Header */
-      pdf.setFillColor(15, 23, 40);
-      pdf.rect(0, 0, PAGE_W, PAGE_H, "F");
-      pdf.setTextColor(239, 196, 44);
-      pdf.setFontSize(14);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("🏆 Afrocat VC — Team of the Week", MARGIN, 9);
-      pdf.setFontSize(8);
-      pdf.setTextColor(150, 160, 180);
-      const label = (teamOfWeek as any)?.weekLabel || "";
-      pdf.text(label, MARGIN, 13);
+      /* ── Colour helpers ── */
+      const DARK   = [15,  23,  40 ] as [number,number,number];
+      const TEAL   = [21, 160, 155 ] as [number,number,number];
+      const GOLD   = [239, 196,  44] as [number,number,number];
+      const GOLD2  = [180, 140,  20] as [number,number,number];
+      const MUTED  = [130, 145, 165] as [number,number,number];
+      const WHITE  = [255, 255, 255] as [number,number,number];
+      const STAT_BG= [10,  18,  34 ] as [number,number,number];
 
-      /* Place cards in a grid */
-      images.forEach(({ dataUrl, playerName, slot }, idx) => {
-        const col = idx % COLS;
-        const row = Math.floor(idx / COLS);
-        const x = MARGIN + col * (cardW + GAP);
-        const y = MARGIN + HEADER_H + row * (cardH + GAP + 5);
+      const slotLabel = (slot: string) =>
+        slot === "OH" ? "Outside Hitter" : slot === "MB" ? "Middle Blocker"
+        : slot === "OPP" ? "Opposite" : slot === "S" ? "Setter"
+        : slot === "L" ? "Libero" : slot;
 
-        /* Check if we need a new page */
-        if (y + cardH > PAGE_H - MARGIN && idx > 0 && row > 0) {
-          pdf.addPage();
+      const drawCard = (p: any, x: number, y: number) => {
+        const photo = photoMap.get(p.playerId) || null;
+        const photoH = cardH * 0.43;
+        const statsH = cardH * 0.16;
+        const statsY = y + photoH;
+
+        /* Card background */
+        pdf.setFillColor(...DARK);
+        pdf.rect(x, y, cardW, cardH, "F");
+
+        /* Teal header band */
+        pdf.setFillColor(...TEAL);
+        pdf.rect(x, y, cardW * 0.65, photoH, "F");
+
+        /* Gold accent on right of header */
+        pdf.setFillColor(...GOLD2);
+        pdf.rect(x + cardW * 0.55, y, cardW * 0.45, photoH, "F");
+
+        /* Dark overlay so photo area isn't too bright */
+        pdf.setFillColor(15, 23, 40);
+        // Subtle vignette: just a semi-transparent layer (jsPDF doesn't support opacity,
+        // so we approximate by layering a very dark rect at low opacity via GState)
+
+        /* Player photo OR initials */
+        if (photo) {
+          try {
+            const fmt = photo.startsWith("data:image/png") ? "PNG" : "JPEG";
+            pdf.addImage(photo, fmt, x + 0.5, y + 0.5, cardW - 1, photoH - 0.5, undefined, "FAST");
+            /* Darken photo with a semi-transparent overlay */
+            pdf.setFillColor(15, 23, 40);
+            pdf.setGState(new (pdf as any).GState({ opacity: 0.18 }));
+            pdf.rect(x, y, cardW, photoH, "F");
+            pdf.setGState(new (pdf as any).GState({ opacity: 1 }));
+          } catch { /* photo embed failed — fall through to initials */ }
+        }
+
+        if (!photo) {
+          /* Initials circle */
+          const initials = p.playerName.split(" ").map((n: string) => n[0] || "").join("").slice(0, 2).toUpperCase();
+          pdf.setFillColor(30, 45, 75);
+          pdf.circle(x + cardW / 2, y + photoH / 2, cardW * 0.22, "F");
+          pdf.setTextColor(...WHITE);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(cardW * 0.18);
+          pdf.text(initials, x + cardW / 2, y + photoH / 2 + cardW * 0.065, { align: "center" });
+        }
+
+        /* Gold separator line */
+        pdf.setFillColor(...GOLD);
+        pdf.rect(x, statsY, cardW, 0.7, "F");
+
+        /* Stats bar background */
+        pdf.setFillColor(...STAT_BG);
+        pdf.rect(x, statsY + 0.7, cardW, statsH, "F");
+
+        /* ATK / SRV / DEF / BLK numbers */
+        const statW = cardW / 4;
+        const statEntries = [
+          { label: "ATK", val: Math.round(40 + ((p.stars?.atk || 3) - 1) * 14.75) },
+          { label: "SRV", val: Math.round(40 + ((p.stars?.srv || 3) - 1) * 14.75) },
+          { label: "DEF", val: Math.round(40 + ((p.stars?.def || 3) - 1) * 14.75) },
+          { label: "BLK", val: Math.round(40 + ((p.stars?.blk || 3) - 1) * 14.75) },
+        ];
+        statEntries.forEach(({ label, val }, i) => {
+          const sx = x + statW * i + statW / 2;
+          pdf.setTextColor(...GOLD);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(cardW * 0.135);
+          pdf.text(String(val), sx, statsY + statsH * 0.64, { align: "center" });
+          pdf.setTextColor(...MUTED);
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(cardW * 0.065);
+          pdf.text(label, sx, statsY + statsH * 0.95, { align: "center" });
+        });
+
+        /* Badge label top-left */
+        pdf.setFillColor(15, 23, 40);
+        pdf.setDrawColor(...GOLD);
+        pdf.setLineWidth(0.3);
+        pdf.roundedRect(x + 1.5, y + 1.5, cardW * 0.52, 5, 1, 1, "FD");
+        pdf.setTextColor(...GOLD);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(cardW * 0.065);
+        pdf.text("TEAM OF THE WEEK", x + 1.5 + (cardW * 0.52) / 2, y + 4.5, { align: "center" });
+
+        /* Jersey number top-right */
+        if (p.jerseyNo != null) {
           pdf.setFillColor(15, 23, 40);
+          pdf.circle(x + cardW - 4.5, y + 4.5, 3.5, "F");
+          pdf.setDrawColor(...GOLD);
+          pdf.setLineWidth(0.3);
+          pdf.circle(x + cardW - 4.5, y + 4.5, 3.5, "S");
+          pdf.setTextColor(...GOLD);
+          pdf.setFont("helvetica", "bold");
+          pdf.setFontSize(cardW * 0.1);
+          pdf.text(String(p.jerseyNo), x + cardW - 4.5, y + 5.7, { align: "center" });
+        }
+
+        /* Player name */
+        const nameY = statsY + statsH + cardH * 0.085;
+        pdf.setTextColor(...WHITE);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(cardW * 0.1);
+        const nameParts = p.playerName.toUpperCase().split(" ");
+        const midpoint = Math.ceil(nameParts.length / 2);
+        const line1 = nameParts.slice(0, midpoint).join(" ");
+        const line2 = nameParts.slice(midpoint).join(" ");
+        if (line2) {
+          pdf.text(line1, x + cardW / 2, nameY, { align: "center" });
+          pdf.text(line2, x + cardW / 2, nameY + cardW * 0.105, { align: "center" });
+        } else {
+          pdf.text(line1, x + cardW / 2, nameY + cardW * 0.05, { align: "center" });
+        }
+
+        /* Position */
+        pdf.setTextColor(...TEAL);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(cardW * 0.068);
+        pdf.text(slotLabel(p.slot).toUpperCase(), x + cardW / 2, y + cardH - 9, { align: "center" });
+
+        /* Thin gold bottom separator */
+        pdf.setFillColor(...GOLD);
+        pdf.rect(x, y + cardH - 7, cardW, 0.4, "F");
+
+        /* Team name */
+        pdf.setTextColor(...MUTED);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(cardW * 0.055);
+        const teamStr = (p.teamName || "Afrocat Volleyball Club").toUpperCase();
+        pdf.text(teamStr, x + cardW / 2, y + cardH - 3.5, { align: "center" });
+      }
+
+      /* ── Draw page background ── */
+      pdf.setFillColor(...DARK);
+      pdf.rect(0, 0, PAGE_W, PAGE_H, "F");
+
+      /* ── Page header ── */
+      pdf.setTextColor(...GOLD);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(13);
+      pdf.text("AFROCAT VC  —  TEAM OF THE WEEK", MX, MY + 5);
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(...MUTED);
+      const wkLabel = (teamOfWeek as any)?.weekLabel || "";
+      pdf.text(`${wkLabel}  ·  ${towPlayers.length} players selected`, MX, MY + 9.5);
+      /* Gold underline */
+      pdf.setFillColor(...GOLD);
+      pdf.rect(MX, MY + 11, PAGE_W - MX * 2, 0.5, "F");
+
+      /* ── Draw all cards ── */
+      for (let i = 0; i < towPlayers.length; i++) {
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+        const cx = MX + col * (cardW + GAP);
+        const cy = MY + HEADER_H + row * (cardH + GAP);
+
+        /* New page when row overflows */
+        if (row > 0 && cy + cardH > PAGE_H - MY) {
+          pdf.addPage();
+          pdf.setFillColor(...DARK);
           pdf.rect(0, 0, PAGE_W, PAGE_H, "F");
         }
 
-        pdf.addImage(dataUrl, "JPEG", x, y, cardW, cardH);
+        drawCard(towPlayers[i], cx, cy);
+      }
 
-        /* Slot label below each card */
-        pdf.setFontSize(7);
-        pdf.setTextColor(150, 160, 180);
-        const slotLabel = slot === "OH" ? "Outside Hitter" : slot === "MB" ? "Middle Blocker" : slot === "OPP" ? "Opposite" : slot === "S" ? "Setter" : slot === "L" ? "Libero" : slot;
-        pdf.text(slotLabel.toUpperCase(), x + cardW / 2, y + cardH + 3.5, { align: "center" });
-      });
-
-      /* Footer */
+      /* ── Footer ── */
       pdf.setPage(pdf.getNumberOfPages());
-      pdf.setFontSize(7);
-      pdf.setTextColor(80, 90, 110);
-      pdf.text("Afrocat Volleyball Club • Generated " + new Date().toLocaleDateString(), PAGE_W / 2, PAGE_H - 3, { align: "center" });
+      pdf.setFontSize(6.5);
+      pdf.setTextColor(70, 80, 100);
+      pdf.text(
+        `Afrocat Volleyball Club  •  Generated ${new Date().toLocaleDateString()}`,
+        PAGE_W / 2, PAGE_H - MY + 3, { align: "center" }
+      );
 
       pdf.save(`Afrocat_Team_of_Week_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (e) {
