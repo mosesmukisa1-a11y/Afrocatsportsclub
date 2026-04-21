@@ -7,7 +7,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import {
   ScrollText, CheckCircle, AlertTriangle, Loader2, FileText,
-  Shield, UserCheck, Baby, Download, Users, Zap, XCircle
+  Shield, UserCheck, Baby, Download, Users, Zap, XCircle,
+  Printer, ExternalLink, BookOpen, LayoutList
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
 
@@ -78,6 +79,14 @@ export default function ClubContract() {
   });
 
   const [showUnsigned, setShowUnsigned] = useState(false);
+  const [pdfView, setPdfView] = useState(false);
+
+  const HANDBOOK_PDF_URL = "/afrocat-handbook-2026-2027.pdf";
+
+  const handlePrint = () => {
+    const win = window.open(HANDBOOK_PDF_URL, "_blank");
+    if (win) setTimeout(() => win.print(), 800);
+  };
 
   const isAccepted = contractStatus?.accepted === true;
 
@@ -235,12 +244,61 @@ export default function ClubContract() {
         )}
 
         <div className="afrocat-card overflow-hidden" data-testid="card-contract-pdf">
-          <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px]">
+          <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px] flex items-center justify-between flex-wrap gap-3">
             <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-teal">
-              <FileText className="w-5 h-5" /> Afrocat SC Player & Club Handbook 2026-2027
+              <FileText className="w-5 h-5" /> Afrocat SC Player &amp; Club Handbook 2026-2027
             </h3>
+            <div className="flex items-center gap-2">
+              {/* View toggle */}
+              <div className="flex rounded-lg border border-afrocat-teal/30 overflow-hidden text-xs">
+                <button
+                  onClick={() => setPdfView(false)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 font-bold transition-all cursor-pointer ${!pdfView ? "bg-afrocat-teal text-white" : "bg-transparent text-afrocat-muted hover:text-afrocat-teal"}`}
+                  data-testid="button-view-inline"
+                >
+                  <LayoutList className="w-3 h-3" /> Handbook
+                </button>
+                <button
+                  onClick={() => setPdfView(true)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 font-bold transition-all cursor-pointer ${pdfView ? "bg-afrocat-teal text-white" : "bg-transparent text-afrocat-muted hover:text-afrocat-teal"}`}
+                  data-testid="button-view-pdf"
+                >
+                  <BookOpen className="w-3 h-3" /> PDF View
+                </button>
+              </div>
+              {/* PDF actions */}
+              <a
+                href={HANDBOOK_PDF_URL}
+                download="Afrocat-Handbook-2026-2027.pdf"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-afrocat-teal/10 hover:bg-afrocat-teal/20 border border-afrocat-teal/20 text-afrocat-teal text-xs font-bold transition-all"
+                data-testid="link-download-handbook-pdf"
+              >
+                <Download className="w-3 h-3" /> Download PDF
+              </a>
+              <button
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-afrocat-white-5 hover:bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted hover:text-afrocat-text text-xs font-bold transition-all cursor-pointer"
+                data-testid="button-print-handbook"
+              >
+                <Printer className="w-3 h-3" /> Print
+              </button>
+            </div>
           </div>
           <div className="p-5">
+            {/* PDF Embed View */}
+            {pdfView && (
+              <div className="rounded-lg overflow-hidden border border-afrocat-border" data-testid="handbook-pdf-embed">
+                <iframe
+                  src={`${HANDBOOK_PDF_URL}#toolbar=1&navpanes=1&scrollbar=1`}
+                  className="w-full"
+                  style={{ height: "70vh", minHeight: 480 }}
+                  title="Afrocat SC Player & Club Handbook 2026-2027"
+                />
+              </div>
+            )}
+            {/* Inline Content View */}
+            {!pdfView && (
+            <>
             <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-afrocat-border bg-afrocat-white-3 p-6 space-y-6 text-sm text-afrocat-text" data-testid="handbook-content">
 
               <div className="text-center space-y-1 pb-4 border-b border-afrocat-border">
@@ -423,6 +481,8 @@ export default function ClubContract() {
             <p className="text-xs text-afrocat-muted mt-3 text-center">
               Please read the entire handbook above before confirming below.
             </p>
+            </>
+            )}
           </div>
         </div>
 
