@@ -452,6 +452,12 @@ export const api = {
     apiFetch<any>(`/interviews/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteInterview: (id: string) =>
     apiFetch<void>(`/interviews/${id}`, { method: "DELETE" }),
+  likeInterview: (id: string) =>
+    apiFetch<{ liked: boolean }>(`/interviews/${id}/like`, { method: "POST" }),
+  viewInterview: (id: string) =>
+    apiFetch<{ ok: boolean }>(`/interviews/${id}/view`, { method: "POST" }),
+  getMyInterviewLikes: () =>
+    apiFetch<{ likedIds: string[] }>("/interviews-my-likes"),
 
   searchMembers: (q?: string, role?: string, teamId?: string) => {
     const params = new URLSearchParams();
