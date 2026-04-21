@@ -8,6 +8,8 @@ interface PlayerCardData {
   jerseyNo?: number | null;
   photoUrl?: string | null;
   teamName?: string;
+  matchLabel?: string;
+  matchDate?: string;
   stats: {
     kills?: number;
     aces?: number;
@@ -127,6 +129,8 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
     teamName = "AFROCAT VC",
     badge = "PLAYER",
     badgeColor = "gold",
+    matchLabel,
+    matchDate,
   } = data;
 
   const badgeColors: Record<string, string> = {
@@ -285,7 +289,7 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
           {/* Position + quick stats line */}
           <div style={{
             fontSize: s(9), fontWeight: 600, color: badgeBg,
-            letterSpacing: "0.07em", marginBottom: s(7),
+            letterSpacing: "0.07em", marginBottom: s(4),
             textTransform: "uppercase" as const,
           }}>
             {position || "PLAYER"}
@@ -295,6 +299,26 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
               </span>
             )}
           </div>
+
+          {/* Match info line */}
+          {(matchLabel || matchDate) && (
+            <div style={{
+              fontSize: s(8), fontWeight: 600, marginBottom: s(5),
+              color: "rgba(255,255,255,0.55)",
+              display: "flex", alignItems: "center", gap: s(4),
+              letterSpacing: "0.03em",
+            }}>
+              {matchDate && (
+                <span style={{ color: "rgba(255,255,255,0.4)" }}>{matchDate}</span>
+              )}
+              {matchDate && matchLabel && (
+                <span style={{ color: "rgba(255,255,255,0.2)" }}>·</span>
+              )}
+              {matchLabel && (
+                <span style={{ color: "rgba(255,255,255,0.6)", fontWeight: 700 }}>{matchLabel}</span>
+              )}
+            </div>
+          )}
 
           {/* Club footer */}
           <div style={{

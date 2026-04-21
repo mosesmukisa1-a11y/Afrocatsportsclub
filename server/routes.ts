@@ -1627,10 +1627,27 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
 
       const allPlayers = await storage.getPlayers();
       const allMatches = await storage.getMatches();
+      const allTeams = await storage.getTeams();
+      const allPlayerStats = await db.select().from(schema.playerMatchStats);
+
       const pMap = new Map(allPlayers.map((p: any) => [p.id, p]));
       const mMap = new Map(allMatches.map((m: any) => [m.id, m]));
+      const tMap = new Map(allTeams.map((t: any) => [t.id, t]));
+      // Index stats by "playerId|matchId"
+      const statsMap = new Map<string, any>();
+      for (const s of allPlayerStats) {
+        statsMap.set(`${s.playerId}|${s.matchId}`, s);
+      }
 
-      // Derive MVP entries from matches with player_of_match_player_id that don't have a formal award yet
+      const buildStars = (s: any) => {
+        if (!s) return { atk: 3, srv: 3, def: 3, blk: 3 };
+        const atk = Math.max(1, Math.min(5, Math.round(((s.spikesKill || 0) / Math.max(s.spikesKill + s.spikesError + 1, 5)) * 5 + 1)));
+        const srv = Math.max(1, Math.min(5, (s.servesAce || 0) >= 4 ? 5 : (s.servesAce || 0) >= 3 ? 4 : (s.servesAce || 0) >= 2 ? 3 : (s.servesAce || 0) >= 1 ? 2 : 1));
+        const def = Math.max(1, Math.min(5, (s.digs || 0) >= 6 ? 5 : (s.digs || 0) >= 4 ? 4 : (s.digs || 0) >= 2 ? 3 : (s.digs || 0) >= 1 ? 2 : 1));
+        const blk = Math.max(1, Math.min(5, ((s.blocksSolo || 0) + (s.blocksAssist || 0)) >= 4 ? 5 : ((s.blocksSolo || 0) + (s.blocksAssist || 0)) >= 2 ? 4 : ((s.blocksSolo || 0) + (s.blocksAssist || 0)) >= 1 ? 3 : 2));
+        return { atk, srv, def, blk };
+      };
+
       const derivedMvps: any[] = allMatches
         .filter((m: any) => m.playerOfMatchPlayerId && !formalMatchIds.has(m.id))
         .map((m: any) => ({
@@ -1650,17 +1667,36 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
       const enriched = all.map((a: any) => {
         const player = pMap.get(a.playerId);
         const match = a.matchId ? mMap.get(a.matchId) : null;
+        const team = player?.teamId ? tMap.get(player.teamId) : null;
+        const matchStats = a.matchId ? statsMap.get(`${a.playerId}|${a.matchId}`) : null;
+        const teamName = team?.name || "Afrocat VC";
+        const formattedDate = match?.matchDate
+          ? new Date(match.matchDate + "T12:00:00").toLocaleDateString("en-NA", { day: "numeric", month: "short", year: "numeric" })
+          : null;
         return {
           ...a,
           playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
-          playerJersey: player?.jerseyNo || "?",
+          playerJersey: player?.jerseyNo ?? null,
           playerPosition: player?.position || "—",
           playerPhotoUrl: player?.photoUrl || null,
+          teamName,
+          teamId: player?.teamId || null,
           matchDate: match?.matchDate || null,
+          matchDateFormatted: formattedDate,
           matchOpponent: match?.opponent || null,
           matchResult: match?.result || null,
           matchSets: match ? `${match.setsFor || 0}-${match.setsAgainst || 0}` : null,
           matchCompetition: match?.competition || null,
+          matchStats: matchStats ? {
+            kills: matchStats.spikesKill || 0,
+            aces: matchStats.servesAce || 0,
+            blocks: (matchStats.blocksSolo || 0) + (matchStats.blocksAssist || 0),
+            digs: matchStats.digs || 0,
+            assists: matchStats.settingAssist || 0,
+            points: matchStats.pointsTotal || 0,
+            matches: 1,
+          } : null,
+          stars: buildStars(matchStats),
         };
       });
       res.json(enriched);
@@ -1669,19 +1705,80 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
 
   app.get("/api/awards/player/:playerId/mvps", requireAuth, async (req, res, next) => {
     try {
-      const awards = await storage.getAwardsByPlayer(req.params.playerId);
+      const playerId = req.params.playerId;
+      const awards = await storage.getAwardsByPlayer(playerId);
+      const player = await storage.getPlayer(playerId);
       const mvps = awards.filter((a: any) => a.awardType === "MATCH_MVP")
         .sort((a: any, b: any) => (b.createdAt || "").toString().localeCompare((a.createdAt || "").toString()));
+
       const allMatches = await storage.getMatches();
+      const allTeams = await storage.getTeams();
+      const allStats = await db.select().from(schema.playerMatchStats);
+
       const mMap = new Map(allMatches.map((m: any) => [m.id, m]));
-      const enriched = mvps.map((a: any) => {
+      const tMap = new Map(allTeams.map((t: any) => [t.id, t]));
+      const statsMap = new Map<string, any>();
+      for (const s of allStats) { statsMap.set(`${s.playerId}|${s.matchId}`, s); }
+
+      const buildStars = (s: any) => {
+        if (!s) return { atk: 3, srv: 3, def: 3, blk: 3 };
+        const atk = Math.max(1, Math.min(5, Math.round(((s.spikesKill || 0) / Math.max((s.spikesKill || 0) + (s.spikesError || 0) + 1, 5)) * 5 + 1)));
+        const srv = Math.max(1, Math.min(5, (s.servesAce || 0) >= 4 ? 5 : (s.servesAce || 0) >= 3 ? 4 : (s.servesAce || 0) >= 2 ? 3 : (s.servesAce || 0) >= 1 ? 2 : 1));
+        const def = Math.max(1, Math.min(5, (s.digs || 0) >= 6 ? 5 : (s.digs || 0) >= 4 ? 4 : (s.digs || 0) >= 2 ? 3 : (s.digs || 0) >= 1 ? 2 : 1));
+        const blk = Math.max(1, Math.min(5, ((s.blocksSolo || 0) + (s.blocksAssist || 0)) >= 4 ? 5 : ((s.blocksSolo || 0) + (s.blocksAssist || 0)) >= 2 ? 4 : ((s.blocksSolo || 0) + (s.blocksAssist || 0)) >= 1 ? 3 : 2));
+        return { atk, srv, def, blk };
+      };
+
+      const team = player?.teamId ? tMap.get(player.teamId) : null;
+      const teamName = team?.name || "Afrocat VC";
+
+      // Also include derived MVPs from matches with playerOfMatchPlayerId
+      const allDerived = allMatches
+        .filter((m: any) => m.playerOfMatchPlayerId === playerId)
+        .map((m: any) => ({
+          id: `derived-${m.id}`,
+          playerId,
+          awardType: "MATCH_MVP",
+          matchId: m.id,
+          awardMonth: m.matchDate ? m.matchDate.slice(0, 7) : null,
+          notes: "Player of the Match",
+          createdAt: m.matchDate || m.createdAt,
+          derived: true,
+        }));
+      const formalMatchIds = new Set(mvps.map((a: any) => a.matchId).filter(Boolean));
+      const derivedNew = allDerived.filter((d: any) => !formalMatchIds.has(d.matchId));
+      const allMvps = [...mvps, ...derivedNew].sort((a, b) => (b.createdAt || "").toString().localeCompare((a.createdAt || "").toString()));
+
+      const enriched = allMvps.map((a: any) => {
         const match = a.matchId ? mMap.get(a.matchId) : null;
+        const matchStats = a.matchId ? statsMap.get(`${playerId}|${a.matchId}`) : null;
+        const formattedDate = match?.matchDate
+          ? new Date(match.matchDate + "T12:00:00").toLocaleDateString("en-NA", { day: "numeric", month: "short", year: "numeric" })
+          : null;
         return {
           ...a,
+          playerName: player ? `${player.firstName} ${player.lastName}` : "Unknown",
+          playerJersey: player?.jerseyNo ?? null,
+          playerPosition: player?.position || "—",
+          playerPhotoUrl: player?.photoUrl || null,
+          teamName,
+          teamId: player?.teamId || null,
           matchDate: match?.matchDate || null,
+          matchDateFormatted: formattedDate,
           matchOpponent: match?.opponent || null,
           matchResult: match?.result || null,
           matchSets: match ? `${match.setsFor || 0}-${match.setsAgainst || 0}` : null,
+          matchCompetition: match?.competition || null,
+          matchStats: matchStats ? {
+            kills: matchStats.spikesKill || 0,
+            aces: matchStats.servesAce || 0,
+            blocks: (matchStats.blocksSolo || 0) + (matchStats.blocksAssist || 0),
+            digs: matchStats.digs || 0,
+            assists: matchStats.settingAssist || 0,
+            points: matchStats.pointsTotal || 0,
+            matches: 1,
+          } : null,
+          stars: buildStars(matchStats),
         };
       });
       res.json(enriched);
@@ -1727,16 +1824,16 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         a.matches += 1;
       }
 
-      function ratingScore(agg: any): number {
+      const ratingScore = (agg: any): number => {
         return agg.spikesKill * 5 + agg.servesAce * 8 + (agg.blocksSolo * 6 + agg.blocksAssist * 3) +
           agg.digs * 2 + agg.settingAssist * 3 + agg.receivePerfect * 2 -
           (agg.spikesError + agg.servesError + agg.receiveError + agg.settingError) * 3;
-      }
+      };
 
-      function calcStars(val: number, maxVal: number): number {
+      const calcStars = (val: number, maxVal: number): number => {
         if (maxVal === 0) return 3;
         return Math.max(1, Math.min(5, Math.round((val / maxVal) * 5)));
-      }
+      };
 
       const enriched = Object.values(aggByPlayer).map((agg: any) => {
         const player = playerMap.get(agg.playerId);
@@ -1756,11 +1853,11 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
         L: ["L","Libero"],
       };
 
-      function matchPos(pos: string | null | undefined, slot: string): boolean {
+      const matchPos = (pos: string | null | undefined, slot: string): boolean => {
         if (!pos) return false;
         const aliases = posAliases[slot] || [slot];
         return aliases.some(a => pos.toLowerCase().includes(a.toLowerCase()));
-      }
+      };
 
       const selected: any[] = [];
       const usedPlayerIds = new Set<string>();
@@ -1792,29 +1889,36 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
       const maxDigs = Math.max(...selected.map((s: any) => s.digs), 1);
       const maxAssists = Math.max(...selected.map((s: any) => s.settingAssist), 1);
 
-      const result = selected.map((s: any) => ({
-        playerId: s.playerId,
-        slot: s.slot,
-        playerName: `${s.player.firstName} ${s.player.lastName}`,
-        position: s.player.position,
-        jerseyNo: s.player.jerseyNo,
-        photoUrl: s.player.photoUrl,
-        teamId: s.player.teamId,
-        stats: {
-          kills: s.spikesKill, aces: s.servesAce,
-          blocks: s.blocksSolo + s.blocksAssist, digs: s.digs,
-          assists: s.settingAssist, points: s.pointsTotal, matches: s.matches,
-        },
-        stars: {
-          atk: calcStars(s.spikesKill, maxKills),
-          srv: calcStars(s.servesAce, maxAces),
-          def: calcStars(s.digs, maxDigs),
-          blk: calcStars(s.blocksSolo + s.blocksAssist, maxBlocks),
-          set: calcStars(s.settingAssist, maxAssists),
-        },
-        score: s.score,
-        isWeekend: recentMatches.length > 0,
-      }));
+      const allTeams = await storage.getTeams();
+      const tMap = new Map(allTeams.map((t: any) => [t.id, t]));
+
+      const result = selected.map((s: any) => {
+        const team = s.player.teamId ? tMap.get(s.player.teamId) : null;
+        return {
+          playerId: s.playerId,
+          slot: s.slot,
+          playerName: `${s.player.firstName} ${s.player.lastName}`,
+          position: s.player.position,
+          jerseyNo: s.player.jerseyNo,
+          photoUrl: s.player.photoUrl,
+          teamId: s.player.teamId,
+          teamName: team?.name || "Afrocat VC",
+          stats: {
+            kills: s.spikesKill, aces: s.servesAce,
+            blocks: s.blocksSolo + s.blocksAssist, digs: s.digs,
+            assists: s.settingAssist, points: s.pointsTotal, matches: s.matches,
+          },
+          stars: {
+            atk: calcStars(s.spikesKill, maxKills),
+            srv: calcStars(s.servesAce, maxAces),
+            def: calcStars(s.digs, maxDigs),
+            blk: calcStars(s.blocksSolo + s.blocksAssist, maxBlocks),
+            set: calcStars(s.settingAssist, maxAssists),
+          },
+          score: s.score,
+          isWeekend: recentMatches.length > 0,
+        };
+      });
 
       const weekLabel = recentMatches.length > 0
         ? `Weekend ${recentMatches[0]?.matchDate || "this week"}`

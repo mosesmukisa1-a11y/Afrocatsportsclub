@@ -546,9 +546,10 @@ export default function Awards() {
                           position: p.position || p.slot,
                           jerseyNo: p.jerseyNo,
                           photoUrl: p.photoUrl,
-                          teamName: "AFROCAT VC",
+                          teamName: p.teamName || "Afrocat VC",
                           badge: p.slot === "L" ? "LIBERO" : p.slot === "S" ? "SETTER" : p.slot === "MB" ? "BLOCKER" : p.slot === "OPP" ? "OPPOSITE" : "TEAM OF WEEK",
                           badgeColor: i === 0 ? "gold" : i < 3 ? "teal" : "gold",
+                          matchLabel: teamOfWeek.weekLabel,
                           stats: p.stats,
                           stars: p.stars,
                         }}
@@ -597,32 +598,31 @@ export default function Awards() {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-5 justify-center" data-testid="grid-mvp-cards">
-                  {(matchMvps as any[]).map((mvp: any) => {
-                    const towPlayer = (teamOfWeek?.players || []).find((t: any) => t.playerId === mvp.playerId);
-                    return (
-                      <div key={mvp.id} className="flex flex-col items-center" data-testid={`card-mvp-card-${mvp.id}`}>
-                        <PlayerCard
-                          size="sm"
-                          showDownload
-                          data={{
-                            playerName: mvp.playerName || "Player",
-                            position: mvp.playerPosition || "",
-                            jerseyNo: mvp.playerJersey,
-                            photoUrl: mvp.playerPhotoUrl,
-                            teamName: "AFROCAT VC",
-                            badge: "MATCH MVP",
-                            badgeColor: "gold",
-                            stats: towPlayer ? towPlayer.stats : { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0 },
-                            stars: towPlayer ? towPlayer.stars : { atk: 4, srv: 3, def: 3, blk: 3 },
-                          }}
-                        />
-                        <div className="mt-1 text-[10px] text-afrocat-muted">
-                          {mvp.matchDate ? new Date(mvp.matchDate + "T12:00:00").toLocaleDateString("en-NA", { day: "numeric", month: "short" }) : ""}
-                          {mvp.matchOpponent ? ` vs ${mvp.matchOpponent}` : ""}
-                        </div>
+                  {(matchMvps as any[]).map((mvp: any) => (
+                    <div key={mvp.id} className="flex flex-col items-center gap-1" data-testid={`card-mvp-card-${mvp.id}`}>
+                      <PlayerCard
+                        size="sm"
+                        showDownload
+                        data={{
+                          playerName: mvp.playerName || "Player",
+                          position: mvp.playerPosition || "",
+                          jerseyNo: mvp.playerJersey,
+                          photoUrl: mvp.playerPhotoUrl,
+                          teamName: mvp.teamName || "Afrocat VC",
+                          badge: "MATCH MVP",
+                          badgeColor: "gold",
+                          matchLabel: mvp.matchOpponent ? `vs ${mvp.matchOpponent}` : undefined,
+                          matchDate: mvp.matchDateFormatted || mvp.matchDate || undefined,
+                          stats: mvp.matchStats || { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0, matches: 1 },
+                          stars: mvp.stars || { atk: 3, srv: 3, def: 3, blk: 3 },
+                        }}
+                      />
+                      <div className="text-[10px] text-afrocat-muted text-center">
+                        {mvp.matchDateFormatted || mvp.matchDate || ""}
+                        {mvp.matchOpponent ? ` · vs ${mvp.matchOpponent}` : ""}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </>
             )}

@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
+import { PlayerCard } from "@/components/PlayerCard";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -271,6 +272,42 @@ export default function Dashboard() {
                 {(myMvps as any[]).length} MVP{(myMvps as any[]).length !== 1 ? "s" : ""}
               </span>
             </div>
+
+            {/* Latest MVP — FIFA-style downloadable card */}
+            {(() => {
+              const latest = (myMvps as any[])[0];
+              if (!latest) return null;
+              return (
+                <div className="p-4 flex flex-col items-center gap-2 border-b border-afrocat-gold/15" data-testid="section-latest-mvp-card">
+                  <p className="text-[11px] font-bold text-afrocat-gold uppercase tracking-widest mb-1">
+                    🏅 Latest MVP Card
+                  </p>
+                  <PlayerCard
+                    size="sm"
+                    showDownload
+                    data={{
+                      playerName: latest.playerName || "Player",
+                      position: latest.playerPosition || "",
+                      jerseyNo: latest.playerJersey ?? null,
+                      photoUrl: latest.playerPhotoUrl || null,
+                      teamName: latest.teamName || "Afrocat VC",
+                      badge: "MATCH MVP",
+                      badgeColor: "gold",
+                      matchLabel: latest.matchOpponent ? `vs ${latest.matchOpponent}` : undefined,
+                      matchDate: latest.matchDateFormatted || latest.matchDate || undefined,
+                      stats: latest.matchStats || { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0, matches: 1 },
+                      stars: latest.stars || { atk: 3, srv: 3, def: 3, blk: 3 },
+                    }}
+                  />
+                  {(myMvps as any[]).length > 1 && (
+                    <p className="text-[10px] text-afrocat-muted mt-1">
+                      Showing most recent · {(myMvps as any[]).length} total MVPs
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="p-4 space-y-2">
               {(myMvps as any[]).slice(0, 4).map((mvp: any) => (
                 <div key={mvp.id} className="flex items-center gap-3 p-3 rounded-xl bg-afrocat-gold-soft border border-afrocat-gold/20" data-testid={`card-my-mvp-${mvp.id}`}>
@@ -282,7 +319,7 @@ export default function Dashboard() {
                       {mvp.matchOpponent ? `vs ${mvp.matchOpponent}` : "Match MVP"}
                     </p>
                     <p className="text-xs text-afrocat-muted">
-                      {mvp.matchDate || mvp.awardMonth}
+                      {mvp.matchDateFormatted || mvp.matchDate || mvp.awardMonth}
                       {mvp.matchSets ? ` — Sets ${mvp.matchSets}` : ""}
                     </p>
                   </div>
