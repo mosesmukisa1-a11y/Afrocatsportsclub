@@ -82,7 +82,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="h-screen overflow-hidden bg-afrocat-bg text-afrocat-text flex flex-col">
-      <div className="shrink-0 md:hidden flex items-center justify-between p-4 border-b border-afrocat-border bg-afrocat-card">
+      <div data-no-print className="shrink-0 md:hidden flex items-center justify-between p-4 border-b border-afrocat-border bg-afrocat-card">
         <div className="flex items-center gap-2">
           <img src={logo} alt="Afrocat Logo" className="w-8 h-8 object-contain" />
           <span className="font-display font-bold text-afrocat-text">Afrocat Portal</span>
