@@ -10,9 +10,449 @@ import { useToast } from "@/hooks/use-toast";
 import {
   FileText, Plus, CheckCircle, XCircle, Clock, AlertTriangle, Shield,
   Package, Truck, DollarSign, Calculator, Printer, Trash2, ChevronDown, ChevronUp,
-  CreditCard, Banknote, Users, TrendingUp, Hash, Loader2, Bell, PenLine
+  CreditCard, Banknote, Users, TrendingUp, Hash, Loader2, Bell, PenLine,
+  ScrollText, BookOpen, LayoutList, Download, Zap, Baby, ExternalLink,
 } from "lucide-react";
 import logo from "@assets/afrocate_logo_1772226294597.png";
+
+const CONTRACT_KEY_HANDBOOK = "AFROCAT_HANDBOOK_2026_2027";
+const HANDBOOK_PDF_URL = "/afrocat-handbook-2026-2027.pdf";
+
+const CONTRIBUTION_TYPE_LABELS_MC: Record<string, string> = {
+  FIRST_AID: "First Aid", PETROL: "Petrol", BALL: "Ball",
+  TOURNAMENT: "Tournament", YEAR_END: "Year End", TOUR: "Tour", OTHER: "Other",
+};
+
+function MyContractPanel() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [showConfirmSign, setShowConfirmSign] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/contracts/my-contract"],
+    queryFn: api.getMyContract,
+    enabled: !!user,
+  });
+  const signMut = useMutation({
+    mutationFn: () => api.playerSignContract(data?.contract?.id),
+    onSuccess: () => {
+      toast({ title: "Contract Signed!", description: "Thank you for confirming your contract." });
+      qc.invalidateQueries({ queryKey: ["/api/contracts/my-contract"] });
+      setShowConfirmSign(false);
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-afrocat-teal" /></div>;
+
+  const contract = data?.contract;
+  const items = data?.items || [];
+  const transport = data?.transport || [];
+  const contributions = data?.contributions || [];
+  const player = data?.player;
+
+  if (!contract) return (
+    <div className="afrocat-card p-8 text-center">
+      <ScrollText className="w-12 h-12 mx-auto mb-4 text-afrocat-muted opacity-40" />
+      <h2 className="text-xl font-display font-bold text-afrocat-text mb-2">No Contract Found</h2>
+      <p className="text-afrocat-muted">You don't have an active contract yet. Please contact the club administration.</p>
+    </div>
+  );
+
+  const isSigned = !!contract.signedByPlayer;
+  const statusColor = contract.status === "ACTIVE" ? "text-afrocat-green" : contract.status === "DRAFT" ? "text-afrocat-gold" : "text-afrocat-red";
+  const statusBg = contract.status === "ACTIVE" ? "bg-afrocat-green-soft" : contract.status === "DRAFT" ? "bg-afrocat-gold-soft" : "bg-afrocat-red-soft";
+  const totalItemsValue = items.reduce((s: number, i: any) => s + (i.totalValue || 0), 0);
+  const totalContribPaid = contributions.filter((c: any) => c.status === "PAID").reduce((s: number, c: any) => s + (c.amount || 0), 0);
+  const totalContribDue = contributions.filter((c: any) => c.status !== "PAID").reduce((s: number, c: any) => s + (c.amount || 0), 0);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${statusBg} ${statusColor}`}>{contract.status}</span>
+        {isSigned ? (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-afrocat-green-soft text-afrocat-green text-xs font-bold" data-testid="badge-contract-signed">
+            <CheckCircle className="w-3.5 h-3.5" /> Signed
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-afrocat-red-soft text-afrocat-red text-xs font-bold" data-testid="badge-contract-unsigned">
+            <AlertTriangle className="w-3.5 h-3.5" /> Not Signed
+          </span>
+        )}
+      </div>
+
+      {!isSigned && (
+        <div className="afrocat-card border border-afrocat-gold/30 overflow-hidden" data-testid="card-sign-prompt">
+          <div className="bg-afrocat-gold-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px]">
+            <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold"><PenLine className="w-5 h-5" /> Action Required</h3>
+          </div>
+          <div className="p-5">
+            <p className="text-sm text-afrocat-text mb-4">Please review all the contract details below carefully. Once satisfied, click to confirm and sign.</p>
+            {!showConfirmSign ? (
+              <Button onClick={() => setShowConfirmSign(true)} className="bg-afrocat-teal hover:bg-afrocat-teal/80" data-testid="button-start-sign">
+                <PenLine className="w-4 h-4 mr-2" /> I Have Read & Want to Sign
+              </Button>
+            ) : (
+              <div className="p-4 rounded-xl bg-afrocat-white-3 border border-afrocat-border space-y-3">
+                <p className="text-sm font-semibold text-afrocat-text">By clicking "Confirm & Sign", you acknowledge that you have read and agree to all terms, obligations, and financial commitments in this contract.</p>
+                <div className="flex gap-3">
+                  <Button onClick={() => signMut.mutate()} disabled={signMut.isPending} className="bg-afrocat-green hover:bg-afrocat-green/80" data-testid="button-confirm-sign">
+                    {signMut.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing...</> : <><CheckCircle className="w-4 h-4 mr-2" /> Confirm & Sign</>}
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowConfirmSign(false)} className="border-afrocat-border text-afrocat-text">Cancel</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isSigned && contract.playerSignedAt && (
+        <div className="afrocat-card border border-afrocat-green/30 p-5">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="w-6 h-6 text-afrocat-green" />
+            <div>
+              <p className="font-bold text-afrocat-green">Contract Signed</p>
+              <p className="text-xs text-afrocat-muted">Signed on {new Date(contract.playerSignedAt).toLocaleDateString()} at {new Date(contract.playerSignedAt).toLocaleTimeString()}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {contract.contractFileUrl && (
+        <div className="afrocat-card overflow-hidden">
+          <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px]">
+            <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-teal"><FileText className="w-5 h-5" /> Contract Document</h3>
+          </div>
+          <div className="p-5">
+            {contract.contractFileUrl.match(/\.(pdf)$/i) ? (
+              <iframe src={contract.contractFileUrl} className="w-full h-[500px] rounded-lg border border-afrocat-border" title="Contract" />
+            ) : (
+              <a href={contract.contractFileUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal-soft text-afrocat-teal font-semibold text-sm hover:bg-afrocat-teal/20">
+                <FileText className="w-4 h-4" /> View / Download Contract Document
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="afrocat-card overflow-hidden">
+        <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px]">
+          <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-text"><Clock className="w-5 h-5 text-afrocat-teal" /> Contract Details</h3>
+        </div>
+        <div className="p-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            {[
+              { label: "Player", value: player ? `${player.firstName} ${player.lastName}` : "—" },
+              { label: "Type", value: contract.contractType },
+              { label: "Status", value: contract.status },
+              { label: "Start Date", value: contract.startDate },
+              { label: "End Date", value: contract.endDate },
+              { label: "Currency", value: contract.currency || "NAD" },
+            ].map(({ label, value }) => (
+              <div key={label} className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
+                <div className="text-[10px] text-afrocat-muted uppercase tracking-wider mb-1">{label}</div>
+                <div className="text-sm font-bold text-afrocat-text">{value || "—"}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: "Sign-On Fee", value: contract.signOnFee },
+              { label: "Weekly Transport", value: contract.weeklyTransport },
+              { label: "Salary", value: contract.salaryAmount },
+              { label: "Release Fee", value: contract.releaseFee },
+            ].map(({ label, value }) => (
+              <div key={label} className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border text-center">
+                <div className="text-[10px] text-afrocat-muted uppercase tracking-wider mb-1">{label}</div>
+                <div className="text-lg font-bold font-display text-afrocat-gold">{value != null ? `N$${(value as number).toFixed(2)}` : "—"}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {contract.obligations && (
+        <div className="afrocat-card overflow-hidden">
+          <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px]">
+            <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-text"><Shield className="w-5 h-5 text-afrocat-teal" /> Obligations & Terms</h3>
+          </div>
+          <div className="p-5 text-sm text-afrocat-text whitespace-pre-wrap leading-relaxed">{contract.obligations}</div>
+        </div>
+      )}
+
+      {items.length > 0 && (
+        <div className="afrocat-card overflow-hidden">
+          <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px] flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-text"><Package className="w-5 h-5 text-afrocat-gold" /> Issued Attire & Items</h3>
+            <span className="text-xs font-bold px-2 py-1 rounded-full bg-afrocat-gold-soft text-afrocat-gold">Total: N${totalItemsValue.toFixed(2)}</span>
+          </div>
+          <div className="p-5 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-afrocat-muted uppercase bg-afrocat-white-5 border-b border-afrocat-border">
+                <tr><th className="px-4 py-3 text-left">Item</th><th className="px-3 py-3 text-center">Qty</th><th className="px-3 py-3 text-right">Total</th><th className="px-3 py-3 text-center">Issued</th></tr>
+              </thead>
+              <tbody>
+                {items.map((item: any) => (
+                  <tr key={item.id} className="border-b border-afrocat-border hover:bg-afrocat-white-3">
+                    <td className="px-4 py-3 font-medium text-afrocat-text">{item.itemName}</td>
+                    <td className="px-3 py-3 text-center text-afrocat-text">{item.quantity}</td>
+                    <td className="px-3 py-3 text-right font-bold text-afrocat-gold">N${(item.totalValue || 0).toFixed(2)}</td>
+                    <td className="px-3 py-3 text-center text-afrocat-muted">{item.dateIssued}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {contributions.length > 0 && (
+        <div className="afrocat-card overflow-hidden">
+          <div className="bg-afrocat-white-5 border-b border-afrocat-border px-5 py-3 rounded-t-[18px] flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-text"><DollarSign className="w-5 h-5 text-afrocat-gold" /> Contributions</h3>
+            <div className="flex gap-2">
+              <span className="text-xs font-bold px-2 py-1 rounded-full bg-afrocat-green-soft text-afrocat-green">Paid: N${totalContribPaid.toFixed(2)}</span>
+              {totalContribDue > 0 && <span className="text-xs font-bold px-2 py-1 rounded-full bg-afrocat-red-soft text-afrocat-red">Due: N${totalContribDue.toFixed(2)}</span>}
+            </div>
+          </div>
+          <div className="p-5 space-y-3">
+            {contributions.map((c: any) => {
+              const stColor = c.status === "PAID" ? "bg-afrocat-green-soft text-afrocat-green" : c.status === "PARTIAL" ? "bg-afrocat-gold-soft text-afrocat-gold" : "bg-afrocat-red-soft text-afrocat-red";
+              return (
+                <div key={c.id} className="flex items-center justify-between p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
+                  <p className="font-medium text-sm text-afrocat-text">{CONTRIBUTION_TYPE_LABELS_MC[c.contributionType] || c.contributionType}</p>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-afrocat-text">N${(c.amount || 0).toFixed(2)}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stColor}`}>{c.status}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HandbookPanel() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const isAdmin = user?.role === "ADMIN" || user?.role === "MANAGER";
+  const [pdfView, setPdfView] = useState(false);
+  const [showUnsigned, setShowUnsigned] = useState(false);
+  const [formData, setFormData] = useState({ accepterFullName: "", guardianIdNumber: "", guardianPhoneNumber: "", agreed: false });
+
+  const { data: contractStatus, isLoading } = useQuery({
+    queryKey: ["/api/contract/status"],
+    queryFn: api.getClubContractStatus,
+    enabled: !!user,
+  });
+  const { data: playerProfile } = useQuery({
+    queryKey: ["/api/players/me"],
+    queryFn: api.getMyProfile,
+    enabled: !!user && user.role === "PLAYER",
+  });
+  const { data: adminSummary, refetch: refetchSummary } = useQuery({
+    queryKey: ["/api/contract/admin/summary"],
+    queryFn: api.getClubContractAdminSummary,
+    enabled: isAdmin,
+  });
+
+  const isMinor = (() => {
+    if (!playerProfile?.dob) return false;
+    const birth = new Date(playerProfile.dob); const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age < 18;
+  })();
+
+  const acceptMut = useMutation({
+    mutationFn: () => api.acceptClubContract({ accepterFullName: formData.accepterFullName, acceptedBy: isMinor ? "GUARDIAN" : "SELF", guardianIdNumber: isMinor ? formData.guardianIdNumber : undefined, guardianPhoneNumber: isMinor ? formData.guardianPhoneNumber : undefined }),
+    onSuccess: () => { toast({ title: "Handbook Confirmed!" }); qc.invalidateQueries({ queryKey: ["/api/contract/status"] }); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const bulkSignMut = useMutation({
+    mutationFn: api.bulkAutoSignContract,
+    onSuccess: (data: any) => { toast({ title: `Bulk sign complete`, description: `${data.signed} member(s) marked as signed.` }); qc.invalidateQueries({ queryKey: ["/api/contract/admin/summary"] }); refetchSummary(); },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
+
+  const isAccepted = contractStatus?.accepted === true;
+  const canSubmit = formData.agreed && formData.accepterFullName.trim() && (!isMinor || (formData.guardianIdNumber.trim() && formData.guardianPhoneNumber.trim()));
+
+  if (isLoading) return <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-afrocat-teal" /></div>;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2 items-center">
+        {isAccepted ? (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-afrocat-green-soft text-afrocat-green text-xs font-bold" data-testid="badge-handbook-confirmed">
+            <CheckCircle className="w-3.5 h-3.5" /> Handbook Confirmed
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-afrocat-red-soft text-afrocat-red text-xs font-bold" data-testid="badge-handbook-pending">
+            <AlertTriangle className="w-3.5 h-3.5" /> Not Yet Confirmed
+          </span>
+        )}
+      </div>
+
+      {isAdmin && adminSummary && (
+        <div className="afrocat-card overflow-hidden" data-testid="card-admin-handbook-summary">
+          <div className="bg-afrocat-gold-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px] flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold"><Users className="w-5 h-5" /> Admin — Handbook Overview</h3>
+            <span className="text-xs text-afrocat-muted"><span className="text-afrocat-green font-bold">{adminSummary.accepted}</span>/{adminSummary.totalActive} confirmed</span>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-afrocat-green-soft text-center"><div className="text-2xl font-bold text-afrocat-green">{adminSummary.accepted}</div><div className="text-[10px] text-afrocat-muted uppercase tracking-wider mt-1">Confirmed</div></div>
+              <div className="p-3 rounded-xl bg-afrocat-red-soft text-center"><div className="text-2xl font-bold text-afrocat-red">{adminSummary.notAccepted}</div><div className="text-[10px] text-afrocat-muted uppercase tracking-wider mt-1">Pending</div></div>
+              <div className="p-3 rounded-xl bg-afrocat-white-3 text-center"><div className="text-2xl font-bold text-afrocat-text">{adminSummary.totalActive}</div><div className="text-[10px] text-afrocat-muted uppercase tracking-wider mt-1">Total</div></div>
+            </div>
+            {adminSummary.notAccepted > 0 && (
+              <div className="space-y-3">
+                <button className="text-xs text-afrocat-muted hover:text-afrocat-text flex items-center gap-1 cursor-pointer" onClick={() => setShowUnsigned(v => !v)} data-testid="button-toggle-unsigned">
+                  <XCircle className="w-3.5 h-3.5 text-afrocat-red" /> {showUnsigned ? "Hide" : "Show"} {adminSummary.notAccepted} unconfirmed member(s)
+                </button>
+                {showUnsigned && (
+                  <div className="rounded-xl border border-afrocat-border divide-y divide-afrocat-border max-h-48 overflow-y-auto">
+                    {(adminSummary.notAcceptedUsers || []).map((u: any) => (
+                      <div key={u.id} className="px-3 py-2 flex items-center justify-between" data-testid={`row-unsigned-${u.id}`}>
+                        <div><p className="text-sm font-medium text-afrocat-text">{u.fullName}</p><p className="text-[10px] text-afrocat-muted">{u.email} · {u.role}</p></div>
+                        <XCircle className="w-4 h-4 text-afrocat-red opacity-60" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Button onClick={() => { if (window.confirm(`Mark handbook as confirmed for all ${adminSummary.notAccepted} unsigned members?`)) bulkSignMut.mutate(); }} disabled={bulkSignMut.isPending} className="w-full bg-afrocat-gold hover:bg-afrocat-gold/80 text-afrocat-bg font-bold" data-testid="button-bulk-sign">
+                  {bulkSignMut.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Signing all...</> : <><Zap className="w-4 h-4 mr-2" /> Auto-Confirm All {adminSummary.notAccepted} Unsigned</>}
+                </Button>
+              </div>
+            )}
+            {adminSummary.notAccepted === 0 && <div className="flex items-center gap-2 p-3 rounded-xl bg-afrocat-green-soft"><CheckCircle className="w-4 h-4 text-afrocat-green" /><p className="text-sm text-afrocat-green font-medium">All active members have confirmed the handbook.</p></div>}
+          </div>
+        </div>
+      )}
+
+      {isAccepted && contractStatus?.acceptedAt && (
+        <div className="afrocat-card border border-afrocat-green/30 p-5">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="w-6 h-6 text-afrocat-green" />
+            <div className="flex-1">
+              <p className="font-bold text-afrocat-green">Handbook Confirmed</p>
+              <p className="text-xs text-afrocat-muted">Confirmed on {new Date(contractStatus.acceptedAt).toLocaleDateString()} · By: {contractStatus.accepterFullName} ({contractStatus.acceptedBy === "GUARDIAN" ? "Parent/Guardian" : "Self"})</p>
+            </div>
+            {contractStatus.signedPdfUrl && (
+              <a href={contractStatus.signedPdfUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal hover:bg-afrocat-teal/80 text-white text-sm font-bold transition-colors" data-testid="link-download-signed-pdf">
+                <Download className="w-4 h-4" /> Download Signed PDF
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!isAccepted && user?.role === "PLAYER" && (
+        <div className="afrocat-card border border-afrocat-gold/30 overflow-hidden" data-testid="card-handbook-accept">
+          <div className="bg-afrocat-gold-soft border-b border-afrocat-gold/20 px-5 py-3 rounded-t-[18px]">
+            <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-gold"><PenLine className="w-5 h-5" /> Confirm Handbook</h3>
+          </div>
+          <div className="p-5 space-y-4">
+            {isMinor && (
+              <div className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border flex items-center gap-2 text-afrocat-gold text-xs">
+                <Baby className="w-4 h-4" /> Minor player — parent/guardian must complete this section.
+              </div>
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-afrocat-muted font-semibold uppercase tracking-wider mb-1 block">{isMinor ? "Parent/Guardian Full Name *" : "Your Full Name *"}</label>
+                <input value={formData.accepterFullName} onChange={e => setFormData(f => ({ ...f, accepterFullName: e.target.value }))} className="w-full px-3 py-2 border border-afrocat-border rounded-lg text-sm bg-afrocat-white-5 text-afrocat-text" placeholder="Full legal name" data-testid="input-accepter-name" />
+              </div>
+              {isMinor && (<>
+                <div>
+                  <label className="text-xs text-afrocat-muted font-semibold uppercase tracking-wider mb-1 block">Guardian ID Number *</label>
+                  <input value={formData.guardianIdNumber} onChange={e => setFormData(f => ({ ...f, guardianIdNumber: e.target.value }))} className="w-full px-3 py-2 border border-afrocat-border rounded-lg text-sm bg-afrocat-white-5 text-afrocat-text" data-testid="input-guardian-id" />
+                </div>
+                <div>
+                  <label className="text-xs text-afrocat-muted font-semibold uppercase tracking-wider mb-1 block">Guardian Phone *</label>
+                  <input value={formData.guardianPhoneNumber} onChange={e => setFormData(f => ({ ...f, guardianPhoneNumber: e.target.value }))} className="w-full px-3 py-2 border border-afrocat-border rounded-lg text-sm bg-afrocat-white-5 text-afrocat-text" data-testid="input-guardian-phone" />
+                </div>
+              </>)}
+            </div>
+            <label className="flex items-start gap-3 cursor-pointer" data-testid="checkbox-agree">
+              <input type="checkbox" checked={formData.agreed} onChange={e => setFormData(f => ({ ...f, agreed: e.target.checked }))} className="mt-0.5 w-4 h-4 accent-afrocat-teal" />
+              <span className="text-sm text-afrocat-text">I have read and understood the Afrocat SC Player &amp; Club Handbook 2026-2027 and agree to abide by all its terms and conditions.</span>
+            </label>
+            <Button onClick={() => acceptMut.mutate()} disabled={!canSubmit || acceptMut.isPending} className="bg-afrocat-green hover:bg-afrocat-green/80 font-bold" data-testid="button-confirm-handbook">
+              {acceptMut.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Confirming...</> : <><CheckCircle className="w-4 h-4 mr-2" /> Confirm & Accept Handbook</>}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="afrocat-card overflow-hidden" data-testid="card-handbook-pdf">
+        <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px] flex items-center justify-between flex-wrap gap-3">
+          <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-teal"><BookOpen className="w-5 h-5" /> Afrocat SC Player &amp; Club Handbook 2026-2027</h3>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-afrocat-teal/30 overflow-hidden text-xs">
+              <button onClick={() => setPdfView(false)} className={`flex items-center gap-1.5 px-3 py-1.5 font-bold transition-all cursor-pointer ${!pdfView ? "bg-afrocat-teal text-white" : "bg-transparent text-afrocat-muted hover:text-afrocat-teal"}`}><LayoutList className="w-3 h-3" /> Handbook</button>
+              <button onClick={() => setPdfView(true)} className={`flex items-center gap-1.5 px-3 py-1.5 font-bold transition-all cursor-pointer ${pdfView ? "bg-afrocat-teal text-white" : "bg-transparent text-afrocat-muted hover:text-afrocat-teal"}`}><BookOpen className="w-3 h-3" /> PDF View</button>
+            </div>
+            <a href={HANDBOOK_PDF_URL} download="Afrocat-Handbook-2026-2027.pdf" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-afrocat-teal/10 hover:bg-afrocat-teal/20 border border-afrocat-teal/20 text-afrocat-teal text-xs font-bold transition-all" data-testid="link-download-handbook"><Download className="w-3 h-3" /> Download PDF</a>
+            <button onClick={() => { const w = window.open(HANDBOOK_PDF_URL, "_blank"); if (w) setTimeout(() => w.print(), 800); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-afrocat-muted hover:text-afrocat-text text-xs font-bold transition-all cursor-pointer" data-testid="button-print-handbook"><Printer className="w-3 h-3" /> Print</button>
+          </div>
+        </div>
+        <div className="p-5">
+          {pdfView ? (
+            <iframe src={`${HANDBOOK_PDF_URL}#toolbar=1&navpanes=1&scrollbar=1`} className="w-full rounded-lg overflow-hidden border border-afrocat-border" style={{ height: "70vh", minHeight: 480 }} title="Afrocat SC Handbook" />
+          ) : (
+            <div className="max-h-[65vh] overflow-y-auto rounded-lg border border-afrocat-border bg-afrocat-white-3 p-6 space-y-5 text-sm text-afrocat-text">
+              <div className="text-center space-y-1 pb-4 border-b border-afrocat-border">
+                <p className="text-xs text-afrocat-muted uppercase tracking-widest">Windhoek, Namibia</p>
+                <h2 className="text-lg font-display font-bold text-afrocat-teal">AFROCAT SC PLAYER & CLUB HANDBOOK 2026</h2>
+                <p className="text-xs font-bold text-afrocat-gold tracking-wider">ONE TEAM. ONE DREAM</p>
+              </div>
+              {[
+                { title: "Introduction", body: "The Afrocat Sports Club (Afrocat SC) Volleyball Manual outlines the club's mission, values, policies, training structure, and expectations for players, coaches, parents, and officials. This document ensures consistency, professionalism, and a positive culture as our club grows locally and nationally." },
+                { title: "Vision", body: "To be a leading volleyball club that develops disciplined, skilled athletes while promoting teamwork, sportsmanship, and community engagement." },
+                { title: "Mission", body: "To provide structured, high-quality volleyball training and competition opportunities for players of all ages and levels, fostering personal development, competitive excellence, and love for the sport." },
+              ].map(({ title, body }) => (
+                <section key={title}><h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">{title}</h3><p className="text-afrocat-muted leading-relaxed">{body}</p></section>
+              ))}
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Club Values</h3>
+                <div className="space-y-2">
+                  {[["Respect","For self, teammates, opponents, and officials."],["Integrity","Honesty and accountability in all actions."],["Teamwork","Collective effort always outweighs individual contributions."],["Discipline","Consistent commitment to training, behavior, and club standards."],["Growth Mindset","A learning-focused attitude on and off the court."]].map(([v, d]) => (
+                    <div key={v} className="flex gap-3 p-2 rounded-lg bg-afrocat-white-5"><span className="font-bold text-afrocat-teal w-32 shrink-0">{v}</span><span className="text-afrocat-muted">{d}</span></div>
+                  ))}
+                </div>
+              </section>
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Training Schedule</h3>
+                <div className="rounded-lg overflow-hidden border border-afrocat-border">
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-afrocat-white-5"><th className="text-left px-3 py-2 font-semibold text-afrocat-text">Programme</th><th className="text-left px-3 py-2 font-semibold text-afrocat-text">Days</th><th className="text-left px-3 py-2 font-semibold text-afrocat-text">Time</th></tr></thead>
+                    <tbody className="divide-y divide-afrocat-border">
+                      {[["Female Senior","Monday & Wednesday","16h00–19h30"],["Male Senior","Tuesday & Thursday","16h00–19h30"],["School Team","Tuesday & Thursday","14h00–16h00"],["ASC Academy","Wednesday & Friday","14h00–16h00"],["Combined Training","Friday & Sunday","16h00–19h30"],["National League","Saturday","Time slot allocation"]].map(([p, d, t]) => (
+                        <tr key={p}><td className="px-3 py-2 text-afrocat-text">{p}</td><td className="px-3 py-2 text-afrocat-muted">{d}</td><td className="px-3 py-2 text-afrocat-muted">{t}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+              <p className="text-xs text-afrocat-muted italic text-center pt-2">For the full handbook, switch to PDF View or download the document above.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const ATTIRE_PRESETS = [
   { name: "Membership Fee", price: 350, category: "fee" },
@@ -1061,10 +1501,16 @@ export default function Contracts() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const isAdmin = user?.role === "ADMIN" || user?.role === "MANAGER";
+  const isPlayer = user?.role === "PLAYER";
+  const [pageTab, setPageTab] = useState<"contracts" | "handbook">(isPlayer ? "contracts" : "contracts");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
   const [showCreate, setShowCreate] = useState(false);
   const [expandedContract, setExpandedContract] = useState<string | null>(null);
   const [showNvfConfig, setShowNvfConfig] = useState(false);
+
+  const pageTabs = isPlayer
+    ? [{ id: "contracts", label: "My Contract", icon: ScrollText }, { id: "handbook", label: "Club Handbook", icon: BookOpen }]
+    : [{ id: "contracts", label: "Player Contracts", icon: ScrollText }, { id: "handbook", label: "Club Handbook", icon: BookOpen }];
 
   const { data: players = [] } = useQuery({ queryKey: ["players"], queryFn: api.getPlayers });
   const { data: contracts = [] } = useQuery({
@@ -1126,26 +1572,48 @@ export default function Contracts() {
   return (
     <Layout>
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* Page Header */}
         <div className="afrocat-card p-6">
           <div className="flex items-center gap-4 flex-wrap">
             <img src={logo} alt="Afrocat Logo" className="w-14 h-14 object-contain" />
             <div className="flex-1">
-              <h1 className="text-2xl md:text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-page-title">Player Contracts</h1>
-              <p className="text-sm text-afrocat-muted italic mt-0.5">Attire, contributions, fees, fund raising & transfers</p>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {user?.role === "ADMIN" && (
-                <Button onClick={() => setShowNvfConfig(!showNvfConfig)} variant="outline" size="sm" className="border-afrocat-gold text-afrocat-gold hover:bg-afrocat-gold-soft" data-testid="button-nvf-config">
-                  <DollarSign size={14} className="mr-1" /> NVF Fees
-                </Button>
-              )}
-              {isAdmin && (
-                <Button onClick={() => setShowCreate(!showCreate)} size="sm" className="bg-afrocat-teal hover:bg-afrocat-teal/80" data-testid="button-create-contract">
-                  <Plus size={14} className="mr-1" /> New Contract
-                </Button>
-              )}
+              <h1 className="text-2xl md:text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-page-title">Contracts</h1>
+              <p className="text-sm text-afrocat-muted italic mt-0.5">{isPlayer ? "Your contract details & club handbook" : "Player contracts, handbook & transfers"}</p>
             </div>
           </div>
+
+          {/* Top-level page tabs */}
+          <div className="flex gap-1 border-b border-afrocat-border mt-4 overflow-x-auto" data-testid="tab-bar-contracts-page">
+            {pageTabs.map(t => (
+              <button key={t.id} onClick={() => setPageTab(t.id as any)}
+                className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors whitespace-nowrap ${pageTab === t.id ? "border-afrocat-teal text-afrocat-teal" : "border-transparent text-afrocat-muted hover:text-afrocat-text"}`}
+                data-testid={`tab-page-${t.id}`}>
+                <t.icon size={15} /> {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── HANDBOOK TAB ── */}
+        {pageTab === "handbook" && <HandbookPanel />}
+
+        {/* ── MY CONTRACT TAB (players) ── */}
+        {pageTab === "contracts" && isPlayer && <MyContractPanel />}
+
+        {/* ── ADMIN PLAYER CONTRACTS TAB ── */}
+        {pageTab === "contracts" && !isPlayer && (
+        <>
+        <div className="flex gap-2 flex-wrap justify-end">
+          {user?.role === "ADMIN" && (
+            <Button onClick={() => setShowNvfConfig(!showNvfConfig)} variant="outline" size="sm" className="border-afrocat-gold text-afrocat-gold hover:bg-afrocat-gold-soft" data-testid="button-nvf-config">
+              <DollarSign size={14} className="mr-1" /> NVF Fees
+            </Button>
+          )}
+          {isAdmin && (
+            <Button onClick={() => setShowCreate(!showCreate)} size="sm" className="bg-afrocat-teal hover:bg-afrocat-teal/80" data-testid="button-create-contract">
+              <Plus size={14} className="mr-1" /> New Contract
+            </Button>
+          )}
         </div>
 
         {showNvfConfig && <NvfFeeConfig />}
@@ -1302,6 +1770,10 @@ export default function Contracts() {
             })}
           </div>
         )}
+        </>
+        )}
+        {/* ── END ADMIN CONTRACTS TAB ── */}
+
       </div>
     </Layout>
   );

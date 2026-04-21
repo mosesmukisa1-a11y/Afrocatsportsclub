@@ -5277,6 +5277,21 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  // ─── PER-PLAYER HANDBOOK STATUS (admin lookup by playerId) ───────
+  app.get("/api/contract/player-status/:playerId", requireAuth, requireRole(["ADMIN","MANAGER","COACH"]), async (req, res, next) => {
+    try {
+      const { playerId } = req.params;
+      const [acceptance] = await db.select().from(schema.contractAcceptances)
+        .where(and(eq(schema.contractAcceptances.playerId, playerId), eq(schema.contractAcceptances.contractKey, CONTRACT_KEY)));
+      res.json({
+        accepted: !!acceptance,
+        acceptedAt: acceptance?.acceptedAt || null,
+        accepterFullName: acceptance?.accepterFullName || null,
+        acceptedBy: acceptance?.acceptedBy || null,
+      });
+    } catch (e) { next(e); }
+  });
+
   // ─── ADMIN BULK AUTO-SIGN CONTRACT ───────────────────
   app.post("/api/contract/bulk-auto-sign", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
     try {

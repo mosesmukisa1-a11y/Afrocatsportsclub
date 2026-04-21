@@ -86,8 +86,8 @@ function Router() {
       <Route path="/documents">{() => <ProtectedRoute component={Documents} />}</Route>
       <Route path="/reports">{() => <Redirect to="/report-templates" />}</Route>
       <Route path="/player-dashboard">{() => <ProtectedRoute component={PlayerDashboard} />}</Route>
-      <Route path="/my-contract">{() => <ProtectedRoute component={MyContract} />}</Route>
-      <Route path="/club-contract">{() => <ProtectedRoute component={ClubContract} />}</Route>
+      <Route path="/my-contract">{() => <Redirect to="/contracts" />}</Route>
+      <Route path="/club-contract">{() => <Redirect to="/contracts" />}</Route>
       <Route path="/admin/registrations">{() => <ProtectedRoute component={AdminRegistrations} />}</Route>
       <Route path="/admin/users">{() => <ProtectedRoute component={AdminUsers} />}</Route>
       <Route path="/stats-comparison">{() => <ProtectedRoute component={StatsComparison} />}</Route>

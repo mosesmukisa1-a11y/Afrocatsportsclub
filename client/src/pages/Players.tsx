@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Eye, Printer, Shield, Trash2, Mail, Phone } from "lucide-react";
+import { Plus, Search, Eye, Printer, Shield, Trash2, Mail, Phone, CheckCircle, AlertTriangle, ScrollText, BookOpen, FileText } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -40,6 +40,18 @@ export default function Players() {
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
   const [editMode, setEditMode] = useState(false);
+  const [profileTab, setProfileTab] = useState("info");
+
+  const { data: playerContracts = [] } = useQuery({
+    queryKey: ["playerProfileContracts", selectedPlayer?.id],
+    queryFn: () => api.getPlayerContracts(selectedPlayer.id),
+    enabled: !!selectedPlayer?.id && viewOpen,
+  });
+  const { data: handbookStatus } = useQuery({
+    queryKey: ["playerHandbookStatus", selectedPlayer?.id],
+    queryFn: () => fetch(`/api/contract/player-status/${selectedPlayer.id}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }).then(r => r.json()),
+    enabled: !!selectedPlayer?.id && viewOpen && (user?.role === "ADMIN" || user?.role === "MANAGER" || user?.role === "COACH"),
+  });
   const [form, setForm] = useState({ ...emptyForm });
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -89,6 +101,7 @@ export default function Players() {
       bloodGroup: player.bloodGroup || "", photoUrl: player.photoUrl || "",
     });
     setEditMode(false);
+    setProfileTab("info");
     setViewOpen(true);
   };
 
@@ -393,7 +406,59 @@ export default function Players() {
               </form>
             ) : (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                {/* Profile tabs */}
+                <div className="flex gap-1 border-b border-afrocat-border overflow-x-auto" data-testid="tab-bar-profile">
+                  {[{ id: "info", label: "Info", icon: Eye }, { id: "contract", label: "Contract", icon: ScrollText }].map(t => (
+                    <button key={t.id} onClick={() => setProfileTab(t.id)}
+                      className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap cursor-pointer ${profileTab === t.id ? "border-afrocat-teal text-afrocat-teal" : "border-transparent text-afrocat-muted hover:text-afrocat-text"}`}
+                      data-testid={`tab-profile-${t.id}`}>
+                      <t.icon size={12} /> {t.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── CONTRACT TAB ── */}
+                {profileTab === "contract" && (
+                  <div className="space-y-4" data-testid="section-player-contracts">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <span className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider">Contract</span>
+                      {playerContracts.length === 0 ? (
+                        <span className="px-2 py-1 rounded-full bg-afrocat-white-10 text-afrocat-muted text-xs font-bold">No contract</span>
+                      ) : (playerContracts as any[]).map((c: any) => {
+                        const isSigned = !!c.signedByPlayer;
+                        return (
+                          <div key={c.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-afrocat-white-3 border border-afrocat-border text-xs" data-testid={`badge-contract-${c.id}`}>
+                            <FileText size={12} className="text-afrocat-teal" />
+                            <span className="font-medium text-afrocat-text">{c.contractType}</span>
+                            <span className="text-afrocat-muted">{c.startDate} – {c.endDate}</span>
+                            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${c.status === "ACTIVE" ? "bg-afrocat-green-soft text-afrocat-green" : c.status === "DRAFT" ? "bg-afrocat-gold-soft text-afrocat-gold" : "bg-afrocat-red-soft text-afrocat-red"}`}>{c.status}</span>
+                            {isSigned ? (
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-afrocat-green-soft text-afrocat-green text-[10px] font-bold" data-testid={`badge-signed-${c.id}`}><CheckCircle size={10} /> Signed</span>
+                            ) : (
+                              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-afrocat-red-soft text-afrocat-red text-[10px] font-bold" data-testid={`badge-unsigned-${c.id}`}><AlertTriangle size={10} /> Not Signed</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex flex-wrap gap-2 items-center pt-1">
+                      <span className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider">Club Handbook</span>
+                      {handbookStatus?.accepted ? (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-afrocat-green-soft text-afrocat-green text-xs font-bold" data-testid="badge-handbook-signed">
+                          <CheckCircle size={12} /> Confirmed {handbookStatus.acceptedAt ? `on ${new Date(handbookStatus.acceptedAt).toLocaleDateString()}` : ""}
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-afrocat-red-soft text-afrocat-red text-xs font-bold" data-testid="badge-handbook-unsigned">
+                          <AlertTriangle size={12} /> Not Yet Confirmed
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── INFO TAB ── */}
+                {profileTab === "info" && (<>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
                   <div><span className="text-afrocat-muted text-xs uppercase">Position</span><p className="font-medium text-afrocat-text">{selectedPlayer?.position || "—"}</p></div>
                   <div><span className="text-afrocat-muted text-xs uppercase">Gender</span><p className="font-medium text-afrocat-text">{selectedPlayer?.gender || "—"}</p></div>
                   <div><span className="text-afrocat-muted text-xs uppercase">DOB</span><p className="font-medium text-afrocat-text">{selectedPlayer?.dob || "—"}</p></div>
@@ -454,6 +519,7 @@ export default function Players() {
                     </div>
                   </div>
                 )}
+                </>)}
 
                 <div className="flex gap-2 pt-2">
                   {canEdit && <Button variant="outline" onClick={() => setEditMode(true)} className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5" data-testid="button-edit-player">Edit</Button>}
