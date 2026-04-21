@@ -271,8 +271,8 @@ export async function registerRoutes(
           await db.insert(schema.contractAcceptances).values({
             userId: user.id,
             playerId,
-            contractKey: "AFROCAT_CONTRACT_2024_2026",
-            contractVersionHash: "PDF_v1_2024_2026",
+            contractKey: "AFROCAT_HANDBOOK_2026_2027",
+            contractVersionHash: "v1_2026_2027",
             sport: "VOLLEYBALL",
             isMinor: isMinorReg,
             acceptedBy: "SELF",
@@ -5051,8 +5051,8 @@ th{background:#0d7377;color:white}
   });
 
   // ─── CLUB CONTRACT ACCEPTANCE ────────────────────────────────
-  const CONTRACT_KEY = "AFROCAT_CONTRACT_2024_2026";
-  const CONTRACT_VERSION = "PDF_v1_2024_2026";
+  const CONTRACT_KEY = "AFROCAT_HANDBOOK_2026_2027";
+  const CONTRACT_VERSION = "v1_2026_2027";
 
   app.get("/api/contract/status", requireAuth, async (req, res, next) => {
     try {
@@ -5280,7 +5280,7 @@ th{background:#0d7377;color:white}
   app.post("/api/contract/bulk-auto-sign", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
     try {
       const allAcceptances = await db.select().from(schema.contractAcceptances)
-        .where(eq(schema.contractAcceptances.contractKey, "AFROCAT_CONTRACT_2024_2026"));
+        .where(eq(schema.contractAcceptances.contractKey, CONTRACT_KEY));
       const acceptedUserIds = new Set(allAcceptances.map(a => a.userId));
 
       const allUsers = await db.select().from(schema.users);
@@ -5292,8 +5292,8 @@ th{background:#0d7377;color:white}
           await db.insert(schema.contractAcceptances).values({
             userId: u.id,
             playerId: u.playerId || null,
-            contractKey: "AFROCAT_CONTRACT_2024_2026",
-            contractVersionHash: "PDF_v1_2024_2026",
+            contractKey: "AFROCAT_HANDBOOK_2026_2027",
+            contractVersionHash: "v1_2026_2027",
             sport: "VOLLEYBALL",
             isMinor: false,
             acceptedBy: "SELF",
@@ -8810,6 +8810,42 @@ th{background:#0d7377;color:white}
       res.status(204).send();
     } catch (e) { next(e); }
   });
+
+  // ─── STARTUP: Auto-sign existing approved members on new handbook ───
+  (async () => {
+    try {
+      const HANDBOOK_KEY = "AFROCAT_HANDBOOK_2026_2027";
+      const HANDBOOK_VERSION = "v1_2026_2027";
+      const existing = await db.select({ userId: schema.contractAcceptances.userId })
+        .from(schema.contractAcceptances)
+        .where(eq(schema.contractAcceptances.contractKey, HANDBOOK_KEY));
+      const signedIds = new Set(existing.map(r => r.userId));
+      const activeUsers = await db.select().from(schema.users)
+        .where(eq(schema.users.accountStatus, "ACTIVE"));
+      let count = 0;
+      for (const u of activeUsers) {
+        if (signedIds.has(u.id)) continue;
+        try {
+          await db.insert(schema.contractAcceptances).values({
+            userId: u.id,
+            playerId: u.playerId || null,
+            contractKey: HANDBOOK_KEY,
+            contractVersionHash: HANDBOOK_VERSION,
+            sport: "VOLLEYBALL",
+            isMinor: false,
+            acceptedBy: "SELF",
+            accepterFullName: u.fullName || u.email,
+            ipAddress: "SYSTEM_AUTO_SIGN",
+            userAgent: "STARTUP_HANDBOOK_2026_2027",
+          });
+          count++;
+        } catch (_) {}
+      }
+      if (count > 0) console.log(`[contract] Auto-signed ${count} existing member(s) on Player & Club Handbook 2026-2027`);
+    } catch (e) {
+      console.warn("[contract] Startup auto-sign skipped:", (e as any)?.message);
+    }
+  })();
 
   return httpServer;
 }

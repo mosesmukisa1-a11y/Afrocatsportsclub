@@ -102,10 +102,10 @@ export default function ClubContract() {
             <img src={logo} alt="Afrocat Logo" className="w-14 h-14 object-contain" data-testid="img-afrocat-logo" />
             <div className="flex-1">
               <h1 className="text-2xl md:text-3xl font-display font-bold text-afrocat-text tracking-tight" data-testid="text-page-title">
-                Club Contract
+                Player & Club Handbook 2026-2027
               </h1>
               <p className="text-sm text-afrocat-muted italic mt-0.5">
-                Afrocat Volleyball Club — Official Application & Contract
+                Afrocat Sports Club — Official Member Handbook & Acknowledgment
               </p>
             </div>
             {isAccepted ? (
@@ -237,18 +237,191 @@ export default function ClubContract() {
         <div className="afrocat-card overflow-hidden" data-testid="card-contract-pdf">
           <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-5 py-3 rounded-t-[18px]">
             <h3 className="flex items-center gap-2 text-base font-display font-bold text-afrocat-teal">
-              <FileText className="w-5 h-5" /> Official Contract Document
+              <FileText className="w-5 h-5" /> Afrocat SC Player & Club Handbook 2026-2027
             </h3>
           </div>
           <div className="p-5">
-            <iframe
-              src="/contracts/afrocat-volleyball-contract.pdf"
-              className="w-full h-[70vh] rounded-lg border border-afrocat-border"
-              title="Afrocat Volleyball Club Contract"
-              data-testid="iframe-contract-pdf"
-            />
+            <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-afrocat-border bg-afrocat-white-3 p-6 space-y-6 text-sm text-afrocat-text" data-testid="handbook-content">
+
+              <div className="text-center space-y-1 pb-4 border-b border-afrocat-border">
+                <p className="text-xs text-afrocat-muted uppercase tracking-widest">Windhoek, Namibia</p>
+                <h2 className="text-lg font-display font-bold text-afrocat-teal">AFROCAT SC PLAYER & CLUB HANDBOOK 2026</h2>
+                <p className="text-xs text-afrocat-muted italic">This handbook outlines the mission, values, policies, training structure, and expectations of Afrocat Sports Club as we build disciplined athletes and a positive volleyball culture.</p>
+                <p className="text-xs font-bold text-afrocat-gold tracking-wider">ONE TEAM. ONE DREAM</p>
+              </div>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">Introduction</h3>
+                <p className="text-afrocat-muted leading-relaxed">The Afrocat Sports Club (Afrocat SC) Volleyball Manual outlines the club's mission, values, policies, training structure, and expectations for players, coaches, parents, and officials. This document ensures consistency, professionalism, and a positive culture as our club grows locally and nationally.</p>
+                <p className="text-xs text-afrocat-gold italic mt-2">Club Principle: A will to train is a will to play.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Vision & Mission</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-afrocat-white-5 border border-afrocat-border">
+                    <p className="font-bold text-afrocat-text text-xs mb-1">VISION</p>
+                    <p className="text-afrocat-muted leading-relaxed">To be a leading volleyball club that develops disciplined, skilled athletes while promoting teamwork, sportsmanship, and community engagement.</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-afrocat-white-5 border border-afrocat-border">
+                    <p className="font-bold text-afrocat-text text-xs mb-1">MISSION</p>
+                    <p className="text-afrocat-muted leading-relaxed">To provide structured, high-quality volleyball training and competition opportunities for players of all ages and levels; fostering personal development, competitive excellence, and love for the sport.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Club Values</h3>
+                <div className="space-y-2">
+                  {[
+                    { v: "Respect", d: "For self, teammates, opponents, and officials." },
+                    { v: "Integrity", d: "Honesty and accountability in all actions." },
+                    { v: "Teamwork", d: "Collective effort always outweighs individual contributions." },
+                    { v: "Discipline", d: "Consistent commitment to training, behavior, and club standards." },
+                    { v: "Growth Mindset", d: "A learning-focused attitude on and off the court." },
+                  ].map(({ v, d }) => (
+                    <div key={v} className="flex gap-3 p-2 rounded-lg bg-afrocat-white-5">
+                      <span className="font-bold text-afrocat-teal w-32 shrink-0">{v}</span>
+                      <span className="text-afrocat-muted">{d}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Governance & Structure</h3>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="font-semibold text-afrocat-text mb-2 text-xs uppercase tracking-wider">Club Management</p>
+                    <ul className="space-y-1 text-afrocat-muted">
+                      {["Club Chairperson", "Development Director & Operations", "Technical Director", "Head Coach (Volleyball)", "Coaching Staff", "Team Managers", "Medical & Support Staff", "Volunteers & Admin"].map(r => (
+                        <li key={r} className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-afrocat-teal shrink-0" />{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-afrocat-text mb-2 text-xs uppercase tracking-wider">Committees</p>
+                    <ul className="space-y-1 text-afrocat-muted">
+                      {["Technical Committee", "Marketing Committee", "Events & Fundraising Committee"].map(r => (
+                        <li key={r} className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-afrocat-gold shrink-0" />{r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Membership</h3>
+                <p className="text-afrocat-muted leading-relaxed mb-2">Players must submit registration forms, medical consent, pay membership fees, and agree to the Athlete Code of Conduct.</p>
+                <p className="text-afrocat-muted leading-relaxed mb-2"><span className="font-semibold text-afrocat-text">Fees:</span> Category 1 — Working Class. Category 2 — Non-working Class. Membership fee must be settled before the end of the season.</p>
+                <p className="text-afrocat-muted leading-relaxed"><span className="font-semibold text-afrocat-text">Parents/Guardians</span> are expected to support positive behavior, attend orientation sessions, and respect all club stakeholders. Parents must sign membership forms and consent letters for athletes under 18.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Training & Curriculum</h3>
+                <p className="text-xs text-afrocat-muted mb-2 font-semibold">Training Categories: Youth U10/U13/U15/U17 · Development/Beginner · Intermediate · Competitive/Elite · Select/National Pathway</p>
+                <div className="rounded-lg overflow-hidden border border-afrocat-border">
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-afrocat-white-5"><th className="text-left px-3 py-2 font-semibold text-afrocat-text">Programme</th><th className="text-left px-3 py-2 font-semibold text-afrocat-text">Days</th><th className="text-left px-3 py-2 font-semibold text-afrocat-text">Time</th></tr></thead>
+                    <tbody className="divide-y divide-afrocat-border">
+                      {[
+                        ["School Team", "Tuesday & Thursday", "14h00–16h00"],
+                        ["ASC Academy", "Wednesday & Friday", "14h00–16h00"],
+                        ["Female Senior", "Monday & Wednesday", "16h00–19h30"],
+                        ["Male Senior", "Tuesday & Thursday", "16h00–19h30"],
+                        ["Combined Training", "Friday & Sunday", "16h00–19h30"],
+                        ["National League Teams", "Saturday", "Time slot allocation"],
+                      ].map(([p, d, t]) => (
+                        <tr key={p}><td className="px-3 py-2 text-afrocat-text">{p}</td><td className="px-3 py-2 text-afrocat-muted">{d}</td><td className="px-3 py-2 text-afrocat-muted">{t}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-afrocat-muted mt-2 italic">Technical Focus: 5 stages of ASC development pathway — Serve & receive, passing, setting, attacking, blocking, defense, transitions, team systems.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">Competition & Scheduling</h3>
+                <p className="text-afrocat-muted leading-relaxed">Players must attend matches on time, wear the club uniform, and demonstrate sportsmanship at all times during travel, warm-up, matches, and post-match interactions.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Club Standards & Expectations</h3>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {[
+                    { title: "Dress Code", items: ["Official Afrocat SC kit required", "Proper volleyball gear mandatory", "No jewelry", "Clean and appropriate clothing"] },
+                    { title: "Punctuality", items: ["Arrive 10 minutes early", "Players are accountable for behavior, equipment, and commitment"] },
+                    { title: "Communication", items: ["Email & WhatsApp are official platforms", "Volleyball-related content only", "Respectful language required"] },
+                    { title: "Practice Attendance", items: ["Attendance is compulsory", "Absences must be communicated in advance", "A will to train is a will to play"] },
+                  ].map(({ title, items }) => (
+                    <div key={title} className="p-3 rounded-lg bg-afrocat-white-5 border border-afrocat-border">
+                      <p className="font-bold text-afrocat-text text-xs mb-2 uppercase tracking-wider">{title}</p>
+                      <ul className="space-y-1">{items.map(i => <li key={i} className="text-afrocat-muted flex items-start gap-2"><span className="mt-1 w-1.5 h-1.5 rounded-full bg-afrocat-teal shrink-0" />{i}</li>)}</ul>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Safety & Welfare / Equipment & Uniform</h3>
+                <div className="grid md:grid-cols-2 gap-3">
+                  <p className="text-afrocat-muted leading-relaxed p-3 rounded-lg bg-afrocat-white-5 border border-afrocat-border">Emergency contacts are required for all players. Medical forms must be updated annually, and child safeguarding practices must be enforced throughout all club activities.</p>
+                  <p className="text-afrocat-muted leading-relaxed p-3 rounded-lg bg-afrocat-white-5 border border-afrocat-border">Club uniform is mandatory. Equipment provided by the club must be used responsibly, stored properly, and maintained with care.</p>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">Communication Protocols</h3>
+                <p className="text-afrocat-muted leading-relaxed">Official notices are shared via email and WhatsApp. Training schedules, updates, and announcements may be shared daily or weekly, depending on club activity.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">Discipline & Grievance Procedures</h3>
+                <p className="text-afrocat-muted leading-relaxed">Reports should be submitted within 48 hours of an incident. Appeals are allowed through the appropriate club leadership structures.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">Performance Evaluation</h3>
+                <p className="text-afrocat-muted leading-relaxed">The club will conduct annual evaluations of players, coaches, and programmes in order to improve standards, support development, and strengthen performance culture. All members must create their profile in the Afrocat SC portal.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-3">Development Pathways</h3>
+                <p className="text-afrocat-muted leading-relaxed mb-2">Players are given opportunities to progress into elite teams, attend training camps, and pursue national selection. Members should understand the ASC development pathway and the seasonal training calendar.</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {["Youth", "Beginner", "Intermediate", "Competitive / Elite", "National Pathway"].map((s, i, arr) => (
+                    <div key={s} className="flex items-center gap-2">
+                      <span className="px-3 py-1 rounded-full bg-afrocat-teal-soft text-afrocat-teal text-xs font-semibold">{s}</span>
+                      {i < arr.length - 1 && <span className="text-afrocat-muted">→</span>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">Volunteer & Staff Development</h3>
+                <p className="text-afrocat-muted leading-relaxed">Ongoing training, learning opportunities, and certification are encouraged for coaches, staff, volunteers, and all personnel serving the club.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">Sponsorship & Community Relations</h3>
+                <p className="text-afrocat-muted leading-relaxed">Afrocat Sports Club values ethical partnerships that support both the club and the wider community. Sponsorships should strengthen development, visibility, and positive social impact.</p>
+              </section>
+
+              <section>
+                <h3 className="font-display font-bold text-afrocat-teal uppercase tracking-wider text-xs mb-2">Amendments</h3>
+                <p className="text-afrocat-muted leading-relaxed">This manual will be reviewed periodically and updated where necessary to reflect the growth, direction, and operational needs of Afrocat Sports Club.</p>
+              </section>
+
+              <section className="border-t border-afrocat-border pt-4">
+                <h3 className="font-display font-bold text-afrocat-gold uppercase tracking-wider text-xs mb-3">Acknowledgment</h3>
+                <p className="text-afrocat-muted leading-relaxed font-semibold">All members are expected to read, sign, and comply with this manual.</p>
+                <p className="text-xs text-afrocat-muted mt-2 italic">By confirming below, you acknowledge that you have read the Afrocat SC Player & Club Handbook 2026-2027 in its entirety and agree to abide by all policies, expectations, and standards contained herein.</p>
+              </section>
+
+            </div>
             <p className="text-xs text-afrocat-muted mt-3 text-center">
-              Please read the entire contract document above before confirming below.
+              Please read the entire handbook above before confirming below.
             </p>
           </div>
         </div>
@@ -335,8 +508,8 @@ export default function ClubContract() {
                 />
                 <span className="text-sm text-afrocat-text">
                   {isMinor
-                    ? "I, as the parent/guardian of this minor, confirm that I have read and agree to the terms and conditions of the Afrocat Volleyball Club contract on their behalf."
-                    : "I have read and agree to the terms and conditions of the Afrocat Volleyball Club contract."}
+                    ? "I, as the parent/guardian of this minor, confirm that I have read the Afrocat SC Player & Club Handbook 2026-2027 in full and agree to all policies, expectations, and standards on their behalf."
+                    : "I have read the Afrocat SC Player & Club Handbook 2026-2027 in full and agree to abide by all policies, expectations, and standards contained herein."}
                 </span>
               </label>
 
