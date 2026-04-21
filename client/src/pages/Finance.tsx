@@ -39,6 +39,24 @@ export default function Finance() {
   const canApprove = user && (user.role === "ADMIN" || user.role === "FINANCE" || user.isSuperAdmin || user.roles?.some((r: string) => ["ADMIN", "FINANCE"].includes(r)));
   const canManage = user && (user.role === "ADMIN" || user.role === "FINANCE" || user.role === "MANAGER" || user.isSuperAdmin);
 
+  const downloadPdf = async (url: string, filename: string) => {
+    try {
+      const token = localStorage.getItem("token");
+      const resp = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!resp.ok) { const e = await resp.json().catch(() => null); throw new Error(e?.message || "Failed to generate PDF"); }
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      toast({ title: "PDF downloaded" });
+    } catch (err: any) {
+      toast({ title: "PDF error", description: err.message, variant: "destructive" });
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<Tab>("summary");
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -507,11 +525,12 @@ export default function Finance() {
                       </div>
                     </div>
                     {canManage && (
-                      <a href={`/api/finance/player/${selectedPlayerId}/valuation-pdf`} target="_blank" rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-afrocat-teal/20 hover:bg-afrocat-teal/30 border border-afrocat-teal/40 text-afrocat-teal text-xs font-bold transition-all"
+                      <button
+                        onClick={() => downloadPdf(`/api/finance/player/${selectedPlayerId}/valuation-pdf`, `Finance_${playerFinance?.playerName?.replace(/\s+/g,"_") || selectedPlayerId}.pdf`)}
+                        className="flex items-center justify-center gap-2 w-full py-2 rounded-lg bg-afrocat-teal/20 hover:bg-afrocat-teal/30 border border-afrocat-teal/40 text-afrocat-teal text-xs font-bold transition-all cursor-pointer"
                         data-testid="button-download-player-pdf">
                         <Download className="w-3.5 h-3.5" /> Download Player Finance PDF
-                      </a>
+                      </button>
                     )}
                   </div>
                 )}
@@ -588,23 +607,23 @@ export default function Finance() {
                           {teams.map(([id, name]) => <option key={id as string} value={id as string}>{name as string}</option>)}
                         </select>
                         {selectedTeamPdf && (
-                          <a href={`/api/finance/team/${selectedTeamPdf}/valuation-pdf`} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-afrocat-teal/20 hover:bg-afrocat-teal/30 border border-afrocat-teal/40 text-afrocat-teal text-xs font-bold"
+                          <button
+                            onClick={() => { const name = (valuations?.players as any[])?.find(r => r.teamId === selectedTeamPdf)?.team || selectedTeamPdf; downloadPdf(`/api/finance/team/${selectedTeamPdf}/valuation-pdf`, `Team_Finance_${name.replace(/\s+/g,"_")}.pdf`); }}
+                            className="flex items-center gap-1 px-3 py-2 rounded-lg bg-afrocat-teal/20 hover:bg-afrocat-teal/30 border border-afrocat-teal/40 text-afrocat-teal text-xs font-bold cursor-pointer"
                             data-testid="button-team-pdf">
                             <Download className="w-3.5 h-3.5" /> Get
-                          </a>
+                          </button>
                         )}
                       </div>
                     ) : null;
                   })()}
-                  <a
-                    href="/api/finance/club/valuation-pdf"
-                    target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-gold hover:bg-afrocat-gold/80 text-afrocat-dark text-sm font-bold"
+                  <button
+                    onClick={() => downloadPdf("/api/finance/club/valuation-pdf", `Afrocat_Club_Finance_${new Date().toISOString().slice(0,10)}.pdf`)}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-gold hover:bg-afrocat-gold/80 text-afrocat-dark text-sm font-bold cursor-pointer"
                     data-testid="button-club-finance-pdf"
                   >
                     <Download className="w-4 h-4" /> Club PDF
-                  </a>
+                  </button>
                   <button
                     onClick={() => window.print()}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal hover:bg-afrocat-teal/80 text-white text-sm font-bold"
@@ -676,12 +695,13 @@ export default function Finance() {
                                 {tv >= 15000 && <Star className="w-3 h-3 inline ml-1 text-afrocat-gold fill-current" />}
                               </td>
                               <td className="px-3 py-2.5">
-                                <a href={`/api/finance/player/${r.id}/valuation-pdf`} target="_blank" rel="noopener noreferrer"
+                                <button
+                                  onClick={() => downloadPdf(`/api/finance/player/${r.id}/valuation-pdf`, `Finance_${r.name.replace(/\s+/g,"_")}.pdf`)}
                                   title={`Download PDF for ${r.name}`}
-                                  className="inline-flex items-center justify-center w-7 h-7 rounded bg-afrocat-white-5 hover:bg-afrocat-teal/20 border border-afrocat-border hover:border-afrocat-teal/40 text-afrocat-muted hover:text-afrocat-teal transition-all"
+                                  className="inline-flex items-center justify-center w-7 h-7 rounded bg-afrocat-white-5 hover:bg-afrocat-teal/20 border border-afrocat-border hover:border-afrocat-teal/40 text-afrocat-muted hover:text-afrocat-teal transition-all cursor-pointer"
                                   data-testid={`button-player-pdf-${r.id}`}>
                                   <Download className="w-3 h-3" />
-                                </a>
+                                </button>
                               </td>
                             </tr>
                           );
