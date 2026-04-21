@@ -131,10 +131,14 @@ export default function Awards() {
       const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const PAGE_W = 297, PAGE_H = 210;
       const MX = 8, MY = 7;          // side / vertical margin
-      const HEADER_H = 13;           // page header height
-      const COLS = 4, GAP = 3;
-      const cardW = (PAGE_W - MX * 2 - GAP * (COLS - 1)) / COLS;   // ~68mm
-      const cardH = cardW * 1.42;                                    // ~96mm
+      const FOOTER_H = 8;
+      const HEADER_H = 16;           // page header height
+      const COLS = 4;
+      const COL_GAP = 4;             // gap between cards horizontally
+      const ROW_GAP = 4;             // gap between rows
+      /* Two rows must fit: PAGE_H - margins - header - footer - 1 row gap */
+      const cardH = Math.floor((PAGE_H - MY * 2 - HEADER_H - FOOTER_H - ROW_GAP) / 2);
+      const cardW = Math.round(cardH / 1.42);
 
       /* ── Colour helpers ── */
       const DARK   = [15,  23,  40 ] as [number,number,number];
@@ -282,47 +286,65 @@ export default function Awards() {
         pdf.text(teamStr, x + cardW / 2, y + cardH - 3.5, { align: "center" });
       }
 
-      /* ── Draw page background ── */
+      /* ── Page background ── */
       pdf.setFillColor(...DARK);
       pdf.rect(0, 0, PAGE_W, PAGE_H, "F");
 
-      /* ── Page header ── */
+      /* ── Poster banner header ── */
+      /* Gold top stripe */
+      pdf.setFillColor(...GOLD);
+      pdf.rect(0, 0, PAGE_W, 3, "F");
+      /* Teal band behind title */
+      pdf.setFillColor(...TEAL);
+      pdf.rect(0, 3, PAGE_W, HEADER_H - 3, "F");
+      /* Club name left */
       pdf.setTextColor(...GOLD);
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(13);
-      pdf.text("AFROCAT VC  —  TEAM OF THE WEEK", MX, MY + 5);
       pdf.setFontSize(7.5);
-      pdf.setTextColor(...MUTED);
+      pdf.text("AFROCAT VOLLEYBALL CLUB", MX, 3 + 5.5);
+      /* Main title center */
+      pdf.setTextColor(...WHITE);
+      pdf.setFontSize(13);
+      pdf.text("TEAM OF THE WEEK", PAGE_W / 2, 3 + 9.5, { align: "center" });
+      /* Subtitle right */
       const wkLabel = (teamOfWeek as any)?.weekLabel || "";
-      pdf.text(`${wkLabel}  ·  ${towPlayers.length} players selected`, MX, MY + 9.5);
-      /* Gold underline */
+      pdf.setTextColor(...GOLD);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(6.5);
+      pdf.text(
+        wkLabel ? wkLabel.toUpperCase() : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }).toUpperCase(),
+        PAGE_W - MX, 3 + 5.5, { align: "right" }
+      );
+      pdf.setFontSize(6);
+      pdf.setTextColor(...WHITE);
+      pdf.text(`${towPlayers.length} PLAYERS SELECTED`, PAGE_W - MX, 3 + 10, { align: "right" });
+      /* Gold bottom accent line */
       pdf.setFillColor(...GOLD);
-      pdf.rect(MX, MY + 11, PAGE_W - MX * 2, 0.5, "F");
+      pdf.rect(0, HEADER_H, PAGE_W, 0.8, "F");
 
-      /* ── Draw all cards ── */
-      for (let i = 0; i < towPlayers.length; i++) {
-        const col = i % COLS;
-        const row = Math.floor(i / COLS);
-        const cx = MX + col * (cardW + GAP);
-        const cy = MY + HEADER_H + row * (cardH + GAP);
-
-        /* New page when row overflows */
-        if (row > 0 && cy + cardH > PAGE_H - MY) {
-          pdf.addPage();
-          pdf.setFillColor(...DARK);
-          pdf.rect(0, 0, PAGE_W, PAGE_H, "F");
-        }
-
-        drawCard(towPlayers[i], cx, cy);
+      /* ── Card grid — 2 rows, both centered ── */
+      const cardStartY = MY + HEADER_H;
+      /* Group cards into rows of COLS */
+      const rows: any[][] = [];
+      for (let i = 0; i < towPlayers.length; i += COLS) {
+        rows.push(towPlayers.slice(i, i + COLS));
       }
+      rows.forEach((rowPlayers, rowIdx) => {
+        const rowTotalW = rowPlayers.length * cardW + (rowPlayers.length - 1) * COL_GAP;
+        const rowStartX = (PAGE_W - rowTotalW) / 2;
+        const cy = cardStartY + rowIdx * (cardH + ROW_GAP);
+        rowPlayers.forEach((p, colIdx) => {
+          const cx = rowStartX + colIdx * (cardW + COL_GAP);
+          drawCard(p, cx, cy);
+        });
+      });
 
       /* ── Footer ── */
-      pdf.setPage(pdf.getNumberOfPages());
-      pdf.setFontSize(6.5);
+      pdf.setFontSize(6);
       pdf.setTextColor(70, 80, 100);
       pdf.text(
         `Afrocat Volleyball Club  •  Generated ${new Date().toLocaleDateString()}`,
-        PAGE_W / 2, PAGE_H - MY + 3, { align: "center" }
+        PAGE_W / 2, PAGE_H - 2, { align: "center" }
       );
 
       pdf.save(`Afrocat_Team_of_Week_${new Date().toISOString().slice(0, 10)}.pdf`);
