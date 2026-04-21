@@ -2612,6 +2612,18 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     } catch (e) { next(e); }
   });
 
+  // All approved members — for assignment pickers that need any user (coach, player, etc.)
+  app.get("/api/users/all-members", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
+    try {
+      const users = await storage.getAllUsers();
+      const members = users
+        .filter((u: any) => u.accountStatus === "ACTIVE" || u.accountStatus === "APPROVED" || u.isSuperAdmin)
+        .map((u: any) => ({ id: u.id, fullName: u.fullName, email: u.email, role: u.role, photoUrl: u.photoUrl || null }))
+        .sort((a: any, b: any) => a.fullName.localeCompare(b.fullName));
+      res.json(members);
+    } catch (e) { next(e); }
+  });
+
   // Coach users list for assignment picker
   app.get("/api/users/coaches", requireAuth, requireRole(["ADMIN","MANAGER"]), async (req, res, next) => {
     try {

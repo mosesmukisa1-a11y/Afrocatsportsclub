@@ -134,11 +134,11 @@ function AssignmentCard({ assignment }: { assignment: any }) {
   );
 }
 
-function CoachCard({ coachUserId, allAssignments, teams, coachUsers }: {
+function CoachCard({ coachUserId, allAssignments, teams, allUsers }: {
   coachUserId: string;
   allAssignments: any[];
   teams: any[];
-  coachUsers: any[];
+  allUsers: any[];
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -153,7 +153,7 @@ function CoachCard({ coachUserId, allAssignments, teams, coachUsers }: {
     enabled: expanded,
   });
 
-  const coachUser = coachUsers.find((u: any) => u.id === coachUserId);
+  const coachUser = allUsers.find((u: any) => u.id === coachUserId);
   const assignments = allAssignments.filter((a: any) => a.coachUserId === coachUserId);
   const activeTeams = assignments.filter((a: any) => a.active).map((a: any) => teams.find((t: any) => t.id === a.teamId)?.name || a.teamId);
   const isHeadCoach = assignments.some((a: any) => a.assignmentRole === "HEAD_COACH");
@@ -290,6 +290,11 @@ export default function Coaches() {
     queryFn: api.getCoachUsers,
     enabled: isAdmin,
   });
+  const { data: allMembers = [] } = useQuery({
+    queryKey: ["all-members"],
+    queryFn: api.getAllMembers,
+    enabled: isAdmin,
+  });
 
   const [showAssign, setShowAssign] = useState(false);
   const [form, setForm] = useState({
@@ -315,16 +320,16 @@ export default function Coaches() {
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
-  const coachIds = [...new Set((assignments as any[]).map((a: any) => a.coachUserId))];
-  const allCoachIds = [...new Set([
-    ...coachIds,
-    ...coachUsers.map((u: any) => u.id),
-  ])].filter(id => {
-    const userAssignments = (assignments as any[]).filter((a: any) => a.coachUserId === id);
-    return userAssignments.length > 0 || coachUsers.some((u: any) => u.id === id);
-  });
+  // Combine all members + coach-role users so cards always have user info
+  const combinedUsers = [...allMembers as any[]].reduce((acc: any[], u: any) => {
+    if (!acc.find((x: any) => x.id === u.id)) acc.push(u);
+    return acc;
+  }, [...coachUsers as any[]]);
 
-  const displayIds = coachIds.length > 0 ? coachIds : coachUsers.map((u: any) => u.id);
+  // Show cards for everyone who has at least one assignment, plus all COACH-role users
+  const assignedIds = [...new Set((assignments as any[]).map((a: any) => a.coachUserId))];
+  const coachRoleIds = (coachUsers as any[]).map((u: any) => u.id);
+  const displayIds = [...new Set([...assignedIds, ...coachRoleIds])];
 
   return (
     <Layout>
@@ -360,17 +365,24 @@ export default function Coaches() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Coach</label>
+                <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider mb-1 block">Assign To Member</label>
                 <Select value={form.coachUserId} onValueChange={v => setForm(f => ({ ...f, coachUserId: v }))}>
                   <SelectTrigger data-testid="select-coach-user">
-                    <SelectValue placeholder="Select a coach" />
+                    <SelectValue placeholder="Select any member" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(coachUsers as any[]).map((u: any) => (
-                      <SelectItem key={u.id} value={u.id}>{u.fullName}</SelectItem>
+                    {(allMembers as any[]).length === 0 && (coachUsers as any[]).length === 0 && (
+                      <SelectItem value="_none" disabled>No members found</SelectItem>
+                    )}
+                    {((allMembers as any[]).length > 0 ? allMembers : coachUsers as any[]).map((u: any) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.fullName}
+                        {u.role && u.role !== "PLAYER" ? ` · ${u.role}` : ""}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-[10px] text-afrocat-muted mt-1">Any approved member can be assigned as head or assistant coach</p>
               </div>
 
               <div>
@@ -490,7 +502,7 @@ export default function Coaches() {
                 coachUserId={id}
                 allAssignments={assignments as any[]}
                 teams={teams as any[]}
-                coachUsers={coachUsers as any[]}
+                allUsers={combinedUsers}
               />
             ))}
           </div>

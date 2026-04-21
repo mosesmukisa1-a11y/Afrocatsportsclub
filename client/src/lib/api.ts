@@ -146,6 +146,7 @@ export const api = {
   getCoachPerformance: (coachUserId: string) => apiFetch<any>(`/coaches/${coachUserId}/performance`),
   getCoachDetailedPerformance: (coachUserId: string) => apiFetch<any>(`/coaches/${coachUserId}/performance/detailed`),
   getCoachUsers: () => apiFetch<any[]>("/users/coaches"),
+  getAllMembers: () => apiFetch<any[]>("/users/all-members"),
 
   getPlayerContracts: (playerId: string) => apiFetch<any[]>(`/contracts/player/${playerId}`),
   createContract: (data: any) => apiFetch<any>("/contracts", { method: "POST", body: JSON.stringify(data) }),
