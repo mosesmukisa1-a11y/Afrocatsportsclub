@@ -108,6 +108,7 @@ export function Layout({ children }: { children: ReactNode }) {
         )}
 
       <aside
+        data-no-print
         className={`${mobileOpen ? 'flex absolute inset-y-0 left-0 z-40 w-72' : 'hidden'} md:relative md:flex md:w-64 md:z-auto shrink-0 border-r border-afrocat-border bg-afrocat-card flex-col overflow-hidden`}
       >
         <div className="hidden md:flex p-6 items-center gap-3 border-b border-afrocat-border">

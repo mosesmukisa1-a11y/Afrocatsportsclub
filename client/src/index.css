@@ -202,62 +202,54 @@ html, body {
 }
 
 /* ─── PRINT STYLES ────────────────────────────────────────────────── */
-@media print {
-  @page {
-    margin: 1.2cm 1.5cm;
-    size: A4 landscape;
-  }
+@page {
+  margin: 1.2cm 1.5cm;
+  size: A4 landscape;
+}
 
-  /* Hide sidebar, mobile header, mobile nav, action buttons */
-  aside,
-  [data-testid="button-mobile-menu"],
+@media print {
+  /* Hide sidebar, mobile header, mobile bottom nav, action buttons */
+  [data-no-print],
   [data-testid="button-val-print"],
   [data-testid="button-club-finance-pdf"],
+  [data-testid="select-team-pdf"],
   [data-testid="button-team-pdf"],
-  [data-testid="select-team-pdf"] {
+  [data-testid="button-mobile-menu"],
+  [data-testid="mobile-bottom-nav"] {
     display: none !important;
   }
 
-  /* Mobile bottom nav (MobileNav component) */
-  .md\:hidden:first-child,
-  nav.fixed,
-  nav.bottom-0 {
-    display: none !important;
-  }
-
-  /* Remove overflow restrictions so all content prints */
+  /* Allow colors/backgrounds to print */
   html, body {
     height: auto !important;
     overflow: visible !important;
-    background: #0F1822 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
-  .h-screen {
+  /* Remove overflow locks on layout containers */
+  .h-screen,
+  .overflow-hidden,
+  .overflow-y-auto {
     height: auto !important;
     overflow: visible !important;
   }
 
-  .overflow-hidden,
-  .overflow-y-auto {
-    overflow: visible !important;
-  }
-
-  /* Main content takes full width */
+  /* Main content fills full width, no clipping */
   main {
     width: 100% !important;
     overflow: visible !important;
     max-height: none !important;
+    flex: 1 1 auto !important;
   }
 
-  /* Remove the flex container that splits sidebar + main */
-  .flex-1.flex.overflow-hidden {
+  /* The flex wrapper around aside + main — collapse to block */
+  .flex-1.flex {
     display: block !important;
     overflow: visible !important;
   }
 
-  /* Keep table rows from breaking across pages */
+  /* Table pagination: keep rows together, repeat headers */
   tr { page-break-inside: avoid; }
   thead { display: table-header-group; }
 }
