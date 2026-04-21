@@ -64,6 +64,8 @@ export default function Finance() {
   const [showLedgerForm, setShowLedgerForm] = useState(false);
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
   const [playerSearch, setPlayerSearch] = useState("");
+  const [genderFilter, setGenderFilter] = useState<"" | "MALE" | "FEMALE">("");
+  const [teamFilter, setTeamFilter] = useState("");
   const isPlayerRole = user?.role === "PLAYER";
 
   const [payForm, setPayForm] = useState({ playerId: "", feeType: "MEMBERSHIP", amount: "", paidBy: "PLAYER", paidByName: "", reference: "", paymentDate: "" });
@@ -73,6 +75,7 @@ export default function Finance() {
   const [stmtPeriod, setStmtPeriod] = useState({ from: "", to: "" });
 
   const { data: players = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
+  const { data: teams = [] } = useQuery({ queryKey: ["/api/teams"], queryFn: api.getTeams });
   const { data: txns = [] } = useQuery({ queryKey: ["/api/finance"], queryFn: api.getFinanceTxns });
   const { data: payments = [] } = useQuery({ queryKey: ["/api/finance/payments"], queryFn: () => api.getFinancePayments() });
   const { data: expenses = [] } = useQuery({ queryKey: ["/api/finance/expenses"], queryFn: () => api.getFinanceExpenses() });
@@ -157,14 +160,19 @@ export default function Finance() {
   );
 
   const filteredDropdownPlayers = useMemo(() => {
-    if (!playerSearch.trim()) return sortedPlayers;
-    const q = playerSearch.toLowerCase();
-    return sortedPlayers.filter((p: any) =>
-      `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
-      String(p.jerseyNo || "").includes(q) ||
-      (p.position || "").toLowerCase().includes(q)
-    );
-  }, [sortedPlayers, playerSearch]);
+    let result = sortedPlayers;
+    if (genderFilter) result = result.filter((p: any) => (p.gender || "").toUpperCase() === genderFilter);
+    if (teamFilter) result = result.filter((p: any) => p.teamId === teamFilter);
+    if (playerSearch.trim()) {
+      const q = playerSearch.toLowerCase();
+      result = result.filter((p: any) =>
+        `${p.firstName} ${p.lastName}`.toLowerCase().includes(q) ||
+        String(p.jerseyNo || "").includes(q) ||
+        (p.position || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [sortedPlayers, playerSearch, genderFilter, teamFilter]);
 
   const createPaymentMut = useMutation({
     mutationFn: (data: any) => api.createFinancePayment(data),
@@ -325,7 +333,7 @@ export default function Finance() {
                 ].map(f => (
                   <div key={f.key} className="p-3 rounded-xl bg-afrocat-white-3 border border-afrocat-border">
                     <div className="text-xs text-afrocat-muted">{f.label}</div>
-                    <div className="text-lg font-bold text-afrocat-text">{fmt(feeConfig[f.key] || f.def)}</div>
+                    <div className="text-lg font-bold text-afrocat-text">{fmt(parseInt(String(feeConfig[f.key] || f.def)) || 0)}</div>
                   </div>
                 ))}
               </div>
@@ -478,17 +486,60 @@ export default function Finance() {
               </div>
             ) : (
               <div className="afrocat-card p-4 space-y-3">
+                {/* Filter chips: gender + team */}
+                <div className="flex flex-wrap gap-2">
+                  {(["", "MALE", "FEMALE"] as const).map(g => (
+                    <button
+                      key={g || "all-gender"}
+                      onClick={() => setGenderFilter(g)}
+                      data-testid={`chip-gender-${g || "all"}`}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
+                        genderFilter === g
+                          ? "bg-afrocat-teal text-white border-afrocat-teal"
+                          : "bg-afrocat-white-5 text-afrocat-muted border-afrocat-border hover:border-afrocat-teal/40"
+                      }`}
+                    >
+                      {g === "" ? "All" : g === "MALE" ? "♂ Men" : "♀ Women"}
+                    </button>
+                  ))}
+                  <div className="h-6 w-px bg-afrocat-border mx-1" />
+                  <button
+                    onClick={() => setTeamFilter("")}
+                    data-testid="chip-team-all"
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
+                      teamFilter === ""
+                        ? "bg-afrocat-gold text-white border-afrocat-gold"
+                        : "bg-afrocat-white-5 text-afrocat-muted border-afrocat-border hover:border-afrocat-gold/40"
+                    }`}
+                  >
+                    All Teams
+                  </button>
+                  {(teams as any[]).map((t: any) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTeamFilter(t.id)}
+                      data-testid={`chip-team-${t.id}`}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
+                        teamFilter === t.id
+                          ? "bg-afrocat-gold text-white border-afrocat-gold"
+                          : "bg-afrocat-white-5 text-afrocat-muted border-afrocat-border hover:border-afrocat-gold/40"
+                      }`}
+                    >
+                      {t.name || t.teamName}
+                    </button>
+                  ))}
+                </div>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-afrocat-muted pointer-events-none" />
                   <input
                     value={playerSearch}
                     onChange={e => setPlayerSearch(e.target.value)}
-                    placeholder="Search players by name, #, or position…"
+                    placeholder="Search by name, jersey #, or position…"
                     className="w-full pl-9 pr-4 py-2 rounded-xl bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text focus:outline-none focus:ring-1 focus:ring-afrocat-teal"
                     data-testid="input-player-finance-search"
                   />
                 </div>
-                <div className="max-h-52 overflow-y-auto rounded-xl border border-afrocat-border divide-y divide-afrocat-border/40" data-testid="list-player-finance-picker">
+                <div className="max-h-60 overflow-y-auto rounded-xl border border-afrocat-border divide-y divide-afrocat-border/40" data-testid="list-player-finance-picker">
                   {filteredDropdownPlayers.length === 0 ? (
                     <div className="px-4 py-3 text-xs text-afrocat-muted text-center">No players found</div>
                   ) : filteredDropdownPlayers.map((p: any) => (

@@ -122,6 +122,7 @@ export const api = {
   getMatchMvps: () => apiFetch<any[]>("/awards/match-mvps"),
   getPlayerMvps: (playerId: string) => apiFetch<any[]>(`/awards/player/${playerId}/mvps`),
   getAwardsLeaderboard: () => apiFetch<any>("/awards/leaderboard"),
+  getTeamOfWeek: () => apiFetch<any>("/awards/team-of-week"),
 
   getSmartFocus: (playerId: string) => apiFetch<any[]>(`/smart-focus/player/${playerId}`),
 

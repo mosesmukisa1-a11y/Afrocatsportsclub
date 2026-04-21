@@ -509,7 +509,7 @@ function InterviewForm({
           <div className="space-y-3">
             <label className="text-xs font-semibold text-afrocat-muted uppercase tracking-wider block">Video</label>
             {showRecorder ? (
-              <VideoRecorder onRecorded={handleRecordedVideo} onCancel={() => setShowRecorder(false)} />
+              <VideoRecorder onVideoReady={handleRecordedVideo} onClose={() => setShowRecorder(false)} />
             ) : (
               <div className="space-y-2">
                 <input type="url" value={formVideoUrl} onChange={e => setFormVideoUrl(e.target.value)}

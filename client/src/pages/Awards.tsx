@@ -5,11 +5,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trophy, Star, TrendingUp, Target, Zap, Award as AwardIcon, Medal, Calendar, BarChart3, Flame, Shield } from "lucide-react";
+import { Plus, Trophy, Star, TrendingUp, Target, Zap, Award as AwardIcon, Medal, Calendar, BarChart3, Flame, Shield, Users, Loader2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
+import { PlayerCard } from "@/components/PlayerCard";
 
 const AWARD_LABELS: Record<string, { label: string; icon: any; color: string; bg: string }> = {
   MVP:           { label: "Club MVP",       icon: Trophy,    color: "text-afrocat-gold",   bg: "bg-afrocat-gold-soft border-afrocat-gold/30" },
@@ -37,7 +38,7 @@ function PlayerAvatar({ name, photoUrl, size = "md", highlight = "gold" }: { nam
   );
 }
 
-type AwardTab = "match-mvps" | "leaders" | "club-awards";
+type AwardTab = "match-mvps" | "leaders" | "club-awards" | "team-of-week" | "mvp-cards";
 
 const STAT_CATEGORIES = [
   { key: "topScorers",  label: "Top Scorers",   icon: Flame,     statKey: "pointsTotal",   unit: "pts",   color: "text-afrocat-gold",    desc: "Total points scored" },
@@ -68,6 +69,11 @@ export default function Awards() {
     queryFn: api.getAwardsLeaderboard,
   });
   const { data: players = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
+  const { data: teamOfWeek, isLoading: towLoading } = useQuery({
+    queryKey: ["/api/awards/team-of-week"],
+    queryFn: api.getTeamOfWeek,
+    enabled: tab === "team-of-week" || tab === "mvp-cards",
+  });
 
   const clubAwards = (awards as any[]).filter((a: any) => a.awardType !== "MATCH_MVP");
   const sortedPlayers = [...players].sort((a: any, b: any) =>
@@ -230,11 +236,13 @@ export default function Awards() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-afrocat-border">
+        <div className="flex gap-1 border-b border-afrocat-border overflow-x-auto">
           {[
-            { key: "match-mvps" as AwardTab,  label: `Match MVPs (${totalMvps})`,          icon: Star },
-            { key: "leaders"    as AwardTab,  label: "Stats Leaders",                       icon: BarChart3 },
-            { key: "club-awards" as AwardTab, label: `Club Awards (${clubAwards.length})`,  icon: Trophy },
+            { key: "match-mvps"   as AwardTab, label: `Match MVPs (${totalMvps})`,         icon: Star },
+            { key: "leaders"      as AwardTab, label: "Stats Leaders",                      icon: BarChart3 },
+            { key: "club-awards"  as AwardTab, label: `Club Awards (${clubAwards.length})`, icon: Trophy },
+            { key: "team-of-week" as AwardTab, label: "Team of the Week",                   icon: Users },
+            { key: "mvp-cards"    as AwardTab, label: "MVP Cards",                          icon: Medal },
           ].map(t => (
             <button
               key={t.key}
@@ -495,6 +503,132 @@ export default function Awards() {
             )}
           </>
         )}
+        {/* ── TEAM OF THE WEEK ── */}
+        {tab === "team-of-week" && (
+          <div className="space-y-5">
+            {towLoading ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-afrocat-muted">
+                <Loader2 className="animate-spin h-5 w-5" /> Building Team of the Week…
+              </div>
+            ) : !teamOfWeek || (teamOfWeek.players || []).length === 0 ? (
+              <div className="afrocat-card p-10 text-center space-y-3">
+                <Users className="h-12 w-12 text-afrocat-muted mx-auto opacity-40" />
+                <p className="font-semibold text-afrocat-text">No match stats yet</p>
+                <p className="text-xs text-afrocat-muted max-w-sm mx-auto">
+                  Record match stats via Touch Stats to auto-generate the Team of the Week.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-display font-bold text-afrocat-text" data-testid="text-tow-title">
+                      🏆 Team of the Week
+                    </h2>
+                    <p className="text-xs text-afrocat-muted mt-0.5">
+                      {teamOfWeek.weekLabel} · {teamOfWeek.matchCount} match{teamOfWeek.matchCount !== 1 ? "es" : ""} analysed
+                    </p>
+                  </div>
+                  <Badge className="bg-afrocat-teal/10 text-afrocat-teal border-afrocat-teal/30 text-xs">
+                    {teamOfWeek.players.length} players selected
+                  </Badge>
+                </div>
+
+                {/* Position formation display */}
+                <div className="flex flex-wrap gap-5 justify-center" data-testid="grid-team-of-week">
+                  {(teamOfWeek.players as any[]).map((p: any, i: number) => (
+                    <div key={p.playerId} className="flex flex-col items-center" data-testid={`card-tow-player-${p.playerId}`}>
+                      <PlayerCard
+                        size="sm"
+                        showDownload
+                        data={{
+                          playerName: p.playerName,
+                          position: p.position || p.slot,
+                          jerseyNo: p.jerseyNo,
+                          photoUrl: p.photoUrl,
+                          teamName: "AFROCAT VC",
+                          badge: p.slot === "L" ? "LIBERO" : p.slot === "S" ? "SETTER" : p.slot === "MB" ? "BLOCKER" : p.slot === "OPP" ? "OPPOSITE" : "TEAM OF WEEK",
+                          badgeColor: i === 0 ? "gold" : i < 3 ? "teal" : "gold",
+                          stats: p.stats,
+                          stars: p.stars,
+                        }}
+                      />
+                      <div className="mt-2 text-[10px] font-bold text-afrocat-muted uppercase tracking-wider">
+                        {p.slot === "OH" ? "Outside Hitter" : p.slot === "MB" ? "Middle Blocker" : p.slot === "OPP" ? "Opposite" : p.slot === "S" ? "Setter" : p.slot === "L" ? "Libero" : p.slot}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Download all button */}
+                <div className="flex justify-center pt-2">
+                  <p className="text-xs text-afrocat-muted">Click "Download Card" under each player to save their FIFA-style card as JPEG.</p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── MVP CARDS ── */}
+        {tab === "mvp-cards" && (
+          <div className="space-y-5">
+            {(mvpLoading || towLoading) ? (
+              <div className="flex items-center justify-center py-20 gap-3 text-afrocat-muted">
+                <Loader2 className="animate-spin h-5 w-5" /> Loading MVP cards…
+              </div>
+            ) : (matchMvps as any[]).length === 0 ? (
+              <div className="afrocat-card p-10 text-center space-y-3">
+                <Medal className="h-12 w-12 text-afrocat-muted mx-auto opacity-40" />
+                <p className="font-semibold text-afrocat-text">No Match MVPs yet</p>
+                <p className="text-xs text-afrocat-muted max-w-sm mx-auto">
+                  Complete matches in Touch Stats to generate MVP cards.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-display font-bold text-afrocat-text">
+                      🥇 MVP Player Cards
+                    </h2>
+                    <p className="text-xs text-afrocat-muted mt-0.5">
+                      Download FIFA-style cards for each Match MVP
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-5 justify-center" data-testid="grid-mvp-cards">
+                  {(matchMvps as any[]).map((mvp: any) => {
+                    const towPlayer = (teamOfWeek?.players || []).find((t: any) => t.playerId === mvp.playerId);
+                    return (
+                      <div key={mvp.id} className="flex flex-col items-center" data-testid={`card-mvp-card-${mvp.id}`}>
+                        <PlayerCard
+                          size="sm"
+                          showDownload
+                          data={{
+                            playerName: mvp.playerName || "Player",
+                            position: mvp.playerPosition || "",
+                            jerseyNo: mvp.playerJersey,
+                            photoUrl: mvp.playerPhotoUrl,
+                            teamName: "AFROCAT VC",
+                            badge: "MATCH MVP",
+                            badgeColor: "gold",
+                            stats: towPlayer ? towPlayer.stats : { kills: 0, aces: 0, blocks: 0, digs: 0, assists: 0 },
+                            stars: towPlayer ? towPlayer.stars : { atk: 4, srv: 3, def: 3, blk: 3 },
+                          }}
+                        />
+                        <div className="mt-1 text-[10px] text-afrocat-muted">
+                          {mvp.matchDate ? new Date(mvp.matchDate + "T12:00:00").toLocaleDateString("en-NA", { day: "numeric", month: "short" }) : ""}
+                          {mvp.matchOpponent ? ` vs ${mvp.matchOpponent}` : ""}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
       </div>
     </Layout>
   );

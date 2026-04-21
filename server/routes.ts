@@ -1688,6 +1688,141 @@ ${player.position ? `<div style="color:#666;font-size:13px">${esc(player.positio
     } catch (e) { next(e); }
   });
 
+  // ─── TEAM OF THE WEEK ─────────────────────────────────
+  app.get("/api/awards/team-of-week", requireAuth, async (_req, res, next) => {
+    try {
+      const allMatches = await storage.getMatches();
+      const allPlayers = await storage.getPlayers();
+      const playerMap = new Map(allPlayers.map((p: any) => [p.id, p]));
+
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const sevenDaysAgoStr = sevenDaysAgo.toISOString().slice(0, 10);
+
+      const recentMatches = allMatches.filter((m: any) => {
+        if (!m.matchDate || m.matchDate < sevenDaysAgoStr) return false;
+        const day = new Date(m.matchDate + "T12:00:00").getDay();
+        return day === 5 || day === 6 || day === 0;
+      });
+
+      const targetMatchIds = recentMatches.length > 0
+        ? new Set(recentMatches.map((m: any) => m.id))
+        : new Set(allMatches.slice(-10).map((m: any) => m.id));
+
+      const allStats = await db.select().from(schema.playerMatchStats);
+      const weekStats = allStats.filter((s: any) => targetMatchIds.has(s.matchId));
+
+      const aggByPlayer: Record<string, any> = {};
+      for (const s of weekStats) {
+        if (!aggByPlayer[s.playerId]) {
+          aggByPlayer[s.playerId] = { playerId: s.playerId, spikesKill: 0, spikesError: 0, servesAce: 0, servesError: 0, blocksSolo: 0, blocksAssist: 0, receivePerfect: 0, receiveError: 0, digs: 0, settingAssist: 0, settingError: 0, pointsTotal: 0, matches: 0 };
+        }
+        const a = aggByPlayer[s.playerId];
+        a.spikesKill += s.spikesKill || 0; a.spikesError += s.spikesError || 0;
+        a.servesAce += s.servesAce || 0; a.servesError += s.servesError || 0;
+        a.blocksSolo += s.blocksSolo || 0; a.blocksAssist += s.blocksAssist || 0;
+        a.receivePerfect += s.receivePerfect || 0; a.receiveError += s.receiveError || 0;
+        a.digs += s.digs || 0; a.settingAssist += s.settingAssist || 0;
+        a.settingError += s.settingError || 0; a.pointsTotal += s.pointsTotal || 0;
+        a.matches += 1;
+      }
+
+      function ratingScore(agg: any): number {
+        return agg.spikesKill * 5 + agg.servesAce * 8 + (agg.blocksSolo * 6 + agg.blocksAssist * 3) +
+          agg.digs * 2 + agg.settingAssist * 3 + agg.receivePerfect * 2 -
+          (agg.spikesError + agg.servesError + agg.receiveError + agg.settingError) * 3;
+      }
+
+      function calcStars(val: number, maxVal: number): number {
+        if (maxVal === 0) return 3;
+        return Math.max(1, Math.min(5, Math.round((val / maxVal) * 5)));
+      }
+
+      const enriched = Object.values(aggByPlayer).map((agg: any) => {
+        const player = playerMap.get(agg.playerId);
+        if (!player) return null;
+        const score = ratingScore(agg);
+        return { ...agg, score, player };
+      }).filter(Boolean);
+
+      enriched.sort((a: any, b: any) => b.score - a.score);
+
+      const positions = ["OPP","OH","OH","MB","MB","S","L"];
+      const posAliases: Record<string,string[]> = {
+        OPP: ["OPP","Opposite","Opposite Hitter"],
+        OH: ["OH","Outside Hitter","Outside"],
+        MB: ["MB","Middle Blocker","Middle"],
+        S: ["S","Setter"],
+        L: ["L","Libero"],
+      };
+
+      function matchPos(pos: string | null | undefined, slot: string): boolean {
+        if (!pos) return false;
+        const aliases = posAliases[slot] || [slot];
+        return aliases.some(a => pos.toLowerCase().includes(a.toLowerCase()));
+      }
+
+      const selected: any[] = [];
+      const usedPlayerIds = new Set<string>();
+      const positionSlotCounts: Record<string,number> = {};
+
+      for (const slot of positions) {
+        const candidate = enriched.find((e: any) =>
+          !usedPlayerIds.has(e.playerId) &&
+          matchPos(e.player?.position, slot)
+        );
+        if (candidate) {
+          positionSlotCounts[slot] = (positionSlotCounts[slot] || 0) + 1;
+          selected.push({ ...candidate, slot, slotIndex: positionSlotCounts[slot] });
+          usedPlayerIds.add(candidate.playerId);
+        }
+      }
+
+      for (const e of enriched) {
+        if (selected.length >= 7) break;
+        if (!usedPlayerIds.has(e.playerId)) {
+          selected.push({ ...e, slot: e.player?.position || "UTIL", slotIndex: 1 });
+          usedPlayerIds.add(e.playerId);
+        }
+      }
+
+      const maxKills = Math.max(...selected.map((s: any) => s.spikesKill), 1);
+      const maxAces = Math.max(...selected.map((s: any) => s.servesAce), 1);
+      const maxBlocks = Math.max(...selected.map((s: any) => s.blocksSolo + s.blocksAssist), 1);
+      const maxDigs = Math.max(...selected.map((s: any) => s.digs), 1);
+      const maxAssists = Math.max(...selected.map((s: any) => s.settingAssist), 1);
+
+      const result = selected.map((s: any) => ({
+        playerId: s.playerId,
+        slot: s.slot,
+        playerName: `${s.player.firstName} ${s.player.lastName}`,
+        position: s.player.position,
+        jerseyNo: s.player.jerseyNo,
+        photoUrl: s.player.photoUrl,
+        teamId: s.player.teamId,
+        stats: {
+          kills: s.spikesKill, aces: s.servesAce,
+          blocks: s.blocksSolo + s.blocksAssist, digs: s.digs,
+          assists: s.settingAssist, points: s.pointsTotal, matches: s.matches,
+        },
+        stars: {
+          atk: calcStars(s.spikesKill, maxKills),
+          srv: calcStars(s.servesAce, maxAces),
+          def: calcStars(s.digs, maxDigs),
+          blk: calcStars(s.blocksSolo + s.blocksAssist, maxBlocks),
+          set: calcStars(s.settingAssist, maxAssists),
+        },
+        score: s.score,
+        isWeekend: recentMatches.length > 0,
+      }));
+
+      const weekLabel = recentMatches.length > 0
+        ? `Weekend ${recentMatches[0]?.matchDate || "this week"}`
+        : "Last 10 Matches";
+      res.json({ players: result, weekLabel, matchCount: targetMatchIds.size });
+    } catch (e) { next(e); }
+  });
+
   app.get("/api/matches/played", requireAuth, async (_req, res, next) => {
     try {
       const all = await storage.getMatches();
