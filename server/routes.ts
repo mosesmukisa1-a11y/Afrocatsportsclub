@@ -8218,6 +8218,202 @@ th{background:#0d7377;color:white}
     } catch (e) { next(e); }
   });
 
+  // ─── FINANCE: MEMBERSHIP DUES + TRANSFER VALUATIONS ──────────
+  app.get("/api/finance/valuations", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
+    try {
+      const parseRolesLocal = (r: any): string[] => {
+        if (!r) return [];
+        if (Array.isArray(r)) return r;
+        if (typeof r === "string") return r.replace(/^\{|\}$/g,"").split(",").map((s:string)=>s.trim()).filter(Boolean);
+        return [];
+      };
+      const calcAgeLocal = (dob: string | null): number | null => {
+        if (!dob) return null;
+        const b = new Date(dob); if (isNaN(b.getTime())) return null;
+        const now = new Date(); let age = now.getFullYear() - b.getFullYear();
+        const m = now.getMonth() - b.getMonth();
+        if (m < 0 || (m === 0 && now.getDate() < b.getDate())) age--;
+        return age;
+      };
+
+      const [players, configs, allPayments, allExpenses, allStats, allSessions, allRecords, allUsers, allTeams] = await Promise.all([
+        storage.getPlayers(),
+        storage.getFeeConfigs(),
+        storage.getPlayerPayments(),
+        storage.getPlayerExpenses(),
+        db.select().from(schema.playerMatchStats),
+        storage.getAttendanceSessions(),
+        db.select().from(schema.attendanceRecords),
+        storage.getAllUsers(),
+        storage.getTeams(),
+      ]);
+
+      const feeMap: Record<string, number> = {};
+      configs.forEach((c: any) => { feeMap[c.key] = parseInt(c.value) || 0; });
+      const membershipW = feeMap.membershipFeeWorking || 800;
+      const membershipNW = feeMap.membershipFeeNonWorking || 400;
+      const devFee = feeMap.developmentFee || 2500;
+      const resFee = feeMap.resourceFee || 1500;
+      const leagueFee = feeMap.leagueAffiliationFeePerPlayer || 0;
+
+      // Group payments and expenses by playerId
+      const payByPlayer: Record<string, any[]> = {};
+      allPayments.forEach((p: any) => { if (!payByPlayer[p.playerId]) payByPlayer[p.playerId] = []; payByPlayer[p.playerId].push(p); });
+      const expByPlayer: Record<string, any[]> = {};
+      allExpenses.forEach((e: any) => { if (!expByPlayer[e.playerId]) expByPlayer[e.playerId] = []; expByPlayer[e.playerId].push(e); });
+
+      // Group stats by playerId (aggregate)
+      const statsByPlayer: Record<string, any> = {};
+      allStats.forEach((s: any) => {
+        if (!statsByPlayer[s.playerId]) statsByPlayer[s.playerId] = { spikesKill:0, spikesError:0, servesAce:0, servesError:0, blocksSolo:0, blocksAssist:0, receivePerfect:0, receiveError:0, digs:0, settingAssist:0, settingError:0, pointsTotal:0, matches:0 };
+        const agg = statsByPlayer[s.playerId];
+        agg.spikesKill += s.spikesKill || 0; agg.spikesError += s.spikesError || 0;
+        agg.servesAce += s.servesAce || 0; agg.servesError += s.servesError || 0;
+        agg.blocksSolo += s.blocksSolo || 0; agg.blocksAssist += s.blocksAssist || 0;
+        agg.receivePerfect += s.receivePerfect || 0; agg.receiveError += s.receiveError || 0;
+        agg.digs += s.digs || 0; agg.settingAssist += s.settingAssist || 0;
+        agg.settingError += s.settingError || 0; agg.pointsTotal += s.pointsTotal || 0;
+        agg.matches += 1;
+      });
+
+      // Attendance rate per player
+      const sessionsByTeam: Record<string, string[]> = {};
+      allSessions.forEach((s: any) => {
+        if (!sessionsByTeam[s.teamId]) sessionsByTeam[s.teamId] = [];
+        sessionsByTeam[s.teamId].push(s.id);
+      });
+      const allTeamSessionIds = allSessions.filter((s: any) => !s.teamId || s.sessionType === "ALL_TEAM").map((s: any) => s.id);
+      const recordsByPlayer: Record<string, any[]> = {};
+      allRecords.forEach((r: any) => { if (!recordsByPlayer[r.playerId]) recordsByPlayer[r.playerId] = []; recordsByPlayer[r.playerId].push(r); });
+
+      const getAttendRate = (player: any): number => {
+        const teamSessIds = new Set([...(sessionsByTeam[player.teamId] || []), ...allTeamSessionIds]);
+        const expected = teamSessIds.size;
+        if (expected === 0) return 0.8; // no sessions yet, assume average
+        const records = recordsByPlayer[player.id] || [];
+        const attended = records.filter((r: any) => teamSessIds.has(r.sessionId) && ["PRESENT","LATE","EXCUSED"].includes(r.status)).length;
+        return Math.min(1, attended / expected);
+      };
+
+      // Position base values (NAD)
+      const posBase: Record<string, number> = {
+        "OH": 5000, "Outside Hitter": 5000, "Outside": 5000,
+        "OPP": 6000, "Opposite": 6000, "Opposite Hitter": 6000,
+        "MB": 4500, "Middle Blocker": 4500, "Middle": 4500,
+        "S": 4500, "Setter": 4500,
+        "L": 3500, "Libero": 3500,
+      };
+      const getBase = (pos: string | null): number => {
+        if (!pos) return 4000;
+        const key = Object.keys(posBase).find(k => pos.toLowerCase().includes(k.toLowerCase()));
+        return key ? posBase[key] : 4000;
+      };
+
+      const calcPerformanceScore = (agg: any): number => {
+        if (!agg || agg.matches === 0) return 50;
+        const { spikesKill, spikesError, servesAce, servesError, blocksSolo, blocksAssist, receivePerfect, receiveError, digs, settingAssist, settingError, matches } = agg;
+        const errorsTotal = spikesError + servesError + receiveError + settingError;
+        const rawPerMatch = (spikesKill * 5 + servesAce * 8 + blocksSolo * 6 + blocksAssist * 3 + digs * 2 + settingAssist * 3 + receivePerfect * 2 - errorsTotal * 3) / matches;
+        return Math.round(Math.min(100, Math.max(0, rawPerMatch * 1.5 + 45)));
+      };
+
+      const calcAgeMultiplier = (dob: string | null): number => {
+        const age = calcAgeLocal(dob);
+        if (age === null) return 1.0;
+        if (age < 17) return 0.7;
+        if (age < 22) return 1.5;
+        if (age < 27) return 2.0;
+        if (age < 31) return 1.4;
+        if (age < 35) return 0.9;
+        return 0.6;
+      };
+
+      const computePlayerRow = (player: any) => {
+        const payments = payByPlayer[player.id] || [];
+        const expenses = expByPlayer[player.id] || [];
+        const approved = payments.filter((p: any) => p.status === "APPROVED");
+        const appExp = expenses.filter((e: any) => e.status === "APPROVED");
+        const memFee = player.employmentClass === "WORKING" ? membershipW : membershipNW;
+        const totalDue = memFee + devFee + resFee + leagueFee;
+        const totalPaid = approved.reduce((s: number, p: any) => s + p.amount, 0);
+        const outstanding = Math.max(0, totalDue - totalPaid);
+        const clubInvestment = approved.filter((p: any) => p.paidBy !== "PLAYER").reduce((s: number, p: any) => s + p.amount, 0)
+          + appExp.filter((e: any) => e.paidBy !== "PLAYER").reduce((s: number, e: any) => s + e.amount, 0);
+        const agg = statsByPlayer[player.id];
+        const perfScore = calcPerformanceScore(agg);
+        const ageMult = calcAgeMultiplier(player.dob);
+        const attendRate = getAttendRate(player);
+        const base = getBase(player.position);
+        const transferValue = Math.round(base * ageMult * (1 + perfScore / 100) * (1 + attendRate * 0.4) + clubInvestment);
+        const team = allTeams.find((t: any) => t.id === player.teamId);
+        return {
+          type: "PLAYER" as const,
+          id: player.id,
+          name: `${player.firstName} ${player.lastName}`.trim(),
+          position: player.position || "—",
+          team: team?.name || "Unassigned",
+          gender: player.gender || "—",
+          employmentClass: player.employmentClass || "NON_WORKING",
+          age: calcAgeLocal(player.dob),
+          heightCm: player.heightCm || null,
+          weightKg: player.weightKg || null,
+          fees: { membership: memFee, development: devFee, resource: resFee, league: leagueFee, total: totalDue },
+          totalPaid, outstanding, clubInvestment,
+          stats: agg ? { matches: agg.matches, kills: agg.spikesKill, aces: agg.servesAce, blocks: agg.blocksSolo + agg.blocksAssist, digs: agg.digs, assists: agg.settingAssist, points: agg.pointsTotal } : null,
+          perfScore, ageMult: Math.round(ageMult * 10) / 10, attendRate: Math.round(attendRate * 100),
+          transferValue,
+        };
+      };
+
+      const playerRows = players.map(computePlayerRow).sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+      // Officials: active users with non-PLAYER roles who are in the club
+      const officialRoles = ["ADMIN","COACH","ASSISTANT_COACH","MANAGER","STATISTICIAN","TRAINER","PHYSIOTHERAPIST","MEDIC","FINANCE"];
+      const officialRows = allUsers
+        .filter((u: any) => {
+          if (u.accountStatus !== "ACTIVE") return false;
+          const roles = parseRolesLocal(u.roles);
+          const primary = u.role || "";
+          const hasOfficialRole = officialRoles.some(r => primary === r || roles.includes(r));
+          return hasOfficialRole && !players.some((p: any) => p.userId === u.id);
+        })
+        .map((u: any) => {
+          const memFee = u.employmentClass === "WORKING" ? membershipW : membershipNW;
+          const totalDue = memFee + resFee;
+          const roles = [u.role, ...parseRolesLocal(u.roles)].filter(Boolean).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+          return {
+            type: "OFFICIAL" as const,
+            id: u.id,
+            name: u.fullName || u.email,
+            position: roles.join(" / "),
+            team: "—",
+            gender: "—",
+            employmentClass: u.employmentClass || "NON_WORKING",
+            age: null,
+            heightCm: null, weightKg: null,
+            fees: { membership: memFee, development: 0, resource: resFee, league: 0, total: totalDue },
+            totalPaid: 0, outstanding: totalDue, clubInvestment: 0,
+            stats: null,
+            perfScore: null, ageMult: null, attendRate: null,
+            transferValue: null,
+          };
+        }).sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+      res.json({
+        players: playerRows,
+        officials: officialRows,
+        totals: {
+          totalMembershipDue: [...playerRows, ...officialRows].reduce((s: number, r: any) => s + r.fees.total, 0),
+          totalOutstanding: [...playerRows, ...officialRows].reduce((s: number, r: any) => s + r.outstanding, 0),
+          totalTransferValue: playerRows.reduce((s: number, r: any) => s + (r.transferValue || 0), 0),
+          playerCount: playerRows.length,
+          officialCount: officialRows.length,
+        },
+        feeConfig: { membershipW, membershipNW, devFee, resFee, leagueFee },
+      });
+    } catch (e) { next(e); }
+  });
+
   // ─── FINANCE: SUMMARY REPORT ──────────
   app.get("/api/finance/summary", requireAuth, requireRole(["ADMIN","FINANCE","MANAGER"]), async (req, res, next) => {
     try {

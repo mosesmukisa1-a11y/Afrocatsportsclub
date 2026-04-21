@@ -8,10 +8,10 @@ import { useState } from "react";
 import {
   DollarSign, Plus, Check, X, Settings, Users, FileText,
   ArrowUpRight, ArrowDownRight, Trash2, TrendingUp, Scale,
-  BarChart3, Receipt
+  BarChart3, Receipt, Star, Printer, ChevronUp, ChevronDown
 } from "lucide-react";
 
-type Tab = "summary" | "payments" | "expenses" | "players" | "config" | "ledger" | "income-statement" | "balance-sheet";
+type Tab = "summary" | "payments" | "expenses" | "players" | "config" | "ledger" | "income-statement" | "balance-sheet" | "valuations";
 
 const FEE_TYPES = ["MEMBERSHIP", "DEVELOPMENT", "RESOURCE", "LEAGUE_AFFILIATION", "OTHER"];
 const PAID_BY_OPTIONS = ["PLAYER", "CLUB", "SPONSOR", "OTHER"];
@@ -73,6 +73,48 @@ export default function Finance() {
     queryFn: api.getBalanceSheet,
     enabled: activeTab === "balance-sheet" && !!canManage,
   });
+
+  const { data: valuations, isLoading: valuationsLoading } = useQuery({
+    queryKey: ["/api/finance/valuations"],
+    queryFn: api.getFinanceValuations,
+    enabled: activeTab === "valuations" && !!canManage,
+  });
+
+  const [valSort, setValSort] = useState<{ col: string; dir: "asc" | "desc" }>({ col: "transferValue", dir: "desc" });
+  const [valFilter, setValFilter] = useState({ type: "ALL", search: "" });
+
+  const getValField = (row: any, col: string): any => {
+    if (col.includes(".")) { const [k1, k2] = col.split("."); return row[k1]?.[k2]; }
+    return row[col];
+  };
+
+  const valPlayerRows = (() => {
+    if (!valuations?.players) return [];
+    let rows = [...valuations.players];
+    if (valFilter.search) rows = rows.filter((r: any) => r.name.toLowerCase().includes(valFilter.search.toLowerCase()) || r.position.toLowerCase().includes(valFilter.search.toLowerCase()) || r.team.toLowerCase().includes(valFilter.search.toLowerCase()));
+    rows.sort((a: any, b: any) => {
+      const av = getValField(a, valSort.col) ?? -1, bv = getValField(b, valSort.col) ?? -1;
+      if (typeof av === "string") return valSort.dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return valSort.dir === "asc" ? av - bv : bv - av;
+    });
+    return rows;
+  })();
+
+  const valOfficialRows = (() => {
+    if (!valuations?.officials) return [];
+    let rows = [...valuations.officials];
+    if (valFilter.search) rows = rows.filter((r: any) => r.name.toLowerCase().includes(valFilter.search.toLowerCase()) || r.position.toLowerCase().includes(valFilter.search.toLowerCase()));
+    return rows;
+  })();
+
+  const sortHeader = (col: string, label: string) => (
+    <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted cursor-pointer hover:text-afrocat-text select-none"
+      onClick={() => setValSort(s => ({ col, dir: s.col === col && s.dir === "desc" ? "asc" : "desc" }))}>
+      <span className="flex items-center gap-1">{label}
+        {valSort.col === col ? (valSort.dir === "desc" ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />) : null}
+      </span>
+    </th>
+  );
 
   const sortedPlayers = [...players].sort((a: any, b: any) =>
     `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase().localeCompare(`${b.lastName || ""} ${b.firstName || ""}`.toLowerCase())
@@ -156,6 +198,7 @@ export default function Finance() {
     { id: "ledger", label: "Ledger", icon: Receipt, show: !!canManage },
     { id: "income-statement", label: "Income Statement", icon: TrendingUp, show: !!canManage },
     { id: "balance-sheet", label: "Balance Sheet", icon: Scale, show: !!canManage },
+    { id: "valuations", label: "Valuations", icon: Star, show: !!canManage },
     { id: "config", label: "Fee Config", icon: Settings, show: !!canManage },
   ];
 
@@ -423,6 +466,184 @@ export default function Finance() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === "valuations" && canManage && (
+          <div className="space-y-5">
+            {valuationsLoading ? (
+              <div className="flex items-center justify-center py-20 text-afrocat-muted">Loading valuations…</div>
+            ) : valuations ? (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="afrocat-card p-4 text-center">
+                    <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Players</div>
+                    <div className="text-2xl font-display font-bold text-afrocat-text" data-testid="val-player-count">{valuations.totals?.playerCount ?? 0}</div>
+                  </div>
+                  <div className="afrocat-card p-4 text-center">
+                    <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Officials</div>
+                    <div className="text-2xl font-display font-bold text-afrocat-text" data-testid="val-official-count">{valuations.totals?.officialCount ?? 0}</div>
+                  </div>
+                  <div className="afrocat-card p-4 text-center">
+                    <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Total Outstanding</div>
+                    <div className="text-xl font-display font-bold text-red-400" data-testid="val-total-outstanding">{fmt(valuations.totals?.totalOutstanding ?? 0)}</div>
+                  </div>
+                  <div className="afrocat-card p-4 text-center">
+                    <div className="text-xs text-afrocat-muted uppercase font-bold mb-1">Squad Transfer Pool</div>
+                    <div className="text-xl font-display font-bold text-afrocat-gold" data-testid="val-transfer-pool">{fmt(valuations.totals?.totalTransferValue ?? 0)}</div>
+                  </div>
+                </div>
+
+                <div className="afrocat-card p-3 flex flex-wrap items-center gap-3">
+                  <input
+                    type="text"
+                    value={valFilter.search}
+                    onChange={e => setValFilter(f => ({ ...f, search: e.target.value }))}
+                    placeholder="Search by name, position, team…"
+                    className="flex-1 min-w-[180px] px-3 py-2 rounded-lg bg-afrocat-white-5 border border-afrocat-border text-sm text-afrocat-text"
+                    data-testid="input-val-search"
+                  />
+                  <button
+                    onClick={() => window.print()}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-afrocat-teal hover:bg-afrocat-teal/80 text-white text-sm font-bold"
+                    data-testid="button-val-print"
+                  >
+                    <Printer className="w-4 h-4" /> Print Report
+                  </button>
+                </div>
+
+                <div className="afrocat-card overflow-hidden">
+                  <div className="bg-afrocat-teal-soft border-b border-afrocat-teal/20 px-4 py-2.5 flex items-center justify-between">
+                    <h3 className="font-display font-bold text-afrocat-teal text-sm flex items-center gap-2">
+                      <Users className="w-4 h-4" /> Player Membership Dues & Transfer Values ({valPlayerRows.length})
+                    </h3>
+                    <p className="text-[10px] text-afrocat-muted hidden sm:block">
+                      Fee policy: Working N${valuations.feeConfig?.membershipW ?? 800} · Non-working N${valuations.feeConfig?.membershipNW ?? 400} · Dev N${valuations.feeConfig?.devFee ?? 2500} · Resources N${valuations.feeConfig?.resFee ?? 1500}
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="table-player-valuations">
+                      <thead className="bg-afrocat-white-3 border-b border-afrocat-border">
+                        <tr>
+                          {sortHeader("name", "Player")}
+                          {sortHeader("position", "Pos")}
+                          {sortHeader("team", "Team")}
+                          {sortHeader("age", "Age")}
+                          <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted">Class</th>
+                          {sortHeader("fees.total", "Total Due")}
+                          {sortHeader("totalPaid", "Paid")}
+                          {sortHeader("outstanding", "Outstanding")}
+                          {sortHeader("perfScore", "Perf Score")}
+                          {sortHeader("attendRate", "Attend %")}
+                          {sortHeader("transferValue", "Transfer Value")}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-afrocat-border">
+                        {valPlayerRows.length === 0 && (
+                          <tr><td colSpan={11} className="py-8 text-center text-afrocat-muted text-sm">No players found.</td></tr>
+                        )}
+                        {valPlayerRows.map((r: any, i: number) => {
+                          const tv = r.transferValue ?? 0;
+                          const tvTier = tv >= 15000 ? "text-afrocat-gold font-bold" : tv >= 10000 ? "text-afrocat-teal font-bold" : tv >= 7000 ? "text-green-400 font-semibold" : tv >= 4000 ? "text-afrocat-text" : "text-afrocat-muted";
+                          const perfColor = r.perfScore >= 70 ? "bg-afrocat-gold-soft text-afrocat-gold" : r.perfScore >= 55 ? "bg-afrocat-teal-soft text-afrocat-teal" : r.perfScore >= 40 ? "bg-green-900/30 text-green-400" : "bg-afrocat-red-soft text-afrocat-red";
+                          return (
+                            <tr key={r.id} className={`hover:bg-afrocat-white-3 transition-colors ${i % 2 === 0 ? "" : "bg-afrocat-white-3/30"}`} data-testid={`row-val-player-${r.id}`}>
+                              <td className="px-3 py-2.5 font-medium text-afrocat-text">{r.name}</td>
+                              <td className="px-3 py-2.5 text-afrocat-muted text-xs">{r.position}</td>
+                              <td className="px-3 py-2.5 text-afrocat-muted text-xs">{r.team}</td>
+                              <td className="px-3 py-2.5 text-afrocat-muted text-xs">{r.age ?? "—"}</td>
+                              <td className="px-3 py-2.5">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.employmentClass === "WORKING" ? "bg-afrocat-teal-soft text-afrocat-teal" : "bg-afrocat-white-5 text-afrocat-muted"}`}>
+                                  {r.employmentClass === "WORKING" ? "WORKING" : "NON-WORK"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-afrocat-text font-medium">{fmt(r.fees?.total ?? 0)}</td>
+                              <td className="px-3 py-2.5 text-green-400 font-medium">{fmt(r.totalPaid ?? 0)}</td>
+                              <td className="px-3 py-2.5">
+                                <span className={`font-bold ${r.outstanding > 0 ? "text-red-400" : "text-green-400"}`}>{fmt(r.outstanding ?? 0)}</span>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${perfColor}`}>
+                                  {r.perfScore ?? 50}/100
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-afrocat-muted text-xs">{r.attendRate ?? 0}%</td>
+                              <td className="px-3 py-2.5">
+                                <span className={tvTier}>{fmt(tv)}</span>
+                                {tv >= 15000 && <Star className="w-3 h-3 inline ml-1 text-afrocat-gold fill-current" />}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      {valPlayerRows.length > 0 && (
+                        <tfoot className="bg-afrocat-white-3 border-t-2 border-afrocat-border">
+                          <tr>
+                            <td colSpan={5} className="px-3 py-2.5 font-bold text-afrocat-text text-sm">TOTALS ({valPlayerRows.length} players)</td>
+                            <td className="px-3 py-2.5 font-bold text-afrocat-text">{fmt(valPlayerRows.reduce((s: number, r: any) => s + (r.fees?.total ?? 0), 0))}</td>
+                            <td className="px-3 py-2.5 font-bold text-green-400">{fmt(valPlayerRows.reduce((s: number, r: any) => s + (r.totalPaid ?? 0), 0))}</td>
+                            <td className="px-3 py-2.5 font-bold text-red-400">{fmt(valPlayerRows.reduce((s: number, r: any) => s + (r.outstanding ?? 0), 0))}</td>
+                            <td colSpan={2} />
+                            <td className="px-3 py-2.5 font-bold text-afrocat-gold">{fmt(valPlayerRows.reduce((s: number, r: any) => s + (r.transferValue ?? 0), 0))}</td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </div>
+
+                <div className="afrocat-card overflow-hidden">
+                  <div className="bg-afrocat-gold-soft border-b border-afrocat-gold/20 px-4 py-2.5">
+                    <h3 className="font-display font-bold text-afrocat-gold text-sm flex items-center gap-2">
+                      <FileText className="w-4 h-4" /> Officials & Staff Membership Dues ({valOfficialRows.length})
+                    </h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm" data-testid="table-official-valuations">
+                      <thead className="bg-afrocat-white-3 border-b border-afrocat-border">
+                        <tr>
+                          <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted">Name</th>
+                          <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted">Role(s)</th>
+                          <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted">Class</th>
+                          <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted">Total Due</th>
+                          <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted">Outstanding</th>
+                          <th className="text-left px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-afrocat-muted">Transfer Value</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-afrocat-border">
+                        {valOfficialRows.length === 0 && (
+                          <tr><td colSpan={6} className="py-6 text-center text-afrocat-muted text-sm">No officials found.</td></tr>
+                        )}
+                        {valOfficialRows.map((r: any, i: number) => (
+                          <tr key={r.id} className={`hover:bg-afrocat-white-3 transition-colors ${i % 2 === 0 ? "" : "bg-afrocat-white-3/30"}`} data-testid={`row-val-official-${r.id}`}>
+                            <td className="px-3 py-2.5 font-medium text-afrocat-text">{r.name}</td>
+                            <td className="px-3 py-2.5 text-afrocat-muted text-xs">{r.position}</td>
+                            <td className="px-3 py-2.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.employmentClass === "WORKING" ? "bg-afrocat-teal-soft text-afrocat-teal" : "bg-afrocat-white-5 text-afrocat-muted"}`}>
+                                {r.employmentClass === "WORKING" ? "WORKING" : "NON-WORK"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-afrocat-text font-medium">{fmt(r.fees?.total ?? 0)}</td>
+                            <td className="px-3 py-2.5 font-bold text-red-400">{fmt(r.outstanding ?? 0)}</td>
+                            <td className="px-3 py-2.5 text-afrocat-muted text-xs italic">N/A</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="afrocat-card p-4 bg-afrocat-white-3 border border-afrocat-border">
+                  <h4 className="font-bold text-xs text-afrocat-muted uppercase tracking-wider mb-3">Transfer Value Methodology</h4>
+                  <div className="grid sm:grid-cols-2 gap-3 text-xs text-afrocat-muted">
+                    <div><span className="text-afrocat-text font-semibold">Position Base:</span> OPP N$6,000 · OH N$5,000 · MB/S N$4,500 · L N$3,500 · Default N$4,000</div>
+                    <div><span className="text-afrocat-text font-semibold">Age Multiplier:</span> &lt;17 ×0.7 · 17-21 ×1.5 · 22-26 ×2.0 · 27-30 ×1.4 · 31-34 ×0.9 · 35+ ×0.6</div>
+                    <div><span className="text-afrocat-text font-semibold">Performance Score:</span> Weighted kills/aces/blocks/digs/assists per match, normalised 0-100</div>
+                    <div><span className="text-afrocat-text font-semibold">Attendance Bonus:</span> Up to +40% for perfect attendance · Club investment added to final value</div>
+                  </div>
+                </div>
+              </>
+            ) : null}
           </div>
         )}
 

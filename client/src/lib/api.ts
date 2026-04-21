@@ -438,6 +438,7 @@ export const api = {
   getIncomeStatement: (from?: string, to?: string) => apiFetch<any>(`/finance/income-statement${from || to ? `?${from ? `from=${from}` : ""}${to ? `&to=${to}` : ""}` : ""}`),
   getBalanceSheet: () => apiFetch<any>("/finance/balance-sheet"),
   getMyOutstandingFees: () => apiFetch<any>("/finance/my-outstanding"),
+  getFinanceValuations: () => apiFetch<any>("/finance/valuations"),
 
   getCoachMyTeams: () => apiFetch<any[]>("/coach/my-teams"),
   getCoachAttendanceTrends: (teamId: string) => apiFetch<any>(`/coach/attendance-trends?teamId=${teamId}`),
