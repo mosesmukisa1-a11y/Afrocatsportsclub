@@ -29,19 +29,39 @@ interface PlayerCardData {
   badgeColor?: "gold" | "teal" | "purple";
 }
 
-/** Converts any image URL to a base64 data URL so html-to-image can capture it. */
+/**
+ * Converts any image URL to a base64 data URL.
+ * For same-origin relative paths (/uploads/...) we fetch directly.
+ * For external / cross-origin URLs we route through the server-side proxy
+ * which has no CORS restriction.
+ */
 async function toDataUrl(url: string): Promise<string> {
   try {
-    const response = await fetch(url, { cache: "force-cache" });
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return url;
+    const isRelative = url.startsWith("/") || url.startsWith("./");
+    if (isRelative) {
+      /* Same-origin — fetch directly */
+      const resp = await fetch(url, { cache: "force-cache" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const blob = await resp.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } else {
+      /* External URL — use server proxy to bypass CORS */
+      const proxyResp = await fetch(
+        `/api/proxy-image?url=${encodeURIComponent(url)}`,
+        { credentials: "include" }
+      );
+      if (!proxyResp.ok) throw new Error(`Proxy ${proxyResp.status}`);
+      const { dataUrl } = await proxyResp.json();
+      return dataUrl as string;
+    }
+  } catch (err) {
+    console.warn("[PlayerCard] toDataUrl failed:", err);
+    return url; /* fall back — html-to-image will skip the image */
   }
 }
 
@@ -93,20 +113,26 @@ export function PlayerCard({ data, showDownload = true, size = "md" }: PlayerCar
     if (!cardRef.current) return;
     setDownloading(true);
     try {
-      /* Ensure photo is loaded before capture */
-      let imgSrc = photoDataUrl;
-      if (!imgSrc && photoUrl) {
-        imgSrc = await toDataUrl(photoUrl);
-        setPhotoDataUrl(imgSrc);
-        await new Promise(r => setTimeout(r, 80)); // let React re-render
+      /* Ensure photo is converted to base64 before capture */
+      let b64 = photoDataUrl;
+      if (!b64 && photoUrl) {
+        b64 = await toDataUrl(photoUrl);
+        setPhotoDataUrl(b64);
       }
+
+      /* Force-patch every <img> inside the card to use the base64 src
+         so html-to-image doesn't need to re-fetch anything */
+      if (b64 && cardRef.current) {
+        cardRef.current.querySelectorAll("img").forEach(img => { img.src = b64!; });
+      }
+
+      /* Small pause for the browser to paint the updated img src */
+      await new Promise(r => setTimeout(r, 200));
 
       const dataUrl = await toJpeg(cardRef.current, {
         quality: 0.97,
         pixelRatio: 3,
         backgroundColor: "#0F1728",
-        /* Skip external resources — we've already embedded them */
-        fetchRequestInit: { cache: "force-cache" },
       });
 
       const a = document.createElement("a");

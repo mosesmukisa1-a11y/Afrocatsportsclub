@@ -108,6 +108,27 @@ export async function registerRoutes(
 
   app.get("/api/health", (_req, res) => res.json({ ok: true, service: "afrocat", time: new Date().toISOString() }));
 
+  /* ── Image proxy (server-side fetch bypasses browser CORS) ── */
+  app.get("/api/proxy-image", requireAuth, async (req, res) => {
+    const raw = req.query.url as string;
+    if (!raw) return res.status(400).json({ message: "Missing url" });
+    try {
+      const url = decodeURIComponent(raw);
+      const response = await fetch(url, {
+        headers: { "User-Agent": "AfrocatVC/1.0 (+image-proxy)" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) return res.status(502).json({ message: `Upstream ${response.status}` });
+      const arrayBuf = await response.arrayBuffer();
+      const contentType = response.headers.get("content-type") || "image/jpeg";
+      const base64 = Buffer.from(arrayBuf).toString("base64");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.json({ dataUrl: `data:${contentType};base64,${base64}` });
+    } catch (err: any) {
+      res.status(502).json({ message: err.message || "Proxy fetch failed" });
+    }
+  });
+
   app.get("/api/health/modules", async (_req, res) => {
     const modules: Record<string, boolean> = {};
     const errors: Record<string, string> = {};

@@ -87,17 +87,58 @@ export default function Awards() {
   const towCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [towPdfLoading, setTowPdfLoading] = useState(false);
 
+  /** Convert any image URL to base64 via server proxy (same as PlayerCard logic) */
+  async function proxyToDataUrl(url: string): Promise<string> {
+    try {
+      const isRelative = url.startsWith("/") || url.startsWith("./");
+      if (isRelative) {
+        const resp = await fetch(url, { cache: "force-cache" });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const blob = await resp.blob();
+        return await new Promise<string>((res, rej) => {
+          const reader = new FileReader();
+          reader.onloadend = () => res(reader.result as string);
+          reader.onerror = rej;
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        const proxyResp = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`, { credentials: "include" });
+        if (!proxyResp.ok) throw new Error(`Proxy ${proxyResp.status}`);
+        const { dataUrl } = await proxyResp.json();
+        return dataUrl as string;
+      }
+    } catch {
+      return url;
+    }
+  }
+
   async function downloadTOWPdf() {
     const towPlayers = (teamOfWeek as any)?.players || [];
     if (!towPlayers.length) return;
     setTowPdfLoading(true);
     try {
+      /* Pre-convert all player photos to base64 so img tags are data-URL by capture time */
+      const photoCache = new Map<string, string>();
+      for (const p of towPlayers) {
+        if (p.photoUrl) {
+          const b64 = await proxyToDataUrl(p.photoUrl);
+          photoCache.set(p.playerId, b64);
+          /* Patch any <img> inside this card's wrapper to use the data URL */
+          const el = towCardRefs.current.get(p.playerId);
+          if (el) {
+            el.querySelectorAll("img").forEach(img => { img.src = b64; });
+          }
+        }
+      }
+      /* Small pause so React/browser paints the updated img src */
+      await new Promise(r => setTimeout(r, 150));
+
       /* Capture each card as JPEG */
       const images: { dataUrl: string; playerName: string; slot: string }[] = [];
       for (const p of towPlayers) {
         const el = towCardRefs.current.get(p.playerId);
         if (!el) continue;
-        const dataUrl = await toJpeg(el, { quality: 0.95, pixelRatio: 2, backgroundColor: "#0F1728" });
+        const dataUrl = await toJpeg(el, { quality: 0.95, pixelRatio: 2, backgroundColor: "#0F1728", skipFonts: false });
         images.push({ dataUrl, playerName: p.playerName, slot: p.slot });
       }
       if (!images.length) return;
