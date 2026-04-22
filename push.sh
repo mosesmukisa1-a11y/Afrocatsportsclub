@@ -14,7 +14,7 @@ git remote remove github 2>/dev/null
 git remote add github "https://mosesmukisa1-a11y:${TOKEN}@github.com/mosesmukisa1-a11y/Afrocatsportsclub.git"
 
 echo "Pushing to GitHub..."
-git push github main
+git push --force github main
 
 echo ""
 echo "Done! Visit: https://github.com/mosesmukisa1-a11y/Afrocatsportsclub"
