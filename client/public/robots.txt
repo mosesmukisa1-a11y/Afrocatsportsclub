@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /
+Allow: /media
+Allow: /shop
+
+Disallow: /dashboard
+Disallow: /admin/
+Disallow: /players
+Disallow: /teams
+Disallow: /matches
+Disallow: /stats
+Disallow: /finance
+Disallow: /awards
+Disallow: /coaches
+Disallow: /contracts
+Disallow: /documents
+Disallow: /reports
+Disallow: /attendance
+Disallow: /injuries
+Disallow: /chat
+Disallow: /profile-setup
+Disallow: /change-password
+
+Sitemap: https://afrocatsportsclub.com/sitemap.xml
