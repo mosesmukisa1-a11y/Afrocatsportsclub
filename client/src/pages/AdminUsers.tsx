@@ -22,7 +22,7 @@ export default function AdminUsers() {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [resetDialog, setResetDialog] = useState<any>(null);
   const [resetMethod, setResetMethod] = useState<"TEMP_PASSWORD" | "ONE_TIME_LINK">("TEMP_PASSWORD");
-  const [tempPassword, setTempPassword] = useState("");
+  const [tempPassword, setTempPassword] = useState("psswrd.afrocat");
   const [generatedLink, setGeneratedLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [roleDialog, setRoleDialog] = useState<any>(null);
@@ -75,7 +75,7 @@ export default function AdminUsers() {
       } else {
         toast({ title: "Password reset", description: "Temporary password set. User must change it on next login." });
         setResetDialog(null);
-        setTempPassword("");
+        setTempPassword("psswrd.afrocat");
         setGeneratedLink("");
       }
     },
@@ -330,7 +330,7 @@ export default function AdminUsers() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => { setResetDialog(u); setResetMethod("TEMP_PASSWORD"); setTempPassword(""); setGeneratedLink(""); }}
+                          onClick={() => { setResetDialog(u); setResetMethod("TEMP_PASSWORD"); setTempPassword("psswrd.afrocat"); setGeneratedLink(""); }}
                           className="border-afrocat-border text-afrocat-muted hover:bg-afrocat-white-5 hover:text-afrocat-text"
                           data-testid={`button-reset-${u.id}`}
                         >
