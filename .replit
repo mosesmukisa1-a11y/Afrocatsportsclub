@@ -54,3 +54,4 @@ integrations = ["github:1.0.0"]
 ADMIN_EMAIL = "mosesmukisa1@gmail.com"
 ADMIN_TENANT_SLUG = "afrocat"
 GMAIL_USER = "afrocatvolleyballclub@gmail.com"
+EMAIL_AUTO_CC = "afrocatvolleyballclub@gmail.com"
