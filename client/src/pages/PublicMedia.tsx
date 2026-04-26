@@ -43,8 +43,31 @@ export default function PublicMedia() {
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {media.map((post: any) => (
             <div key={post.id} className="afrocat-card overflow-hidden group" data-testid={`media-card-${post.id}`}>
-              <div className="aspect-square bg-afrocat-white-5 overflow-hidden">
-                <img src={post.imageUrl} alt={post.title || "Photo"} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+              <div className="aspect-square bg-afrocat-white-5 overflow-hidden flex items-center justify-center relative">
+                {post.imageUrl && post.imageUrl.startsWith("data:video") ? (
+                  <video src={post.imageUrl} className="w-full h-full object-cover" muted playsInline />
+                ) : post.imageUrl ? (
+                  <img
+                    src={post.imageUrl}
+                    alt={post.title || "Photo"}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    onError={e => {
+                      const t = e.currentTarget;
+                      t.onerror = null;
+                      t.style.display = "none";
+                      const div = document.createElement("div");
+                      div.className = "flex flex-col items-center justify-center w-full h-full gap-2 text-afrocat-muted absolute inset-0";
+                      div.innerHTML = `<svg xmlns='http://www.w3.org/2000/svg' class='w-12 h-12 opacity-20' fill='none' viewBox='0 0 24 24' stroke='currentColor'><circle cx='12' cy='12' r='10' stroke-width='1.5'/><path stroke-width='1.5' d='M12 2a10 10 0 0 1 6.32 17.45M5.07 5.63A10 10 0 0 0 12 22'/></svg>`;
+                      t.parentElement?.appendChild(div);
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center w-full h-full gap-2 text-afrocat-muted">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <circle cx="12" cy="12" r="10" strokeWidth="1.5"/><path strokeWidth="1.5" d="M12 2a10 10 0 0 1 6.32 17.45M5.07 5.63A10 10 0 0 0 12 22"/>
+                    </svg>
+                  </div>
+                )}
               </div>
               {(post.title || post.caption) && (
                 <div className="p-3">

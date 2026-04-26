@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80">
-  <rect width="120" height="80" rx="8" fill="#009900"/>
-  <rect x="0" y="0" width="120" height="26" rx="8" fill="#006600"/>
-  <rect x="0" y="54" width="120" height="26" rx="0 0 8 8" fill="#cc8800"/>
-  <text x="60" y="45" font-family="Arial,sans-serif" font-size="22" font-weight="bold" fill="white" text-anchor="middle">CAVB</text>
-  <text x="60" y="16" font-family="Arial,sans-serif" font-size="7" fill="#ccffcc" text-anchor="middle">CONFEDERATION AFRICAINE</text>
-  <text x="60" y="68" font-family="Arial,sans-serif" font-size="7" fill="#fff3cc" text-anchor="middle">DE VOLLEYBALL</text>
-</svg>

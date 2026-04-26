@@ -188,18 +188,18 @@ export default function PublicHome() {
             </div>
             <div className="w-px h-10 bg-afrocat-border hidden sm:block" />
             <div className="flex flex-col items-center gap-1.5">
-              <img src="/nvf-logo.svg" alt="Namibia Volleyball Federation" className="h-12 w-20 object-contain rounded-md" />
-              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[70px]">Namibia<br/>Volleyball Fed.</span>
+              <img src="/nvf-logo.jpeg" alt="Namibia Volleyball Federation" className="h-12 w-24 object-contain rounded-md bg-white p-0.5" />
+              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[80px]">Namibia Volleyball Federation</span>
             </div>
             <div className="w-px h-10 bg-afrocat-border hidden sm:block" />
             <div className="flex flex-col items-center gap-1.5">
-              <img src="/cavb-logo.svg" alt="Confederation of African Volleyball" className="h-12 w-20 object-contain rounded-md" />
-              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[70px]">Confederation<br/>African VB</span>
+              <img src="/cavb-logo.png" alt="Confederation Africaine de Volleyball" className="h-12 w-16 object-contain rounded-md bg-white p-0.5" />
+              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[80px]">Confédération Africaine de Volleyball</span>
             </div>
             <div className="w-px h-10 bg-afrocat-border hidden sm:block" />
             <div className="flex flex-col items-center gap-1.5">
-              <img src="/fivb-logo.svg" alt="FIVB" className="h-12 w-20 object-contain rounded-md" />
-              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[70px]">Fédération Int.<br/>de Volleyball</span>
+              <img src="/fivb-logo.jpeg" alt="FIVB" className="h-12 w-24 object-contain rounded-md" />
+              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[80px]">Fédération Internationale de Volleyball</span>
             </div>
           </div>
           <p className="text-center text-xs text-afrocat-muted">
