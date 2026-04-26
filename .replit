@@ -53,3 +53,4 @@ integrations = ["github:1.0.0"]
 [userenv.shared]
 ADMIN_EMAIL = "mosesmukisa1@gmail.com"
 ADMIN_TENANT_SLUG = "afrocat"
+GMAIL_USER = "afrocatvolleyballclub@gmail.com"

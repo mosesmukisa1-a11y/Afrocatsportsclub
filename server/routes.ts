@@ -473,6 +473,100 @@ export async function registerRoutes(
     }
   });
 
+  // ─── SELF-SERVICE: SEND OTP ──────────────────────────────────────────
+  app.post("/api/auth/send-otp", async (req, res, next) => {
+    try {
+      const body = z.object({ email: z.string().email() }).parse(req.body);
+      const user = await storage.getUserByEmail(body.email);
+      if (!user) return res.json({ ok: true }); // don't reveal whether email exists
+
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otpHash = crypto.createHash("sha256").update(otp).digest("hex");
+      const otpExp = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+      await storage.updateUser(user.id, {
+        passwordResetTokenHash: otpHash,
+        passwordResetTokenExp: otpExp,
+        passwordResetRequested: false,
+      } as any);
+
+      const gmailUser = process.env.GMAIL_USER;
+      const gmailPass = process.env.GMAIL_APP_PASSWORD;
+      let emailSent = false;
+      if (gmailUser && gmailPass) {
+        try {
+          const nodemailer = await import("nodemailer");
+          const transporter = nodemailer.default.createTransport({
+            service: "gmail",
+            auth: { user: gmailUser, pass: gmailPass },
+          });
+          await transporter.sendMail({
+            from: `"Afrocat Volleyball Club" <${gmailUser}>`,
+            to: user.email,
+            subject: "Afrocat VC — Password Reset Code",
+            text: `Your password reset code is: ${otp}\n\nThis code expires in 15 minutes.\n\nIf you did not request this, ignore this email.`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#0f1728;color:#e2e8f0;padding:32px;border-radius:12px;">
+              <h2 style="color:#15a09b;text-align:center;margin-bottom:8px;">Afrocat Volleyball Club</h2>
+              <p style="color:#8292a8;text-align:center;margin-top:0;">Password Reset</p>
+              <p style="color:#e2e8f0;">Hi <strong>${user.fullName}</strong>, use the code below to reset your password.</p>
+              <div style="background:#1e2a40;border:2px solid #efb82c;border-radius:10px;padding:28px;text-align:center;margin:20px 0;">
+                <span style="font-size:40px;font-weight:bold;color:#efb82c;letter-spacing:10px;">${otp}</span>
+              </div>
+              <p style="color:#8292a8;font-size:13px;">This code expires in <strong>15 minutes</strong>. If you did not request a password reset, ignore this email — your account is safe.</p>
+            </div>`,
+          });
+          emailSent = true;
+        } catch (emailErr) {
+          console.error("[OTP email error]", emailErr);
+        }
+      }
+
+      if (!emailSent) console.log(`[OTP] Reset code for ${user.email}: ${otp}`);
+
+      return res.json({ ok: true, emailSent });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: "Invalid email address." });
+      next(e);
+    }
+  });
+
+  // ─── SELF-SERVICE: VERIFY OTP + SET NEW PASSWORD ─────────────────────
+  app.post("/api/auth/verify-otp", async (req, res, next) => {
+    try {
+      const body = z.object({
+        email: z.string().email(),
+        otp: z.string().length(6),
+        newPassword: z.string().min(8, "Password must be at least 8 characters"),
+      }).parse(req.body);
+
+      const user = await storage.getUserByEmail(body.email);
+      if (!user || !user.passwordResetTokenHash || !user.passwordResetTokenExp) {
+        return res.status(400).json({ message: "Invalid or expired code. Please request a new one." });
+      }
+      if (new Date(user.passwordResetTokenExp) < new Date()) {
+        return res.status(400).json({ message: "This code has expired. Please request a new one." });
+      }
+      const otpHash = crypto.createHash("sha256").update(body.otp).digest("hex");
+      if (otpHash !== user.passwordResetTokenHash) {
+        return res.status(400).json({ message: "Incorrect code. Please check your email and try again." });
+      }
+
+      const newHash = await hashPassword(body.newPassword);
+      await storage.updateUser(user.id, {
+        passwordHash: newHash,
+        passwordResetTokenHash: null,
+        passwordResetTokenExp: null,
+        mustChangePassword: false,
+        passwordResetRequested: false,
+      } as any);
+
+      return res.json({ ok: true, message: "Password reset successfully. You can now log in." });
+    } catch (e: any) {
+      if (e?.name === "ZodError") return res.status(400).json({ message: e.errors?.[0]?.message || "Validation error" });
+      next(e);
+    }
+  });
+
   // ─── ADMIN: GET PENDING PASSWORD RESET REQUESTS ──────────────────────
   app.get("/api/admin/password-reset-requests", requireAuth, requireRole(["ADMIN"]), async (req, res, next) => {
     try {

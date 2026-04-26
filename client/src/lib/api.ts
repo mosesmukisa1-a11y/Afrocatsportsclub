@@ -274,6 +274,10 @@ export const api = {
     apiFetch<any>(`/admin/users/${userId}`, { method: "DELETE" }),
   forgotPassword: (email: string) =>
     apiFetch<any>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  sendOtp: (email: string) =>
+    apiFetch<any>("/auth/send-otp", { method: "POST", body: JSON.stringify({ email }) }),
+  verifyOtp: (data: { email: string; otp: string; newPassword: string }) =>
+    apiFetch<any>("/auth/verify-otp", { method: "POST", body: JSON.stringify(data) }),
 
   getContractContributions: (contractId: string) => apiFetch<any[]>(`/contracts/${contractId}/contributions`),
   getPlayerContributions: (playerId: string) => apiFetch<any[]>(`/contributions/player/${playerId}`),
