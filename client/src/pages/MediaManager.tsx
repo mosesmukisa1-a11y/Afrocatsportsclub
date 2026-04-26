@@ -17,7 +17,9 @@ export default function MediaManager() {
   const qc = useQueryClient();
   const isAdmin = user && ["ADMIN", "MANAGER"].includes(user.role);
   const [tab, setTab] = useState<"all" | "pending" | "upload">("all");
-  const [uploadForm, setUploadForm] = useState({ title: "", caption: "", imageUrl: "", visibility: "PUBLIC" });
+  const [uploadForm, setUploadForm] = useState({ title: "", caption: "", visibility: "PUBLIC" });
+  const [selectedFiles, setSelectedFiles] = useState<{ file: File; preview: string; b64: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [tagMediaId, setTagMediaId] = useState<string | null>(null);
   const [tagPlayerIds, setTagPlayerIds] = useState("");
 
@@ -26,9 +28,51 @@ export default function MediaManager() {
   const { data: players = [] } = useQuery({ queryKey: ["/api/players"], queryFn: api.getPlayers });
   const { data: tagRequests = [] } = useQuery({ queryKey: ["/api/media/tag-requests"], queryFn: api.getMediaTagRequests, enabled: !!isAdmin });
 
+  const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const processed = await Promise.all(files.map(async (file) => {
+      const b64 = await toBase64(file);
+      return { file, preview: b64, b64 };
+    }));
+    setSelectedFiles(prev => [...prev, ...processed]);
+    e.target.value = "";
+  };
+
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0) return;
+    setUploading(true);
+    try {
+      for (const { b64, file } of selectedFiles) {
+        await api.createMedia({
+          title: uploadForm.title || file.name,
+          caption: uploadForm.caption || null,
+          imageUrl: b64,
+          visibility: uploadForm.visibility,
+          status: isAdmin ? "APPROVED" : "PENDING_REVIEW",
+        });
+      }
+      qc.invalidateQueries({ queryKey: ["/api/media"] });
+      toast({ title: `${selectedFiles.length} photo${selectedFiles.length > 1 ? "s" : ""} uploaded` });
+      setTab("all");
+      setSelectedFiles([]);
+      setUploadForm({ title: "", caption: "", visibility: "PUBLIC" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const uploadMut = useMutation({
     mutationFn: (data: any) => api.createMedia(data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/media"] }); toast({ title: "Photo uploaded" }); setTab("all"); setUploadForm({ title: "", caption: "", imageUrl: "", visibility: "PUBLIC" }); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/media"] }); toast({ title: "Photo uploaded" }); setTab("all"); setUploadForm({ title: "", caption: "", visibility: "PUBLIC" }); },
   });
 
   const approveMut = useMutation({
@@ -80,23 +124,39 @@ export default function MediaManager() {
         </div>
 
         {tab === "upload" && (
-          <div className="afrocat-card p-6 max-w-lg">
-            <h3 className="text-lg font-bold text-afrocat-text mb-4 flex items-center gap-2"><Upload className="h-5 w-5 text-afrocat-teal" /> Upload Photo</h3>
+          <div className="afrocat-card p-6 max-w-xl">
+            <h3 className="text-lg font-bold text-afrocat-text mb-4 flex items-center gap-2"><Upload className="h-5 w-5 text-afrocat-teal" /> Upload Photos</h3>
             <div className="space-y-4">
+              {/* File picker */}
+              <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-afrocat-border rounded-xl cursor-pointer bg-afrocat-white-5 hover:bg-afrocat-white-10 transition-colors" data-testid="label-file-picker">
+                <Camera className="h-8 w-8 text-afrocat-teal mb-2" />
+                <span className="text-sm text-afrocat-muted">Tap to choose photos from your device</span>
+                <span className="text-xs text-afrocat-muted mt-1">JPG, PNG, HEIC — up to 10 photos at once</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleFileSelect} data-testid="input-file-picker" />
+              </label>
+
+              {/* Preview grid */}
+              {selectedFiles.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {selectedFiles.map((f, i) => (
+                    <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-afrocat-white-5" data-testid={`preview-file-${i}`}>
+                      <img src={f.preview} alt="" className="w-full h-full object-cover" />
+                      <button onClick={() => setSelectedFiles(prev => prev.filter((_, j) => j !== i))}
+                        className="absolute top-1 right-1 bg-black/60 rounded-full w-5 h-5 flex items-center justify-center text-white text-xs">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label className="text-afrocat-muted text-sm">Image URL</Label>
-                <Input value={uploadForm.imageUrl} onChange={e => setUploadForm(f => ({ ...f, imageUrl: e.target.value }))} placeholder="https://..." data-testid="input-image-url"
-                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" />
+                <Label className="text-afrocat-muted text-sm">Album / Title <span className="text-afrocat-muted/60">(optional)</span></Label>
+                <Input value={uploadForm.title} onChange={e => setUploadForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Training Session April 2026"
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-media-title" />
               </div>
               <div className="space-y-2">
-                <Label className="text-afrocat-muted text-sm">Title</Label>
-                <Input value={uploadForm.title} onChange={e => setUploadForm(f => ({ ...f, title: e.target.value }))} placeholder="Photo title" data-testid="input-media-title"
-                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-afrocat-muted text-sm">Caption</Label>
-                <Input value={uploadForm.caption} onChange={e => setUploadForm(f => ({ ...f, caption: e.target.value }))} placeholder="Caption" data-testid="input-media-caption"
-                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" />
+                <Label className="text-afrocat-muted text-sm">Caption <span className="text-afrocat-muted/60">(optional)</span></Label>
+                <Input value={uploadForm.caption} onChange={e => setUploadForm(f => ({ ...f, caption: e.target.value }))} placeholder="Describe the photo..."
+                  className="bg-afrocat-white-5 border-afrocat-border text-afrocat-text" data-testid="input-media-caption" />
               </div>
               {isAdmin && (
                 <div className="space-y-2">
@@ -106,16 +166,16 @@ export default function MediaManager() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="PUBLIC">Public</SelectItem>
+                      <SelectItem value="PUBLIC">Public (visible on website)</SelectItem>
                       <SelectItem value="TEAM_ONLY">Team Only</SelectItem>
                       <SelectItem value="PRIVATE">Private</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               )}
-              <Button onClick={() => uploadMut.mutate(uploadForm)} disabled={!uploadForm.imageUrl || uploadMut.isPending}
+              <Button onClick={handleUpload} disabled={selectedFiles.length === 0 || uploading}
                 className="w-full bg-afrocat-teal hover:bg-afrocat-teal-dark text-white" data-testid="button-submit-upload">
-                {uploadMut.isPending ? "Uploading..." : "Upload Photo"}
+                {uploading ? `Uploading ${selectedFiles.length} photo${selectedFiles.length > 1 ? "s" : ""}...` : `Upload ${selectedFiles.length > 0 ? selectedFiles.length + " " : ""}Photo${selectedFiles.length !== 1 ? "s" : ""}`}
               </Button>
             </div>
           </div>

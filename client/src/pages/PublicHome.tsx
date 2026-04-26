@@ -158,8 +158,8 @@ export default function PublicHome() {
             <h4 className="font-bold text-afrocat-text mb-3">Contact</h4>
             <div className="space-y-2 text-sm text-afrocat-muted">
               <p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-afrocat-teal" /> Windhoek, Namibia</p>
-              <p className="flex items-center gap-2"><Mail className="h-4 w-4 text-afrocat-teal" /> info@afrocatvc.com</p>
-              <p className="flex items-center gap-2"><Phone className="h-4 w-4 text-afrocat-teal" /> +264 81 000 0000</p>
+              <a href="mailto:afrocatvolleyballclub@gmail.com" className="flex items-center gap-2 hover:text-afrocat-teal transition-colors"><Mail className="h-4 w-4 text-afrocat-teal" /> afrocatvolleyballclub@gmail.com</a>
+              <a href="tel:+264813389595" className="flex items-center gap-2 hover:text-afrocat-teal transition-colors"><Phone className="h-4 w-4 text-afrocat-teal" /> +264 81 338 9595</a>
             </div>
           </div>
         </div>
