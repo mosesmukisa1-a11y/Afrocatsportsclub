@@ -89,8 +89,24 @@ export default function PublicHome() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {media.slice(0, 8).map((post: any) => (
               <div key={post.id} className="afrocat-card overflow-hidden group" data-testid={`media-card-${post.id}`}>
-                <div className="aspect-square bg-afrocat-white-5 overflow-hidden">
-                  <img src={post.imageUrl} alt={post.title || "Media"} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                <div className="aspect-square bg-afrocat-white-5 overflow-hidden flex items-center justify-center">
+                  {post.imageUrl ? (
+                    <img
+                      src={post.imageUrl}
+                      alt={post.title || "Media"}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={e => {
+                        const t = e.currentTarget;
+                        t.onerror = null;
+                        t.style.display = "none";
+                        t.parentElement!.innerHTML = `<div class="flex flex-col items-center justify-center w-full h-full gap-2 text-afrocat-muted"><svg xmlns='http://www.w3.org/2000/svg' class='w-10 h-10 opacity-30' fill='none' viewBox='0 0 24 24' stroke='currentColor'><circle cx='12' cy='12' r='10' stroke-width='1.5'/><path stroke-width='1.5' d='M12 2a10 10 0 0 1 6.32 17.45M5.07 5.63A10 10 0 0 0 12 22'/></svg></div>`;
+                      }}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center w-full h-full gap-2 text-afrocat-muted">
+                      <Camera className="w-10 h-10 opacity-30" />
+                    </div>
+                  )}
                 </div>
                 {(post.title || post.caption) && (
                   <div className="p-3">
@@ -163,8 +179,32 @@ export default function PublicHome() {
             </div>
           </div>
         </div>
-        <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-afrocat-border text-center text-xs text-afrocat-muted">
-          &copy; {new Date().getFullYear()} Afrocat Volleyball Club. All rights reserved.
+        <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-afrocat-border">
+          <p className="text-xs text-afrocat-muted text-center mb-6">Affiliated with</p>
+          <div className="flex flex-wrap items-center justify-center gap-6 mb-6">
+            <div className="flex flex-col items-center gap-1.5">
+              <img src={logo} alt="Afrocat Volleyball Club" className="h-14 w-14 object-contain" />
+              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[70px]">Afrocat<br/>VC</span>
+            </div>
+            <div className="w-px h-10 bg-afrocat-border hidden sm:block" />
+            <div className="flex flex-col items-center gap-1.5">
+              <img src="/nvf-logo.svg" alt="Namibia Volleyball Federation" className="h-12 w-20 object-contain rounded-md" />
+              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[70px]">Namibia<br/>Volleyball Fed.</span>
+            </div>
+            <div className="w-px h-10 bg-afrocat-border hidden sm:block" />
+            <div className="flex flex-col items-center gap-1.5">
+              <img src="/cavb-logo.svg" alt="Confederation of African Volleyball" className="h-12 w-20 object-contain rounded-md" />
+              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[70px]">Confederation<br/>African VB</span>
+            </div>
+            <div className="w-px h-10 bg-afrocat-border hidden sm:block" />
+            <div className="flex flex-col items-center gap-1.5">
+              <img src="/fivb-logo.svg" alt="FIVB" className="h-12 w-20 object-contain rounded-md" />
+              <span className="text-[10px] text-afrocat-muted text-center leading-tight max-w-[70px]">Fédération Int.<br/>de Volleyball</span>
+            </div>
+          </div>
+          <p className="text-center text-xs text-afrocat-muted">
+            &copy; {new Date().getFullYear()} Afrocat Volleyball Club. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>
