@@ -4156,9 +4156,15 @@ th{background:#0d7377;color:white}
         if ((ev as any).pointWonByTeamId === teamId) setScoresMap[sn].home++;
         else if ((ev as any).pointWonByTeamId === "OPPONENT") setScoresMap[sn].away++;
       }
-      const setScores = Object.entries(setScoresMap)
+      const matchHomeSetsWon = (match as any).homeSetsWon ?? (match as any).setsFor ?? 0;
+      const rawSetScores = Object.entries(setScoresMap)
         .sort(([a], [b]) => Number(a) - Number(b))
-        .map(([sn, sc]) => ({ setNumber: Number(sn), home: sc.home, away: sc.away, won: sc.home > sc.away }));
+        .map(([sn, sc]) => ({ setNumber: Number(sn), home: sc.home, away: sc.away, diff: sc.home - sc.away }));
+      // Reconcile won/lost using the authoritative homeSetsWon from the match record.
+      // Sort by point differential desc to pick the most-likely-won sets first.
+      const sortedByDiff = [...rawSetScores].sort((a, b) => b.diff - a.diff);
+      const winnerSetNumbers = new Set(sortedByDiff.slice(0, matchHomeSetsWon).map(s => s.setNumber));
+      const setScores = rawSetScores.map(({ diff: _diff, ...s }) => ({ ...s, won: winnerSetNumbers.has(s.setNumber) }));
 
       const assignments = await storage.getCoachAssignmentsByTeam(teamId);
       const headCoach = assignments.find(a => a.assignmentRole === "HEAD_COACH" && a.active);
@@ -7119,11 +7125,14 @@ th{background:#0d7377;color:white}
   <span class="bestof">&nbsp;(Best of ${bestOf})</span>
 </div>`;
 
-      // Set scores
+      // Set scores — reconcile won/lost with authoritative homeSetsWon
       if (Object.keys(sets).length > 0) {
         html += `<h2>Set Scores</h2><div class="set-row">`;
-        Object.entries(sets).sort(([a], [b]) => Number(a) - Number(b)).forEach(([sn, sv]) => {
-          const won = sv.home > sv.away;
+        const sortedSets = Object.entries(sets).sort(([a], [b]) => Number(a) - Number(b));
+        const byDiff = [...sortedSets].sort(([, a], [, b]) => (b.home - b.away) - (a.home - a.away));
+        const wonSetNums = new Set(byDiff.slice(0, homeSets).map(([sn]) => sn));
+        sortedSets.forEach(([sn, sv]) => {
+          const won = wonSetNums.has(sn);
           html += `<div class="set-card">
             <div class="label">Set ${sn}</div>
             <div class="score" style="color:${won ? "#0F8B7D" : "#dc2626"}">${sv.home} &ndash; ${sv.away}</div>
