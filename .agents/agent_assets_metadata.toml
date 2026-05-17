@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "Sa7UPZoC-AYwT_fHYdvc2"
+uri = "file://afrocat-club-portal.tar.gz"
+type = "unspecified"
+title = "Afrocat Club Portal — Full Source Code"
